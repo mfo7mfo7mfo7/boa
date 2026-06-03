@@ -1,0 +1,13 @@
+.DS_Store
+.git
+.pytest_cache
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.db
+docs/
+tests/
+debug.db
+boa.db
+uv.lock

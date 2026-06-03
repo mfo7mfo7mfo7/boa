@@ -1,0 +1,725 @@
+"""SQLite-backed storage for Boa releases and runtime state."""
+
+from __future__ import annotations
+
+import sqlite3
+from contextlib import contextmanager
+from datetime import date, datetime, timezone
+from pathlib import Path
+from typing import Iterator
+
+from boa.domain import (
+    AckRecord,
+    BUG_SNAPSHOT_INGEST_CAPABILITY,
+    BugSnapshot,
+    BugSnapshotSubmission,
+    DAILY_REMINDER_TYPE,
+    Milestone,
+    MilestoneRecord,
+    MilestoneTimelineItem,
+    NotificationRecord,
+    PluginDescriptor,
+    ReleaseBlueprint,
+    ReleaseRecord,
+    ReleaseTimeline,
+    ReminderState,
+    pending_reminder_types,
+)
+
+
+class BoaStorage:
+    """Repository layer for Boa's persisted state."""
+
+    def __init__(self, db_path: str | Path = "boa.db") -> None:
+        self.db_path = str(db_path)
+        self.plugin_registry = {
+            "manual_bug_snapshot": PluginDescriptor(
+                name="manual_bug_snapshot",
+                version="1.0.0",
+                capabilities=(BUG_SNAPSHOT_INGEST_CAPABILITY,),
+                endpoint="/api/plugins/manual_bug_snapshot/releases/{release_id}/bug-snapshots",
+            )
+        }
+
+    @contextmanager
+    def connect(self) -> Iterator[sqlite3.Connection]:
+        connection = sqlite3.connect(self.db_path)
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys = ON")
+        try:
+            yield connection
+            connection.commit()
+        finally:
+            connection.close()
+
+    def initialize(self) -> None:
+        with self.connect() as connection:
+            connection.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS releases (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    product TEXT NOT NULL,
+                    version TEXT NOT NULL,
+                    secret TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS milestones (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    release_id INTEGER NOT NULL,
+                    name TEXT NOT NULL,
+                    expected TEXT NOT NULL,
+                    owner TEXT NOT NULL,
+                    FOREIGN KEY (release_id) REFERENCES releases(id) ON DELETE CASCADE
+                );
+
+                CREATE TABLE IF NOT EXISTS milestone_ack (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    release_id INTEGER NOT NULL,
+                    milestone_id INTEGER NOT NULL,
+                    owner TEXT NOT NULL,
+                    acked_at TEXT NOT NULL,
+                    note TEXT NOT NULL DEFAULT '',
+                    FOREIGN KEY (release_id) REFERENCES releases(id) ON DELETE CASCADE,
+                    FOREIGN KEY (milestone_id) REFERENCES milestones(id) ON DELETE CASCADE
+                );
+
+                CREATE TABLE IF NOT EXISTS bug_snapshot (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    release_id INTEGER NOT NULL,
+                    snapshot_date TEXT NOT NULL,
+                    observed_at TEXT,
+                    signal_type TEXT NOT NULL DEFAULT 'total',
+                    open_bug_count INTEGER NOT NULL,
+                    quality TEXT NOT NULL DEFAULT 'normal',
+                    quality_reason TEXT,
+                    FOREIGN KEY (release_id) REFERENCES releases(id) ON DELETE CASCADE
+                );
+
+                CREATE TABLE IF NOT EXISTS notification_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    release_id INTEGER NOT NULL,
+                    milestone_id INTEGER NOT NULL,
+                    sent_at TEXT NOT NULL,
+                    type TEXT NOT NULL,
+                    FOREIGN KEY (release_id) REFERENCES releases(id) ON DELETE CASCADE,
+                    FOREIGN KEY (milestone_id) REFERENCES milestones(id) ON DELETE CASCADE
+                );
+                """
+            )
+            ack_columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(milestone_ack)").fetchall()
+            }
+            if "note" not in ack_columns:
+                connection.execute(
+                    "ALTER TABLE milestone_ack ADD COLUMN note TEXT NOT NULL DEFAULT ''"
+                )
+            bug_snapshot_columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(bug_snapshot)").fetchall()
+            }
+            if "observed_at" not in bug_snapshot_columns:
+                connection.execute("ALTER TABLE bug_snapshot ADD COLUMN observed_at TEXT")
+            if "signal_type" not in bug_snapshot_columns:
+                connection.execute("ALTER TABLE bug_snapshot ADD COLUMN signal_type TEXT NOT NULL DEFAULT 'total'")
+            if "quality" not in bug_snapshot_columns:
+                connection.execute("ALTER TABLE bug_snapshot ADD COLUMN quality TEXT NOT NULL DEFAULT 'normal'")
+            if "quality_reason" not in bug_snapshot_columns:
+                connection.execute("ALTER TABLE bug_snapshot ADD COLUMN quality_reason TEXT")
+            connection.execute(
+                """
+                UPDATE bug_snapshot
+                SET observed_at = snapshot_date || 'T12:00:00+00:00'
+                WHERE observed_at IS NULL
+                """
+            )
+
+    def create_release(self, blueprint: ReleaseBlueprint) -> ReleaseRecord:
+        with self.connect() as connection:
+            self._ensure_unique_release_version(connection, blueprint.product, blueprint.version)
+            cursor = connection.execute(
+                """
+                INSERT INTO releases (product, version, secret)
+                VALUES (?, ?, ?)
+                """,
+                (blueprint.product, blueprint.version, blueprint.secret),
+            )
+            release_id = int(cursor.lastrowid)
+
+            connection.executemany(
+                """
+                INSERT INTO milestones (release_id, name, expected, owner)
+                VALUES (?, ?, ?, ?)
+                """,
+                [
+                    (
+                        release_id,
+                        milestone.name,
+                        milestone.expected.isoformat(),
+                        milestone.owner,
+                    )
+                    for milestone in blueprint.milestones
+                ],
+            )
+
+        return self.get_release(release_id)
+
+    def list_releases(self) -> list[ReleaseRecord]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT id FROM releases ORDER BY id ASC"
+            ).fetchall()
+        return [self.get_release(int(row["id"])) for row in rows]
+
+    def get_release(self, release_id: int) -> ReleaseRecord:
+        with self.connect() as connection:
+            release_row = connection.execute(
+                """
+                SELECT id, product, version, secret
+                FROM releases
+                WHERE id = ?
+                """,
+                (release_id,),
+            ).fetchone()
+            if release_row is None:
+                raise KeyError(f"Release {release_id} was not found.")
+
+            milestone_rows = connection.execute(
+                """
+                SELECT id, release_id, name, expected, owner
+                FROM milestones
+                WHERE release_id = ?
+                ORDER BY expected ASC, id ASC
+                """,
+                (release_id,),
+            ).fetchall()
+
+        blueprint = ReleaseBlueprint(
+            product=str(release_row["product"]),
+            version=str(release_row["version"]),
+            secret=str(release_row["secret"]),
+            milestones=tuple(
+                Milestone(
+                    name=str(row["name"]),
+                    expected=date.fromisoformat(str(row["expected"])),
+                    owner=str(row["owner"]),
+                )
+                for row in milestone_rows
+            ),
+        )
+        return ReleaseRecord(id=int(release_row["id"]), blueprint=blueprint)
+
+    def list_milestones(self, release_id: int) -> list[MilestoneRecord]:
+        self.get_release(release_id)
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT id, release_id, name, expected, owner
+                FROM milestones
+                WHERE release_id = ?
+                ORDER BY expected ASC, id ASC
+                """,
+                (release_id,),
+            ).fetchall()
+
+        return [
+            MilestoneRecord(
+                id=int(row["id"]),
+                release_id=int(row["release_id"]),
+                name=str(row["name"]),
+                expected=date.fromisoformat(str(row["expected"])),
+                owner=str(row["owner"]),
+            )
+            for row in rows
+        ]
+
+    def delete_release(self, release_id: int) -> None:
+        with self.connect() as connection:
+            cursor = connection.execute(
+                "DELETE FROM releases WHERE id = ?",
+                (release_id,),
+            )
+            if cursor.rowcount == 0:
+                raise KeyError(f"Release {release_id} was not found.")
+
+    def update_release(self, release_id: int, blueprint: ReleaseBlueprint) -> ReleaseRecord:
+        with self.connect() as connection:
+            self._ensure_unique_release_version(
+                connection,
+                blueprint.product,
+                blueprint.version,
+                ignored_release_id=release_id,
+            )
+            cursor = connection.execute(
+                """
+                UPDATE releases
+                SET product = ?, version = ?, secret = ?
+                WHERE id = ?
+                """,
+                (blueprint.product, blueprint.version, blueprint.secret, release_id),
+            )
+            if cursor.rowcount == 0:
+                raise KeyError(f"Release {release_id} was not found.")
+        return self.get_release(release_id)
+
+    def _ensure_unique_release_version(
+        self,
+        connection: sqlite3.Connection,
+        product: str,
+        version: str,
+        *,
+        ignored_release_id: int | None = None,
+    ) -> None:
+        if ignored_release_id is None:
+            row = connection.execute(
+                """
+                SELECT id FROM releases
+                WHERE product = ? AND version = ?
+                LIMIT 1
+                """,
+                (product, version),
+            ).fetchone()
+        else:
+            row = connection.execute(
+                """
+                SELECT id FROM releases
+                WHERE product = ? AND version = ? AND id != ?
+                LIMIT 1
+                """,
+                (product, version, ignored_release_id),
+            ).fetchone()
+
+        if row is not None:
+            raise ValueError(f"{product} {version} already exists.")
+
+    def add_milestone(self, release_id: int, milestone: Milestone) -> MilestoneRecord:
+        self.get_release(release_id)
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO milestones (release_id, name, expected, owner)
+                VALUES (?, ?, ?, ?)
+                """,
+                (release_id, milestone.name, milestone.expected.isoformat(), milestone.owner),
+            )
+            milestone_id = int(cursor.lastrowid)
+        return self.get_milestone(milestone_id)
+
+    def update_milestone(self, milestone_id: int, milestone: Milestone) -> MilestoneRecord:
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE milestones
+                SET name = ?, expected = ?, owner = ?
+                WHERE id = ?
+                """,
+                (milestone.name, milestone.expected.isoformat(), milestone.owner, milestone_id),
+            )
+            if cursor.rowcount == 0:
+                raise KeyError(f"Milestone {milestone_id} was not found.")
+        return self.get_milestone(milestone_id)
+
+    def delete_milestone(self, milestone_id: int) -> None:
+        with self.connect() as connection:
+            cursor = connection.execute("DELETE FROM milestones WHERE id = ?", (milestone_id,))
+            if cursor.rowcount == 0:
+                raise KeyError(f"Milestone {milestone_id} was not found.")
+
+    def get_milestone(self, milestone_id: int) -> MilestoneRecord:
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT id, release_id, name, expected, owner
+                FROM milestones
+                WHERE id = ?
+                """,
+                (milestone_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"Milestone {milestone_id} was not found.")
+
+        return MilestoneRecord(
+            id=int(row["id"]),
+            release_id=int(row["release_id"]),
+            name=str(row["name"]),
+            expected=date.fromisoformat(str(row["expected"])),
+            owner=str(row["owner"]),
+        )
+
+    def ack_milestone(self, milestone_id: int, note: str) -> AckRecord:
+        milestone = self.get_milestone(milestone_id)
+        with self.connect() as connection:
+            existing = connection.execute(
+                """
+                SELECT id, release_id, milestone_id, owner, acked_at, note
+                FROM milestone_ack
+                WHERE milestone_id = ?
+                ORDER BY acked_at DESC, id DESC
+                LIMIT 1
+                """,
+                (milestone_id,),
+            ).fetchone()
+            if existing is not None:
+                connection.execute(
+                    """
+                    UPDATE milestone_ack
+                    SET note = ?
+                    WHERE id = ?
+                    """,
+                    (note, int(existing["id"])),
+                )
+                return AckRecord(
+                    id=int(existing["id"]),
+                    release_id=int(existing["release_id"]),
+                    milestone_id=int(existing["milestone_id"]),
+                    owner=str(existing["owner"]),
+                    acked_at=datetime.fromisoformat(str(existing["acked_at"])),
+                    note=note,
+                )
+
+            acked_at = datetime.now(timezone.utc).replace(microsecond=0)
+            cursor = connection.execute(
+                """
+                INSERT INTO milestone_ack (release_id, milestone_id, owner, acked_at, note)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    milestone.release_id,
+                    milestone.id,
+                    milestone.owner,
+                    acked_at.isoformat(),
+                    note,
+                ),
+            )
+            ack_id = int(cursor.lastrowid)
+        return AckRecord(
+            id=ack_id,
+            release_id=milestone.release_id,
+            milestone_id=milestone.id,
+            owner=milestone.owner,
+            acked_at=acked_at,
+            note=note,
+        )
+
+    def list_bug_snapshots(self, release_id: int) -> list[BugSnapshot]:
+        self.get_release(release_id)
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT id, release_id, observed_at, signal_type, open_bug_count, quality, quality_reason
+                FROM bug_snapshot
+                WHERE release_id = ?
+                ORDER BY observed_at ASC, id ASC
+                """,
+                (release_id,),
+            ).fetchall()
+        return [
+            BugSnapshot(
+                id=int(row["id"]),
+                release_id=int(row["release_id"]),
+                observed_at=datetime.fromisoformat(str(row["observed_at"])),
+                signal_type=str(row["signal_type"]),
+                open_bug_count=int(row["open_bug_count"]),
+                quality=str(row["quality"]),
+                quality_reason=str(row["quality_reason"]) if row["quality_reason"] is not None else None,
+            )
+            for row in rows
+        ]
+
+    def add_bug_snapshot(
+        self,
+        release_id: int,
+        *,
+        open_bug_count: int,
+        signal_type: str = "total",
+        observed_at: datetime | None = None,
+    ) -> BugSnapshot:
+        self.get_release(release_id)
+        cleaned_signal_type = signal_type.strip().lower() or "total"
+        if observed_at is None:
+            observed_at = datetime.now(timezone.utc).replace(microsecond=0)
+        elif observed_at.tzinfo is None:
+            observed_at = observed_at.replace(tzinfo=timezone.utc)
+        else:
+            observed_at = observed_at.astimezone(timezone.utc).replace(microsecond=0)
+
+        with self.connect() as connection:
+            previous = connection.execute(
+                """
+                SELECT open_bug_count
+                FROM bug_snapshot
+                WHERE release_id = ? AND signal_type = ? AND quality = 'normal'
+                ORDER BY observed_at DESC, id DESC
+                LIMIT 1
+                """,
+                (release_id, cleaned_signal_type),
+            ).fetchone()
+            quality, quality_reason = self._classify_bug_snapshot_quality(
+                open_bug_count,
+                previous_count=(int(previous["open_bug_count"]) if previous is not None else None),
+            )
+            cursor = connection.execute(
+                """
+                INSERT INTO bug_snapshot (
+                    release_id,
+                    snapshot_date,
+                    observed_at,
+                    signal_type,
+                    open_bug_count,
+                    quality,
+                    quality_reason
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    release_id,
+                    observed_at.date().isoformat(),
+                    observed_at.isoformat(),
+                    cleaned_signal_type,
+                    open_bug_count,
+                    quality,
+                    quality_reason,
+                ),
+            )
+            snapshot_id = int(cursor.lastrowid)
+        return BugSnapshot(
+            id=snapshot_id,
+            release_id=release_id,
+            observed_at=observed_at,
+            signal_type=cleaned_signal_type,
+            open_bug_count=open_bug_count,
+            quality=quality,
+            quality_reason=quality_reason,
+        )
+
+    def _classify_bug_snapshot_quality(
+        self,
+        open_bug_count: int,
+        *,
+        previous_count: int | None,
+    ) -> tuple[str, str | None]:
+        if previous_count is None:
+            return ("normal", None)
+        if open_bug_count >= 100_000 and open_bug_count > max(previous_count * 20, previous_count + 10_000):
+            return ("suspicious", "extreme spike from previous observation")
+        if open_bug_count == 0 and previous_count >= 50:
+            return ("suspicious", "sudden drop to zero from previous observation")
+        return ("normal", None)
+
+    def list_plugins(self) -> list[PluginDescriptor]:
+        return list(self.plugin_registry.values())
+
+    def run_bug_snapshot_plugin(
+        self,
+        plugin_name: str,
+        release_id: int,
+        submission: BugSnapshotSubmission,
+    ) -> BugSnapshot:
+        plugin = self.plugin_registry.get(plugin_name)
+        if plugin is None:
+            raise KeyError(f"Plugin {plugin_name} was not found.")
+        if BUG_SNAPSHOT_INGEST_CAPABILITY not in plugin.capabilities:
+            raise ValueError(f"Plugin {plugin_name} does not support bug snapshot ingestion.")
+        return self.add_bug_snapshot(
+            release_id,
+            open_bug_count=submission.open_bug_count,
+            signal_type=submission.signal_type,
+        )
+
+    def log_notification(
+        self,
+        *,
+        release_id: int,
+        milestone_id: int,
+        notification_type: str,
+        sent_at: datetime,
+    ) -> NotificationRecord:
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO notification_log (release_id, milestone_id, sent_at, type)
+                VALUES (?, ?, ?, ?)
+                """,
+                (release_id, milestone_id, sent_at.isoformat(), notification_type),
+            )
+            notification_id = int(cursor.lastrowid)
+        return NotificationRecord(
+            id=notification_id,
+            release_id=release_id,
+            milestone_id=milestone_id,
+            type=notification_type,
+            sent_at=sent_at,
+        )
+
+    def list_notifications(
+        self,
+        *,
+        release_id: int | None = None,
+        milestone_id: int | None = None,
+    ) -> list[NotificationRecord]:
+        where: list[str] = []
+        params: list[int] = []
+        if release_id is not None:
+            where.append("release_id = ?")
+            params.append(release_id)
+        if milestone_id is not None:
+            where.append("milestone_id = ?")
+            params.append(milestone_id)
+
+        query = """
+            SELECT id, release_id, milestone_id, sent_at, type
+            FROM notification_log
+        """
+        if where:
+            query += f" WHERE {' AND '.join(where)}"
+        query += " ORDER BY sent_at ASC, id ASC"
+
+        with self.connect() as connection:
+            rows = connection.execute(query, params).fetchall()
+
+        return [
+            NotificationRecord(
+                id=int(row["id"]),
+                release_id=int(row["release_id"]),
+                milestone_id=int(row["milestone_id"]),
+                type=str(row["type"]),
+                sent_at=datetime.fromisoformat(str(row["sent_at"])),
+            )
+            for row in rows
+        ]
+
+    def get_milestone_reminder_state(self, milestone_id: int, *, as_of: date) -> ReminderState:
+        milestone = self.get_milestone(milestone_id)
+        timeline = self.get_release_timeline(milestone.release_id)
+        timeline_item = next(item for item in timeline.milestones if item.id == milestone_id)
+        notifications = tuple(self.list_notifications(milestone_id=milestone_id))
+        return ReminderState(
+            release_id=timeline_item.release_id,
+            milestone_id=timeline_item.id,
+            milestone_name=timeline_item.name,
+            expected=timeline_item.expected,
+            owner=timeline_item.owner,
+            acked_at=timeline_item.acked_at,
+            pending_types=pending_reminder_types(
+                expected=timeline_item.expected,
+                acked_at=timeline_item.acked_at,
+                notifications=notifications,
+                as_of=as_of,
+            ),
+            notifications=notifications,
+        )
+
+    def list_release_reminder_states(self, release_id: int, *, as_of: date) -> list[ReminderState]:
+        timeline = self.get_release_timeline(release_id)
+        notifications_by_milestone: dict[int, list[NotificationRecord]] = {}
+        for notification in self.list_notifications(release_id=release_id):
+            notifications_by_milestone.setdefault(notification.milestone_id, []).append(notification)
+
+        states: list[ReminderState] = []
+        for item in timeline.milestones:
+            notifications = tuple(notifications_by_milestone.get(item.id, []))
+            states.append(
+                ReminderState(
+                    release_id=item.release_id,
+                    milestone_id=item.id,
+                    milestone_name=item.name,
+                    expected=item.expected,
+                    owner=item.owner,
+                    acked_at=item.acked_at,
+                    pending_types=pending_reminder_types(
+                        expected=item.expected,
+                        acked_at=item.acked_at,
+                        notifications=notifications,
+                        as_of=as_of,
+                    ),
+                    notifications=notifications,
+                )
+            )
+        return states
+
+    def generate_due_notifications(
+        self,
+        *,
+        as_of: date,
+        sent_at: datetime | None = None,
+    ) -> list[NotificationRecord]:
+        if sent_at is None:
+            sent_at = datetime.now(timezone.utc).replace(microsecond=0)
+
+        generated: list[NotificationRecord] = []
+        for release in self.list_releases():
+            for state in self.list_release_reminder_states(release.id, as_of=as_of):
+                for reminder_type in state.pending_types:
+                    effective_sent_at = sent_at
+                    if reminder_type == DAILY_REMINDER_TYPE:
+                        effective_sent_at = sent_at.replace(
+                            year=as_of.year,
+                            month=as_of.month,
+                            day=as_of.day,
+                        )
+                    generated.append(
+                        self.log_notification(
+                            release_id=state.release_id,
+                            milestone_id=state.milestone_id,
+                            notification_type=reminder_type,
+                            sent_at=effective_sent_at,
+                        )
+                    )
+        return generated
+
+    def get_release_timeline(self, release_id: int) -> ReleaseTimeline:
+        release = self.get_release(release_id)
+        with self.connect() as connection:
+            milestone_rows = connection.execute(
+                """
+                SELECT
+                    milestones.id,
+                    milestones.release_id,
+                    milestones.name,
+                    milestones.expected,
+                    milestones.owner,
+                    (
+                        SELECT milestone_ack.acked_at
+                        FROM milestone_ack
+                        WHERE milestone_ack.milestone_id = milestones.id
+                        ORDER BY milestone_ack.acked_at DESC, milestone_ack.id DESC
+                        LIMIT 1
+                    ) AS acked_at
+                    ,
+                    (
+                        SELECT milestone_ack.note
+                        FROM milestone_ack
+                        WHERE milestone_ack.milestone_id = milestones.id
+                        ORDER BY milestone_ack.acked_at DESC, milestone_ack.id DESC
+                        LIMIT 1
+                    ) AS ack_note
+                FROM milestones
+                WHERE milestones.release_id = ?
+                ORDER BY milestones.expected ASC, milestones.id ASC
+                """,
+                (release_id,),
+            ).fetchall()
+
+        return ReleaseTimeline(
+            release=release,
+            milestones=tuple(
+                MilestoneTimelineItem(
+                    id=int(row["id"]),
+                    release_id=int(row["release_id"]),
+                    name=str(row["name"]),
+                    expected=date.fromisoformat(str(row["expected"])),
+                    owner=str(row["owner"]),
+                    acked_at=(
+                        datetime.fromisoformat(str(row["acked_at"]))
+                        if row["acked_at"] is not None
+                        else None
+                    ),
+                    ack_note=str(row["ack_note"]) if row["ack_note"] is not None else None,
+                )
+                for row in milestone_rows
+            ),
+            bug_snapshots=tuple(self.list_bug_snapshots(release_id)),
+        )
+
+    def list_release_timelines(self) -> list[ReleaseTimeline]:
+        return [self.get_release_timeline(release.id) for release in self.list_releases()]

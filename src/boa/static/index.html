@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Boa</title>
+    <link rel="stylesheet" href="/static/app.css">
+  </head>
+  <body>
+    <div class="now-label" aria-hidden="true">NOW</div>
+    <div class="now-line" aria-hidden="true"></div>
+    <button class="now-toggle now-toggle-top" type="button" aria-label="Expand upper Now line panel" aria-expanded="false" data-now-toggle="top">
+      <span aria-hidden="true">+</span>
+    </button>
+    <button class="now-toggle now-toggle-bottom" type="button" aria-label="Expand lower Now line panel" aria-expanded="false" data-now-toggle="bottom">
+      <span aria-hidden="true">+</span>
+    </button>
+    <div class="app-shell">
+      <header class="masthead">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <img src="/static/boa-logo.png" alt="" />
+          </div>
+          <div class="brand-copy">
+            <p class="brand-name">BOA</p>
+            <h1 class="brand-tagline">reveal the shape of a release</h1>
+          </div>
+        </div>
+        <div class="masthead-actions">
+          <div class="masthead-controls" aria-label="Board controls">
+            <div class="selector-field">
+              <span class="selector-label">Horizon</span>
+              <div id="horizon-selector" class="segmented-selector" role="radiogroup" aria-label="Horizon">
+                <span class="segment-highlight" aria-hidden="true"></span>
+                <button class="segment-option is-active" type="button" role="radio" aria-checked="true" data-horizon-months="3">3m</button>
+                <button class="segment-option" type="button" role="radio" aria-checked="false" data-horizon-months="6">6m</button>
+                <button class="segment-option" type="button" role="radio" aria-checked="false" data-horizon-months="9">9m</button>
+              </div>
+            </div>
+            <div class="selector-field">
+              <span class="selector-label">Perspective</span>
+              <div id="perspective-selector" class="segmented-selector segmented-selector-wide" role="radiogroup" aria-label="Perspective">
+                <span class="segment-highlight" aria-hidden="true"></span>
+                <button class="segment-option is-active" type="button" role="radio" aria-checked="true" data-perspective="due-soon">Due Soon</button>
+                <button class="segment-option" type="button" role="radio" aria-checked="false" data-perspective="destination">Destination</button>
+              </div>
+            </div>
+          </div>
+          <div class="legend-hover-shell">
+            <button class="quiet-info-button icon-button" type="button" aria-label="Boa header information" title="Boa keeps the near future in view while the horizon shifts.">
+              <span aria-hidden="true">i</span>
+            </button>
+            <section class="timeline-legend" aria-label="Timeline legend">
+              <div class="legend-item"><span class="legend-icon legend-expected">▼</span><span>Expected</span></div>
+              <div class="legend-item"><span class="legend-icon legend-acked">▲</span><span>Acked</span></div>
+              <div class="legend-item"><span class="legend-icon legend-pending">▲</span><span>Pending</span></div>
+              <div class="legend-item"><span class="legend-icon legend-overdue">▲</span><span>Overdue</span></div>
+            </section>
+          </div>
+        </div>
+      </header>
+
+      <main class="release-stage">
+        <section id="empty-state" class="empty-state hidden">
+          <p class="empty-eyebrow">No release yet</p>
+          <h2>Start the first snake.</h2>
+          <p>The timeline appears as soon as a release arrives.</p>
+          <div class="empty-actions">
+            <button id="empty-new-release-button" class="primary-button" type="button">New Release</button>
+            <button id="seed-button" class="ghost-button" type="button">Load Demo Release</button>
+          </div>
+        </section>
+
+        <section id="timeline-board" class="timeline-board" aria-live="polite">
+        </section>
+        <section class="month-ruler-wrap" aria-hidden="true">
+          <svg id="month-ruler" class="month-ruler" viewBox="0 0 960 42" preserveAspectRatio="none"></svg>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="journey-dialog" class="journey-dialog">
+      <div class="journey-surface">
+        <div class="dialog-head journey-head">
+          <div>
+            <p id="journey-kicker" class="dialog-kicker">Begin a Journey</p>
+            <h2 id="journey-title">Blueprint Editor</h2>
+          </div>
+          <button id="close-journey-dialog-button" class="icon-button" type="button" aria-label="Close">×</button>
+        </div>
+
+        <div class="journey-layout">
+          <form id="journey-form" class="journey-basics">
+            <label>
+              <span>Product</span>
+              <input id="journey-product" type="text" placeholder="FortiSASE">
+            </label>
+            <label>
+              <span>Version</span>
+              <input id="journey-version" type="text" placeholder="26.4">
+            </label>
+            <label>
+              <span>Secret</span>
+              <input id="journey-secret" type="text" placeholder="boa-264">
+            </label>
+            <button id="journey-create-button" class="primary-button" type="submit">Done</button>
+            <p id="journey-message" class="form-note" aria-live="polite"></p>
+          </form>
+
+          <section class="journey-builder" aria-label="Journey timeline builder">
+            <form id="journey-milestone-popover" class="journey-milestone-popover hidden">
+              <div class="journey-popover-head">
+                <span class="journey-popover-kicker">Milestone</span>
+                <div class="journey-delete-shell">
+                  <button id="journey-milestone-menu" class="journey-milestone-menu" type="button" aria-label="Milestone actions">⋯</button>
+                  <div id="journey-milestone-menu-panel" class="journey-milestone-menu-panel hidden">
+                    <button id="journey-milestone-delete" class="journey-milestone-delete" type="button">Delete Milestone</button>
+                  </div>
+                </div>
+              </div>
+              <label>
+                <input id="journey-milestone-name" type="text" placeholder="Regression Ready">
+              </label>
+              <label>
+                Owner
+                <input id="journey-milestone-owner" type="text" placeholder="alice@example.com">
+              </label>
+            </form>
+            <div class="journey-canvas-shell">
+              <svg id="journey-timeline" class="journey-timeline" viewBox="0 0 1120 260" preserveAspectRatio="none"></svg>
+              <button id="journey-add-milestone" class="journey-add-milestone" type="button" aria-label="Add milestone">+</button>
+            </div>
+          </section>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="composer-dialog" class="composer-dialog">
+      <div class="dialog-surface">
+        <div class="dialog-head">
+          <div>
+            <p class="dialog-kicker">Studio</p>
+            <h2>Release rituals</h2>
+          </div>
+          <button id="close-dialog-button" class="icon-button" type="button" aria-label="Close">×</button>
+        </div>
+
+        <div class="dialog-grid">
+          <section class="dialog-panel">
+            <h3>New release</h3>
+            <form id="create-form" class="stack-form">
+              <label>
+                Product
+                <input id="create-product" type="text" placeholder="FortiSASE">
+              </label>
+              <label>
+                Version
+                <input id="create-version" type="text" placeholder="26.2">
+              </label>
+              <label>
+                Secret
+                <input id="create-secret" type="text" placeholder="boa-262">
+              </label>
+              <button class="primary-button" type="submit">Create Release</button>
+              <p id="create-message" class="form-note" aria-live="polite"></p>
+            </form>
+          </section>
+
+          <section class="dialog-panel import-journey-panel">
+            <h3>Bring a Journey from YAML</h3>
+            <form id="import-form" class="stack-form">
+              <label class="file-field">
+                Journey scroll
+                <input id="import-file" type="file" accept=".yaml,.yml,text/yaml,text/x-yaml">
+              </label>
+              <fieldset class="choice-field">
+                <legend>Kickoff</legend>
+                <label class="choice-pill">
+                  <input id="import-keep-original" name="import-mode" type="radio" value="keep" checked>
+                  <span>Keep its first day</span>
+                </label>
+                <label class="choice-pill">
+                  <input id="import-shift-timeline" name="import-mode" type="radio" value="shift">
+                  <span>Choose a new first day</span>
+                </label>
+              </fieldset>
+              <label id="import-kickoff-label" class="hidden">
+                First day
+                <input id="import-kickoff-date" type="date">
+              </label>
+              <button class="primary-button" type="submit">Prepare Journey</button>
+              <p id="import-message" class="form-note" aria-live="polite"></p>
+            </form>
+          </section>
+
+          <section class="dialog-panel">
+            <div class="dialog-row">
+              <div>
+                <h3>Edit release</h3>
+                <p class="summary-line">Adjust milestones without leaving the renderer.</p>
+              </div>
+            </div>
+            <form id="edit-form" class="stack-form">
+              <label>
+                Release
+                <select id="edit-release"></select>
+              </label>
+              <div class="mini-grid">
+                <label>
+                  Product
+                  <input id="edit-product" type="text" placeholder="FortiSASE">
+                </label>
+                <label>
+                  Version
+                  <input id="edit-version" type="text" placeholder="26.3">
+                </label>
+              </div>
+              <label>
+                Secret
+                <input id="edit-secret" type="text" placeholder="boa-263">
+              </label>
+              <button id="edit-release-save-button" class="ghost-button" type="button">Save release basics</button>
+              <div class="editor-divider"></div>
+              <div id="edit-milestone-list" class="milestone-editor-list"></div>
+              <div class="editor-divider"></div>
+              <div class="stack-form">
+                <h4 class="mini-heading">Add milestone</h4>
+                <label>
+                  Name
+                  <input id="edit-new-name" type="text" placeholder="Regression Ready">
+                </label>
+                <label>
+                  Expected
+                  <input id="edit-new-date" type="date">
+                </label>
+                <label>
+                  Owner
+                  <input id="edit-new-owner" type="text" placeholder="alice">
+                </label>
+                <button id="edit-add-button" class="ghost-button" type="submit">Add milestone</button>
+              </div>
+              <p id="edit-message" class="form-note" aria-live="polite"></p>
+            </form>
+          </section>
+
+          <section class="dialog-panel">
+            <div class="dialog-row">
+              <div>
+                <h3>Notifications</h3>
+                <p class="summary-line">See current and pending reminder pressure for one release at a time.</p>
+              </div>
+              <span id="reminder-status-pill" class="status-pill">Checking</span>
+            </div>
+            <div class="stack-form">
+              <label>
+                Release
+                <select id="reminder-release"></select>
+              </label>
+              <div class="dialog-row compact-row">
+                <p class="summary-line">Refresh the reminder engine before checking pending pressure.</p>
+                <button id="reminder-run-button" class="ghost-button" type="button">Run reminders now</button>
+              </div>
+              <div id="reminder-summary" class="subtle-block">Choose a release to inspect reminder state.</div>
+              <div id="reminder-list" class="signal-list"></div>
+              <p id="reminder-message" class="form-note" aria-live="polite"></p>
+            </div>
+          </section>
+
+          <section class="dialog-panel">
+            <div class="dialog-row">
+              <div>
+                <h3>Bug snapshot plugin</h3>
+                <p class="summary-line">A minimal runner for plugin-backed bug snapshot ingestion.</p>
+              </div>
+              <span id="plugin-status-pill" class="status-pill">Checking</span>
+            </div>
+            <form id="plugin-form" class="stack-form">
+              <label>
+                Release
+                <select id="plugin-release"></select>
+              </label>
+              <label>
+                Runner
+                <select id="plugin-runner"></select>
+              </label>
+              <div id="plugin-details" class="subtle-block">Looking for a bug snapshot plugin contract.</div>
+              <label class="file-field">
+                Import file
+                <input id="plugin-file" type="file" accept=".json,.csv,.yaml,.yml,text/csv,application/json,text/plain,text/yaml,text/x-yaml">
+              </label>
+              <label>
+                Manual payload
+                <textarea id="plugin-payload" rows="4" placeholder='{"open_bug_count":37}'></textarea>
+              </label>
+              <button class="primary-button" type="submit">Run snapshot import</button>
+              <p id="plugin-message" class="form-note" aria-live="polite"></p>
+            </form>
+          </section>
+
+          <section class="dialog-panel dialog-panel-wide">
+            <div class="dialog-row">
+              <div>
+                <h3>Board state</h3>
+                <p id="board-summary" class="summary-line">0 releases</p>
+              </div>
+              <span id="status-pill" class="status-pill">Loading</span>
+            </div>
+            <div class="dialog-row">
+              <div>
+                <h3>Demo</h3>
+                <p class="summary-line">Populate a sample snake for the renderer.</p>
+              </div>
+              <button id="dialog-seed-button" class="ghost-button" type="button">Load Demo Release</button>
+            </div>
+          </section>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="ack-dialog" class="ack-dialog">
+      <div class="ack-surface">
+        <div class="dialog-head">
+          <div>
+            <p class="dialog-kicker">Acknowledge</p>
+            <h2>Quietly mark this milestone.</h2>
+          </div>
+          <button id="close-ack-dialog-button" class="icon-button" type="button" aria-label="Close">×</button>
+        </div>
+
+        <form id="ack-form" class="stack-form">
+          <div class="ack-summary">
+            <p id="ack-release-name" class="ack-release-name"></p>
+            <p id="ack-milestone-name" class="ack-milestone-name"></p>
+          </div>
+          <label>
+            Date
+            <input id="ack-date" type="text" readonly>
+          </label>
+          <label>
+            Secret
+            <input id="ack-secret" name="secret" type="password" placeholder="boa-262" required>
+          </label>
+          <label>
+            Note <span class="field-optional">(optional)</span>
+            <textarea id="ack-note" rows="4" placeholder="A short acknowledgement note"></textarea>
+          </label>
+          <p id="ack-hint" class="summary-line">The release secret is required to acknowledge or update the note.</p>
+          <button id="ack-submit-button" class="primary-button" type="submit">Acknowledge</button>
+          <p id="ack-message" class="form-note" aria-live="polite"></p>
+        </form>
+      </div>
+    </dialog>
+
+    <div class="page-note-shell">
+      <button id="new-release-button" class="page-note-action" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="journey-action-menu" title="Begin a Journey">✦ Begin a Journey</button>
+      <div id="journey-action-menu" class="journey-action-menu hidden" role="menu">
+        <button id="new-journey-option" class="journey-action-item" type="button" role="menuitem">Begin a New Journey</button>
+        <button id="import-journey-option" class="journey-action-item" type="button" role="menuitem">Bring a Journey from YAML</button>
+      </div>
+    </div>
+
+    <template id="release-template">
+      <article class="release-row">
+        <div class="release-identity">
+          <div class="release-heading">
+            <div class="release-heading-copy">
+              <p class="release-product"></p>
+              <div class="release-version-row">
+                <h2 class="release-version"></h2>
+                <div class="release-menu-shell">
+                  <button class="release-menu-button" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Release actions">⌄</button>
+                  <div class="release-menu hidden" role="menu">
+                    <button class="release-menu-item" type="button" data-action="edit" role="menuitem">Edit</button>
+                    <button class="release-menu-item" type="button" data-action="export" role="menuitem">Download</button>
+                    <button class="release-menu-item release-menu-item-danger" type="button" data-action="delete" role="menuitem">Delete</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="release-track">
+          <svg class="release-canvas" viewBox="0 0 1120 226" preserveAspectRatio="none"></svg>
+        </div>
+      </article>
+    </template>
+
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>
