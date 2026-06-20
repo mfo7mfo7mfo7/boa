@@ -1,8 +1,8 @@
 const SVG_NS = "http://www.w3.org/2000/svg";
 const RELEASE_VIEWBOX = {
   width: 1120,
-  height: 210,
-  baselineY: 160,
+  height: 280,
+  baselineY: 208,
   leftPad: 18,
   rightPad: 18,
 };
@@ -20,10 +20,28 @@ STORY_LAYOUT.timelineRatio = STORY_LAYOUT.timelineUnits / STORY_LAYOUT.totalUnit
 STORY_LAYOUT.nowRatioInTimeline = STORY_LAYOUT.pastUnits / STORY_LAYOUT.timelineUnits;
 
 const BOARD_NOW_RATIO = 0.5;
+const STARLIGHT_VISUAL_CONFIG = {
+  bugWaveApexStarlight: 75,
+  bugWaveMinHeightRatio: 0.08,
+  bugWaveMaxHeightRatio: 1,
+  bugWaveLowRiskThreshold: 5,
+  bugWaveLowRiskMaxHeightRatio: 0.25,
+  bugWaveUseRollingPeak: false,
+  bugWaveFallbackPeakRisk: 1,
+  bugWaveSmoothingWindow: 3,
+};
+const BUG_WAVE_MANUAL_FIXTURES = {
+  normalConvergence: [10, 30, 80, 50, 20],
+  newPeakToday: [10, 30, 80, 90],
+  lowRiskRelease: [0, 1, 2, 1, 0],
+  noBugs: [0, 0, 0],
+  flatHighRisk: [50, 50, 50, 50],
+};
 
 const state = {
   releases: [],
   timeline: null,
+  pageScope: getPageScope(),
   journeyFoldDays: 15,
   horizonMonths: 3,
   perspective: "due-soon",
@@ -46,11 +64,17 @@ const state = {
 };
 
 const elements = {
+  releaseStage: document.querySelector(".release-stage"),
   board: document.querySelector("#timeline-board"),
   boardSummary: document.querySelector("#board-summary"),
   empty: document.querySelector("#empty-state"),
+  emptyEyebrow: document.querySelector("#empty-eyebrow"),
+  emptyTitle: document.querySelector("#empty-title"),
+  emptyBody: document.querySelector("#empty-body"),
+  emptyReturnLink: document.querySelector("#empty-return-link"),
   monthRuler: document.querySelector("#month-ruler"),
   monthRulerWrap: document.querySelector(".month-ruler-wrap"),
+  journeyStar: document.querySelector(".journey-star"),
   nowLine: document.querySelector(".now-line"),
   nowLabel: document.querySelector(".now-label"),
   nowToggles: [...document.querySelectorAll("[data-now-toggle]")],
@@ -77,6 +101,7 @@ const elements = {
   seedButton: document.querySelector("#seed-button"),
   dialogSeedButton: document.querySelector("#dialog-seed-button"),
   newReleaseButton: document.querySelector("#new-release-button"),
+  boardScope: document.querySelector("#board-scope"),
   journeyActionMenu: document.querySelector("#journey-action-menu"),
   newJourneyOption: document.querySelector("#new-journey-option"),
   importJourneyOption: document.querySelector("#import-journey-option"),
@@ -193,15 +218,27 @@ async function requestOptional(path, options = {}) {
 async function loadTimeline() {
   setStatus("Loading");
   try {
-    state.releases = await request("/api/timeline");
+    const query = state.pageScope.mode === "galaxy"
+      ? `?galaxy=${encodeURIComponent(state.pageScope.galaxySlug)}`
+      : "";
+    const timelinePayload = await request(`/api/timeline${query}`);
+    state.releases = timelinePayload.map(normalizeTimelineRelease);
+    if (state.pageScope.mode === "galaxy" && state.releases.length) {
+      state.pageScope.label = state.releases[0].product;
+    }
     state.timeline = buildTimelineScale(state.releases);
     render();
     await refreshOptionalSurfaces(state.editReleaseId || state.releases[0]?.id);
-    setStatus(state.releases.length ? "Quietly current" : "Waiting");
+    if (state.pageScope.mode === "galaxy" && !state.releases.length) {
+      setStatus("Uncharted galaxy");
+    } else {
+      setStatus(state.releases.length ? "Quietly current" : "Waiting");
+    }
   } catch (error) {
     console.error(error);
     state.releases = [];
     state.timeline = buildTimelineScale([]);
+    syncBoardChromeVisibility(false);
     elements.board.innerHTML = `<section class="empty-state"><p class="empty-eyebrow">Unable to load</p><h2>The horizon is hidden.</h2><p>${escapeHtml(error.message)}</p></section>`;
     elements.empty.classList.add("hidden");
     updateBoardSummary();
@@ -231,6 +268,9 @@ function render(allowTimelineRealign = true) {
   ];
   const hasAnyReleases = state.releases.length > 0;
   const hasReleases = releases.length > 0;
+  syncPageScope();
+  renderEmptyState(hasAnyReleases);
+  syncBoardChromeVisibility(hasAnyReleases);
   elements.empty.classList.toggle("hidden", hasAnyReleases);
   updateBoardSummary();
   syncNowControls();
@@ -273,9 +313,17 @@ function render(allowTimelineRealign = true) {
     row.style.setProperty("--release-soft-rgb", palette.softRgb);
     row.style.setProperty("--release-stroke-rgb", palette.strokeRgb);
     row.style.setProperty("--release-shadow-rgb", palette.shadowRgb);
+    renderReleaseStarlight(fragment, release);
 
     const svg = fragment.querySelector(".release-canvas");
-    drawRelease(svg, { ...release, milestones: orderedMilestones }, state.timeline, palette);
+    const detailCard = fragment.querySelector(".starlight-detail-card");
+    drawRelease(
+      svg,
+      { ...release, milestones: orderedMilestones },
+      state.timeline,
+      palette,
+      { detailCard },
+    );
 
     elements.board.appendChild(fragment);
   });
@@ -294,6 +342,184 @@ function render(allowTimelineRealign = true) {
   renderEditForm();
   renderReminderReleaseOptions();
   renderPluginReleaseOptions();
+}
+
+function renderReleaseStarlight(fragment, release) {
+  const panel = fragment.querySelector(".starlight-summary");
+  const starlight = release.starlight || null;
+  if (!panel || !starlight) {
+    panel?.classList.add("hidden");
+    return;
+  }
+
+  panel.classList.remove("hidden");
+  fragment.querySelector(".starlight-whisper").textContent = starlight.whisper;
+  const metricBits = summarizeStarlightMetrics(starlight.metrics);
+  panel.title = metricBits ? `${starlight.whisper} • ${metricBits}` : starlight.whisper;
+}
+
+function describeStarlightState(value) {
+  if (value >= 100) {
+    return "Departure";
+  }
+  if (value >= 81) {
+    return "Ready";
+  }
+  if (value >= 61) {
+    return "Advancing";
+  }
+  if (value >= 41) {
+    return "Preparing";
+  }
+  if (value >= 21) {
+    return "Building";
+  }
+  return "Gathering";
+}
+
+function getPageScope() {
+  const pathname = window.location.pathname.replace(/\/+$/g, "") || "/";
+  if (pathname === "/") {
+    return {
+      mode: "universe",
+      galaxySlug: null,
+      label: "All releases",
+    };
+  }
+  const segments = pathname.split("/").filter(Boolean);
+  if (segments.length === 1) {
+    const galaxySlug = slugify(segments[0]);
+    if (galaxySlug) {
+      return {
+        mode: "galaxy",
+        galaxySlug,
+        label: formatGalaxyTitle(segments[0]),
+      };
+    }
+  }
+  return {
+    mode: "universe",
+    galaxySlug: null,
+    label: "All releases",
+  };
+}
+
+function formatGalaxyLabel(value) {
+  return String(value || "")
+    .replaceAll(/[-_]+/g, " ")
+    .replaceAll(/\s+/g, " ")
+    .trim();
+}
+
+function formatGalaxyTitle(value) {
+  return formatGalaxyLabel(value)
+    .split(" ")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function syncPageScope() {
+  if (state.pageScope.mode === "galaxy") {
+    const label = state.pageScope.label || formatGalaxyTitle(state.pageScope.galaxySlug);
+    elements.boardScope.textContent = `Galaxy view: ${label}`;
+    elements.boardScope.classList.remove("hidden");
+    return;
+  }
+  elements.boardScope.textContent = "";
+  elements.boardScope.classList.add("hidden");
+}
+
+function renderEmptyState(hasAnyReleases) {
+  const isGalaxy = state.pageScope.mode === "galaxy";
+  elements.releaseStage.classList.toggle("is-empty-state", !hasAnyReleases);
+  elements.releaseStage.classList.toggle("is-empty-galaxy", isGalaxy && !hasAnyReleases);
+  elements.releaseStage.classList.toggle("is-empty-universe", !isGalaxy && !hasAnyReleases);
+  if (!isGalaxy) {
+    elements.emptyEyebrow.textContent = "No release yet";
+    elements.emptyTitle.textContent = "The sky is waiting for its first journey.";
+    elements.emptyBody.textContent = "When the first release arrives, Boa will begin tracing its horizon.";
+    elements.emptyNewReleaseButton.classList.remove("hidden");
+    elements.seedButton.classList.remove("hidden");
+    elements.emptyReturnLink.classList.add("hidden");
+    return;
+  }
+
+  const galaxyLabel = state.pageScope.label || formatGalaxyTitle(state.pageScope.galaxySlug);
+  elements.emptyEyebrow.textContent = "Galaxy not found";
+  elements.emptyTitle.textContent = `${galaxyLabel} has not been observed yet.`;
+  elements.emptyBody.textContent = hasAnyReleases
+    ? "This galaxy is quiet for now."
+    : "No releases map to this galaxy yet. Return to the full universe to keep traveling.";
+  elements.emptyNewReleaseButton.classList.add("hidden");
+  elements.seedButton.classList.add("hidden");
+  elements.emptyReturnLink.classList.remove("hidden");
+}
+
+function syncBoardChromeVisibility(hasAnyReleases) {
+  const shouldShow = Boolean(hasAnyReleases);
+  elements.nowLine.classList.toggle("hidden", !shouldShow);
+  elements.nowLabel.classList.toggle("hidden", !shouldShow);
+  elements.monthRulerWrap.classList.toggle("hidden", !shouldShow);
+  elements.journeyStar.classList.toggle("hidden", !shouldShow);
+  elements.nowToggles.forEach((toggle) => {
+    toggle.classList.toggle("hidden", !shouldShow);
+  });
+}
+
+function normalizeTimelineRelease(release) {
+  return {
+    ...release,
+    milestones: Array.isArray(release.milestones) ? release.milestones.map((milestone) => ({ ...milestone })) : [],
+    bug_snapshots: Array.isArray(release.bug_snapshots) ? release.bug_snapshots.map((snapshot) => ({ ...snapshot })) : [],
+    starlight: normalizeStarlightStatus(release.starlight),
+    starlight_trail: Array.isArray(release.starlight_trail)
+      ? release.starlight_trail.map(normalizeStarlightEvent)
+      : [],
+  };
+}
+
+function normalizeStarlightStatus(starlight) {
+  if (!starlight || typeof starlight !== "object") {
+    return null;
+  }
+  return {
+    release_id: Number(starlight.release_id),
+    starlight: Number(starlight.starlight),
+    whisper: String(starlight.whisper || ""),
+    observed_on: starlight.observed_on || null,
+    updated_at: starlight.updated_at || null,
+    detail: normalizeStarlightDetail(starlight.detail),
+    metrics: normalizeStarlightMetrics(starlight.metrics || starlight.details),
+  };
+}
+
+function normalizeStarlightEvent(event) {
+  return {
+    date: event?.date || null,
+    starlight: Number(event?.starlight || 0),
+    whisper: String(event?.whisper || ""),
+    detail: normalizeStarlightDetail(event?.detail),
+    metrics: normalizeStarlightMetrics(event?.metrics || event?.details),
+  };
+}
+
+function normalizeStarlightDetail(detail) {
+  return {
+    type: detail?.type === "markdown" ? "markdown" : "markdown",
+    content: String(detail?.content || ""),
+  };
+}
+
+function normalizeStarlightMetrics(metrics) {
+  if (!metrics || typeof metrics !== "object") {
+    return null;
+  }
+  return {
+    done: Number(metrics?.done || 0),
+    total: Number(metrics?.total || 0),
+    blocked: Number(metrics?.blocked || 0),
+  };
 }
 
 function getTimelineBoardMetrics() {
@@ -403,8 +629,15 @@ function getViewportNowRatioInTrack() {
   if (!trackRect || !trackRect.width) {
     return BOARD_NOW_RATIO;
   }
-  const rawRatio = (window.innerWidth / 2 - trackRect.left) / trackRect.width;
+  const rawRatio = (getViewportCenterX() - trackRect.left) / trackRect.width;
   return Math.min(Math.max(rawRatio, 0.05), 0.95);
+}
+
+function getViewportCenterX() {
+  if (window.visualViewport) {
+    return window.visualViewport.offsetLeft + (window.visualViewport.width / 2);
+  }
+  return window.innerWidth / 2;
 }
 
 function positionStoryGuides() {
@@ -416,7 +649,7 @@ function positionStoryGuides() {
   const firstCanvas = elements.board.querySelector(".release-canvas");
   const canvasRect = firstCanvas?.getBoundingClientRect();
   const actualCanvasWidth = canvasRect?.width ?? metrics.canvasWidth;
-  const nowViewportX = window.innerWidth / 2;
+  const nowViewportX = getViewportCenterX();
   const nowRatio = state.timeline?.nowRatio ?? BOARD_NOW_RATIO;
   const rulerLeft = nowViewportX - (actualCanvasWidth * nowRatio);
 
@@ -748,8 +981,9 @@ function getSelectedAckMilestone() {
   return release.milestones.find((item) => item.id === state.ackContext?.milestoneId) || null;
 }
 
-function drawRelease(svg, release, timeline, palette) {
+function drawRelease(svg, release, timeline, palette, options = {}) {
   svg.innerHTML = "";
+  const detailCard = options.detailCard || null;
 
   const { width, height, baselineY, leftPad, rightPad } = RELEASE_VIEWBOX;
 
@@ -761,8 +995,8 @@ function drawRelease(svg, release, timeline, palette) {
     x2: "0",
     y2: "1",
   });
-  gradient.appendChild(svgNode("stop", { offset: "0%", "stop-color": palette.stroke, "stop-opacity": "0.28" }));
-  gradient.appendChild(svgNode("stop", { offset: "68%", "stop-color": palette.soft, "stop-opacity": "0.12" }));
+  gradient.appendChild(svgNode("stop", { offset: "0%", "stop-color": palette.stroke, "stop-opacity": "0.14" }));
+  gradient.appendChild(svgNode("stop", { offset: "68%", "stop-color": palette.soft, "stop-opacity": "0.08" }));
   gradient.appendChild(svgNode("stop", { offset: "100%", "stop-color": palette.soft, "stop-opacity": "0" }));
   defs.appendChild(gradient);
 
@@ -803,26 +1037,40 @@ function drawRelease(svg, release, timeline, palette) {
   };
 
   const observedBugSnapshots = normalizeObservedBugSnapshots(release.bug_snapshots);
+  const starlightEvents = getMeaningfulStarlightEvents(release);
   const releaseExtent = getReleaseExtent(release, observedBugSnapshots, timeline);
+  const bugWaveMetrics = buildBugWaveMetrics(observedBugSnapshots, baselineY);
   const spineStartX = clampX(xForDate(releaseExtent.startTime));
   const spineEndX = clampX(xForDate(releaseExtent.endTime));
 
   const wash = svgNode("path", {
-    d: buildWaveAreaPath(observedBugSnapshots, xForDate, baselineY, spineStartX, spineEndX),
+    d: buildWaveAreaPath(observedBugSnapshots, xForDate, baselineY, spineStartX, spineEndX, bugWaveMetrics),
     fill: `url(#boaWave-${release.id})`,
-    filter: "url(#handdrawn)",
-    class: "wave-stroke",
+    opacity: "0.7",
+    class: "wave-wash",
   });
   svg.appendChild(wash);
 
-  const wave = svgNode("path", {
-    d: buildWaveLinePath(observedBugSnapshots, xForDate, baselineY, spineStartX, spineEndX),
+  const haze = svgNode("path", {
+    d: buildWaveLinePath(observedBugSnapshots, xForDate, baselineY, spineStartX, spineEndX, bugWaveMetrics),
     fill: "none",
-    stroke: palette.stroke,
-    "stroke-width": "2.2",
+    stroke: `rgba(${palette.softRgb}, 0.5)`,
+    "stroke-width": "11",
     "stroke-linecap": "round",
     "stroke-linejoin": "round",
-    opacity: "0.95",
+    opacity: "0.28",
+    class: "wave-haze",
+  });
+  svg.appendChild(haze);
+
+  const wave = svgNode("path", {
+    d: buildWaveLinePath(observedBugSnapshots, xForDate, baselineY, spineStartX, spineEndX, bugWaveMetrics),
+    fill: "none",
+    stroke: palette.stroke,
+    "stroke-width": "2.05",
+    "stroke-linecap": "round",
+    "stroke-linejoin": "round",
+    opacity: "0.82",
     class: "wave-stroke",
   });
   svg.appendChild(wave);
@@ -830,21 +1078,25 @@ function drawRelease(svg, release, timeline, palette) {
   const latestSnapshot = observedBugSnapshots.at(-1);
   if (latestSnapshot) {
     const sourceX = xForDate(latestSnapshot.observed_at);
-    const sourceY = wavePointY(latestSnapshot.open_bug_count, observedBugSnapshots, baselineY);
+    const sourceY = wavePointY(latestSnapshot, bugWaveMetrics, observedBugSnapshots.length - 1, baselineY);
     const source = svgNode("g", { class: "wave-source", cursor: "help" });
-    source.appendChild(svgTitle([`${latestSnapshot.open_bug_count} open bugs`, `observed ${formatDateTime(latestSnapshot.observed_at)}`]));
+    source.appendChild(svgTitle([
+      `${latestSnapshot.open_bug_count} open bugs`,
+      `risk ${Math.round(getBugRisk(latestSnapshot))}`,
+      `observed ${formatDateTime(latestSnapshot.observed_at)}`,
+    ]));
     source.appendChild(svgNode("circle", {
       cx: String(sourceX),
       cy: String(sourceY),
-      r: "10",
-      fill: `rgba(${palette.softRgb}, 0.2)`,
+      r: "9.5",
+      fill: `rgba(${palette.softRgb}, 0.26)`,
       class: "wave-source-glow",
     }));
     const core = svgNode("circle", {
       cx: String(sourceX),
       cy: String(sourceY),
-      r: "3.2",
-      fill: `rgba(${palette.strokeRgb}, 0.88)`,
+      r: "3.1",
+      fill: `rgba(${palette.strokeRgb}, 0.9)`,
       class: "wave-source-core",
     });
     source.appendChild(core);
@@ -947,6 +1199,431 @@ function drawRelease(svg, release, timeline, palette) {
     }
     svg.appendChild(milestoneGroup);
   });
+
+  renderStarlightTrail(svg, starlightEvents, xForDate, clampX, detailCard);
+}
+
+function getMeaningfulStarlightEvents(release) {
+  const events = Array.isArray(release.starlight_trail) ? release.starlight_trail : [];
+  return events
+    .filter((event) => event && event.date)
+    .sort((left, right) => dateishTime(left.date) - dateishTime(right.date))
+    .filter((event, index, source) => index === 0 || event.starlight !== source[index - 1].starlight);
+}
+
+function renderStarlightTrail(svg, events, xForDate, clampX, detailCard) {
+  if (!events.length) {
+    return;
+  }
+
+  const points = events.map((event) => {
+    const x = clampX(xForDate(event.date));
+    const y = starlightToY(event.starlight);
+    return { event, x, y };
+  });
+  const path = buildStarlightPath(points);
+
+  const curve = svgNode("path", {
+    d: path,
+    class: "starlight-curve-glow",
+    fill: "none",
+    stroke: "rgba(239, 219, 174, 0.22)",
+    "stroke-width": "7.2",
+    "stroke-linecap": "round",
+    "stroke-linejoin": "round",
+    opacity: "0.78",
+    style: "filter: blur(1.8px);",
+  });
+  svg.appendChild(curve);
+
+  const coreCurve = svgNode("path", {
+    d: path,
+    class: "starlight-curve",
+    fill: "none",
+    stroke: "rgba(214, 182, 112, 0.56)",
+    "stroke-width": "1.24",
+    "stroke-linecap": "round",
+    "stroke-linejoin": "round",
+    opacity: "0.92",
+    style: "filter: none;",
+  });
+  svg.appendChild(coreCurve);
+
+  points.forEach(({ event, x, y }, index) => {
+    const starPoint = buildStarlightPoint(event, x, y, index);
+    const direction = getStarlightDirection(points, index);
+    const marker = svgNode("g", { class: "starlight-event", cursor: "help" });
+    marker.setAttribute("tabindex", "0");
+    marker.setAttribute("role", "button");
+    marker.setAttribute("aria-label", `Starlight ${event.starlight} on ${formatCalendarDate(event.date)}`);
+
+    const haloLayer = svgNode("g", {
+      class: "starlight-halo-layer",
+      transform: `translate(${starPoint.x} ${starPoint.y})`,
+      style: `animation-delay:${starPoint.twinkleDelay}s; --halo-duration:${starPoint.haloDuration}s;`,
+    });
+    haloLayer.appendChild(svgNode("circle", {
+      cx: "0",
+      cy: "0",
+      r: "8.8",
+      class: "starlight-glow",
+      fill: "rgba(239, 214, 159, 0.16)",
+      style: `animation-delay:${starPoint.twinkleDelay}s; --halo-duration:${starPoint.haloDuration}s;`,
+    }));
+    haloLayer.appendChild(svgNode("path", {
+      d: createIrregularStarPath(starPoint.points, 10.2, 4.4, 0.12, starPoint.seed + 211),
+      fill: "rgba(247, 229, 190, 0.07)",
+      stroke: "none",
+      opacity: "0.8",
+    }));
+    marker.appendChild(haloLayer);
+
+    const tailLayer = svgNode("g", {
+      class: "starlight-tail-layer",
+      transform: `translate(${starPoint.x} ${starPoint.y}) rotate(${direction})`,
+      "aria-hidden": "true",
+    });
+    tailLayer.appendChild(svgNode("path", {
+      d: buildStarlightTailPath(index === points.length - 1 ? 26 : 18),
+      class: "starlight-tail",
+    }));
+    marker.appendChild(tailLayer);
+
+    const twinkleLayer = svgNode("g", {
+      class: "starlight-star starlight-twinkle-layer",
+      transform: `translate(${starPoint.x} ${starPoint.y}) rotate(${starPoint.rotation}) scale(${starPoint.scale})`,
+      style: `opacity:${starPoint.opacity}; animation-delay:${starPoint.twinkleDelay}s; --twinkle-duration:${starPoint.twinkleDuration}s;`,
+    });
+    twinkleLayer.appendChild(svgNode("path", {
+      d: createIrregularStarPath(starPoint.points, 7.8, 3.1, 0.18, starPoint.seed),
+      fill: "rgba(240, 210, 141, 0.84)",
+      stroke: "rgba(255, 244, 219, 0.56)",
+      "stroke-width": "0.5",
+      "stroke-linejoin": "round",
+      "stroke-linecap": "round",
+    }));
+    twinkleLayer.appendChild(svgNode("path", {
+      d: createIrregularStarPath(starPoint.points, 4.2, 1.7, 0.14, starPoint.seed + 101),
+      fill: "rgba(255, 249, 236, 0.94)",
+      stroke: "none",
+    }));
+    twinkleLayer.appendChild(svgNode("circle", {
+      cx: "0",
+      cy: "0",
+      r: "0.95",
+      fill: "rgba(255, 251, 243, 0.95)",
+      opacity: "0.82",
+    }));
+    marker.appendChild(twinkleLayer);
+
+    const label = textNode(String(event.starlight), starPoint.x + 12, starPoint.y - 8, "rgba(130, 107, 69, 0.7)", 10, "start", "starlight-label-text");
+    marker.appendChild(label);
+    bindStarlightDetail(marker, svg, detailCard, starPoint, event);
+    svg.appendChild(marker);
+  });
+}
+
+function buildStarlightPath(points) {
+  if (!points.length) {
+    return "";
+  }
+
+  if (points.length === 1) {
+    const anchor = points[0];
+    return `M ${(anchor.x - 10).toFixed(2)} ${anchor.y.toFixed(2)} L ${(anchor.x + 10).toFixed(2)} ${anchor.y.toFixed(2)}`;
+  }
+
+  let d = `M ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)}`;
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1];
+    const current = points[index];
+    const beforePrevious = points[index - 2] || previous;
+    const afterCurrent = points[index + 1] || current;
+    const spanStartX = Math.min(previous.x, current.x);
+    const spanEndX = Math.max(previous.x, current.x);
+    const controlOneX = Math.min(Math.max(previous.x + ((current.x - beforePrevious.x) / 6), spanStartX), spanEndX);
+    const controlOneY = previous.y + ((current.y - beforePrevious.y) / 6);
+    const controlTwoX = Math.min(Math.max(current.x - ((afterCurrent.x - previous.x) / 6), spanStartX), spanEndX);
+    const controlTwoY = current.y - ((afterCurrent.y - previous.y) / 6);
+    d += ` C ${controlOneX.toFixed(2)} ${controlOneY.toFixed(2)}, ${controlTwoX.toFixed(2)} ${controlTwoY.toFixed(2)}, ${current.x.toFixed(2)} ${current.y.toFixed(2)}`;
+  }
+  return d;
+}
+
+function buildStarlightPoint(event, x, y, index) {
+  const seedSource = `${event.date}:${event.starlight}:${index}:${event.whisper}`;
+  const seed = hashString(seedSource);
+  const pick = (offset) => seededUnit(seed + offset);
+  const rawPoints = [4, 5, 6][Math.floor(pick(11) * 3)] || 5;
+  return {
+    x,
+    y,
+    value: event.starlight,
+    points: rawPoints,
+    rotation: -16 + (pick(23) * 32),
+    scale: 0.88 + (pick(37) * 0.28),
+    opacity: 0.58 + (pick(41) * 0.22),
+    twinkleDelay: Number((pick(53) * 8).toFixed(2)),
+    twinkleDuration: Number((8.4 + (pick(59) * 5.2)).toFixed(2)),
+    haloDuration: Number((11.6 + (pick(67) * 6.4)).toFixed(2)),
+    seed,
+  };
+}
+
+function getStarlightDirection(points, index) {
+  const previous = points[index - 1] || points[index];
+  const next = points[index + 1] || points[index];
+  const deltaX = next.x - previous.x;
+  const deltaY = next.y - previous.y;
+  return (Math.atan2(deltaY, deltaX) * 180) / Math.PI;
+}
+
+function buildStarlightTailPath(length) {
+  return `M 0 0 C ${(-length * 0.28).toFixed(2)} ${(-1.8).toFixed(2)}, ${(-length * 0.72).toFixed(2)} ${(1.6).toFixed(2)}, ${(-length).toFixed(2)} 0`;
+}
+
+function bindStarlightDetail(marker, svg, detailCard, point, event) {
+  if (!detailCard) {
+    return;
+  }
+
+  if (!detailCard.dataset.hoverBound) {
+    detailCard.dataset.hoverBound = "true";
+    detailCard.addEventListener("mouseenter", () => {
+      detailCard.dataset.hovering = "true";
+      window.clearTimeout(detailCard._hideTimer);
+      window.clearTimeout(detailCard._fadeTimer);
+      detailCard.classList.remove("hidden");
+      detailCard.classList.add("is-revealed");
+    });
+    detailCard.addEventListener("mouseleave", () => {
+      detailCard.dataset.hovering = "false";
+      hideStarlightDetail(detailCard);
+    });
+  }
+
+  const show = () => showStarlightDetail(detailCard, svg, point, event);
+  const hide = () => {
+    detailCard.dataset.markerHover = "false";
+    hideStarlightDetail(detailCard);
+  };
+
+  marker.addEventListener("mouseenter", () => {
+    detailCard.dataset.markerHover = "true";
+    show();
+  });
+  marker.addEventListener("focus", show);
+  marker.addEventListener("mouseleave", hide);
+  marker.addEventListener("blur", hide);
+}
+
+function showStarlightDetail(detailCard, svg, point, event) {
+  const body = detailCard.querySelector(".starlight-detail-body");
+  const stats = detailCard.querySelector(".starlight-detail-stats");
+  detailCard.querySelector(".starlight-detail-value").textContent = `✦ ${event.starlight} ${describeStarlightState(event.starlight)}`;
+  detailCard.querySelector(".starlight-detail-date").textContent = formatCalendarDate(event.date);
+  detailCard.querySelector(".starlight-detail-whisper").textContent = event.whisper;
+  renderStarlightMarkdown(body, event.detail?.content || "");
+
+  if (event.metrics) {
+    detailCard.querySelector(".starlight-detail-done").textContent = String(event.metrics.done);
+    detailCard.querySelector(".starlight-detail-total").textContent = String(event.metrics.total);
+    detailCard.querySelector(".starlight-detail-blocked").textContent = String(event.metrics.blocked);
+    stats.classList.remove("hidden");
+  } else {
+    stats.classList.add("hidden");
+  }
+
+  const box = svg.viewBox.baseVal;
+  const xPercent = (point.x / box.width) * 100;
+  const yPercent = (point.y / box.height) * 100;
+  detailCard.style.left = `${Math.min(Math.max(xPercent + 2, 8), 72)}%`;
+  detailCard.style.top = `${Math.min(Math.max(yPercent - 18, 4), 58)}%`;
+  detailCard.dataset.hovering = detailCard.dataset.hovering || "false";
+  detailCard.classList.remove("hidden");
+  detailCard.classList.remove("is-revealed");
+  window.clearTimeout(detailCard._hideTimer);
+  window.clearTimeout(detailCard._fadeTimer);
+  window.requestAnimationFrame(() => {
+    detailCard.classList.add("is-revealed");
+  });
+}
+
+function hideStarlightDetail(detailCard) {
+  if (detailCard.dataset.hovering === "true" || detailCard.dataset.markerHover === "true") {
+    return;
+  }
+  window.clearTimeout(detailCard._hideTimer);
+  window.clearTimeout(detailCard._fadeTimer);
+  detailCard._fadeTimer = window.setTimeout(() => {
+    if (detailCard.dataset.hovering === "true" || detailCard.dataset.markerHover === "true") {
+      return;
+    }
+    detailCard.classList.remove("is-revealed");
+    detailCard._hideTimer = window.setTimeout(() => {
+      if (detailCard.dataset.hovering === "true" || detailCard.dataset.markerHover === "true") {
+        return;
+      }
+      detailCard.classList.add("hidden");
+    }, 1080);
+  }, 220);
+}
+
+function composeStarlightTitleLines(event) {
+  const lines = [`Starlight ${event.starlight}`, event.whisper];
+  const metricBits = summarizeStarlightMetrics(event.metrics);
+  if (metricBits) {
+    lines.push(metricBits);
+  }
+  return lines;
+}
+
+function summarizeStarlightMetrics(metrics) {
+  if (!metrics) {
+    return "";
+  }
+  return `Done ${metrics.done} / Total ${metrics.total} / Blocked ${metrics.blocked}`;
+}
+
+function renderStarlightMarkdown(container, markdown) {
+  if (!container) {
+    return;
+  }
+  container.replaceChildren();
+  const blocks = safeMarkdownToBlocks(markdown);
+  if (!blocks.length) {
+    const paragraph = document.createElement("p");
+    paragraph.textContent = markdown || "No night log recorded.";
+    container.appendChild(paragraph);
+    return;
+  }
+  blocks.forEach((block) => {
+    if (block.type === "heading") {
+      const heading = document.createElement(block.level <= 2 ? "h2" : "h3");
+      appendInlineMarkdown(heading, block.text);
+      container.appendChild(heading);
+      return;
+    }
+    if (block.type === "list") {
+      const list = document.createElement("ul");
+      block.items.forEach((item) => {
+        const li = document.createElement("li");
+        appendInlineMarkdown(li, item);
+        list.appendChild(li);
+      });
+      container.appendChild(list);
+      return;
+    }
+    const paragraph = document.createElement("p");
+    appendInlineMarkdown(paragraph, block.text);
+    container.appendChild(paragraph);
+  });
+}
+
+function safeMarkdownToBlocks(markdown) {
+  const source = String(markdown || "").replace(/\r\n?/g, "\n");
+  const lines = source.split("\n");
+  const blocks = [];
+  let paragraph = [];
+  let list = [];
+
+  const flushParagraph = () => {
+    if (!paragraph.length) {
+      return;
+    }
+    blocks.push({ type: "paragraph", text: paragraph.join(" ").trim() });
+    paragraph = [];
+  };
+  const flushList = () => {
+    if (!list.length) {
+      return;
+    }
+    blocks.push({ type: "list", items: list.slice() });
+    list = [];
+  };
+
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushParagraph();
+      flushList();
+      return;
+    }
+    const headingMatch = trimmed.match(/^(#{1,3})\s+(.*)$/);
+    if (headingMatch) {
+      flushParagraph();
+      flushList();
+      blocks.push({ type: "heading", level: headingMatch[1].length, text: headingMatch[2].trim() });
+      return;
+    }
+    const listMatch = trimmed.match(/^[-*]\s+(.*)$/);
+    if (listMatch) {
+      flushParagraph();
+      list.push(listMatch[1].trim());
+      return;
+    }
+    flushList();
+    paragraph.push(trimmed);
+  });
+
+  flushParagraph();
+  flushList();
+  return blocks.filter((block) => {
+    if (block.type === "list") {
+      return block.items.length > 0;
+    }
+    return Boolean(block.text);
+  });
+}
+
+function appendInlineMarkdown(node, text) {
+  const source = String(text || "");
+  const pattern = /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|`([^`]+)`/g;
+  let lastIndex = 0;
+  let match;
+  while ((match = pattern.exec(source))) {
+    if (match.index > lastIndex) {
+      node.appendChild(document.createTextNode(source.slice(lastIndex, match.index)));
+    }
+    if (match[1] && match[2]) {
+      const anchor = document.createElement("a");
+      anchor.href = match[2];
+      anchor.target = "_blank";
+      anchor.rel = "noopener noreferrer";
+      anchor.textContent = match[1];
+      node.appendChild(anchor);
+    } else if (match[3]) {
+      const code = document.createElement("code");
+      code.textContent = match[3];
+      node.appendChild(code);
+    }
+    lastIndex = pattern.lastIndex;
+  }
+  if (lastIndex < source.length) {
+    node.appendChild(document.createTextNode(source.slice(lastIndex)));
+  }
+}
+
+function createIrregularStarPath(points, outerRadius, innerRadius, irregularity = 0.18, seed = 0) {
+  const total = points * 2;
+  const coords = [];
+
+  for (let index = 0; index < total; index += 1) {
+    const angle = ((Math.PI * 2 * index) / total) - (Math.PI / 2);
+    const baseRadius = index % 2 === 0 ? outerRadius : innerRadius;
+    const jitter = 1 + ((seededUnit(seed + (index * 17)) * 2) - 1) * irregularity;
+    const radius = baseRadius * jitter;
+    const x = Math.cos(angle) * radius;
+    const y = Math.sin(angle) * radius;
+    coords.push(`${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`);
+  }
+
+  return `${coords.join(" ")} Z`;
+}
+
+function seededUnit(seed) {
+  const value = Math.sin((seed + 1) * 12.9898) * 43758.5453;
+  return value - Math.floor(value);
 }
 
 function startMilestoneDrag(event, releaseId, milestoneId, milestoneName, product, version, dateForX) {
@@ -1077,17 +1754,14 @@ async function finishMilestoneDrag() {
   }
 }
 
-function buildWaveLinePath(snapshots, xForDate, baselineY, leftEdge, rightEdge) {
+function buildWaveLinePath(snapshots, xForDate, baselineY, leftEdge, rightEdge, metrics = buildBugWaveMetrics(snapshots, baselineY)) {
   if (!snapshots.length) {
     return `M ${leftEdge} ${baselineY} L ${rightEdge} ${baselineY}`;
   }
 
-  const values = snapshots.map((item) => item.open_bug_count);
-  const max = Math.max(...values, 1);
-  const ceiling = 46;
-  const points = snapshots.map((snapshot) => {
+  const points = snapshots.map((snapshot, index) => {
     const x = xForDate(snapshot.observed_at);
-    const y = baselineY - (snapshot.open_bug_count / max) * (baselineY - ceiling);
+    const y = wavePointY(snapshot, metrics, index, baselineY);
     return [x, y];
   });
 
@@ -1106,17 +1780,14 @@ function buildTimelineSpinePath(leftEdge, rightEdge, baselineY) {
   ].join(" ");
 }
 
-function buildWaveAreaPath(snapshots, xForDate, baselineY, leftEdge, rightEdge) {
+function buildWaveAreaPath(snapshots, xForDate, baselineY, leftEdge, rightEdge, metrics = buildBugWaveMetrics(snapshots, baselineY)) {
   if (!snapshots.length) {
     return `M ${leftEdge} ${baselineY} L ${rightEdge} ${baselineY}`;
   }
 
-  const values = snapshots.map((item) => item.open_bug_count);
-  const max = Math.max(...values, 1);
-  const ceiling = 46;
-  const points = snapshots.map((snapshot) => {
+  const points = snapshots.map((snapshot, index) => {
     const x = xForDate(snapshot.observed_at);
-    const y = baselineY - (snapshot.open_bug_count / max) * (baselineY - ceiling);
+    const y = wavePointY(snapshot, metrics, index, baselineY);
     return [x, y];
   });
 
@@ -1140,11 +1811,135 @@ function getReleaseExtent(release, observedBugSnapshots, timeline) {
   };
 }
 
-function wavePointY(openBugCount, snapshots, baselineY) {
-  const values = snapshots.map((item) => item.open_bug_count);
-  const max = Math.max(...values, 1);
-  const ceiling = 46;
-  return baselineY - (openBugCount / max) * (baselineY - ceiling);
+function getStarlightSkyBounds() {
+  return {
+    top: 20,
+    bottom: RELEASE_VIEWBOX.baselineY - 44,
+  };
+}
+
+function starlightToY(starlight, bounds = getStarlightSkyBounds()) {
+  const readiness = Math.min(Math.max(Number(starlight) || 0, 0), 100) / 100;
+  const range = Math.max(bounds.bottom - bounds.top, 1);
+  const skyLift = Math.pow(readiness, 1.28);
+  return bounds.bottom - (skyLift * range);
+}
+
+function getBugRisk(snapshot) {
+  return Math.max(Number(snapshot?.open_bug_count) || 0, 0);
+}
+
+function smoothRiskSeries(risks, windowSize = STARLIGHT_VISUAL_CONFIG.bugWaveSmoothingWindow) {
+  const size = Math.max(Math.floor(windowSize || 0), 1);
+  if (size <= 1 || risks.length <= 2) {
+    return risks.slice();
+  }
+  const radius = Math.floor(size / 2);
+  return risks.map((_risk, index) => {
+    let total = 0;
+    let count = 0;
+    for (let cursor = Math.max(0, index - radius); cursor <= Math.min(risks.length - 1, index + radius); cursor += 1) {
+      total += risks[cursor];
+      count += 1;
+    }
+    return count ? total / count : risks[index];
+  });
+}
+
+function computePeakRisk(risks, config = STARLIGHT_VISUAL_CONFIG) {
+  const fallback = Math.max(Number(config.bugWaveFallbackPeakRisk) || 1, 1);
+  if (!risks.length) {
+    return fallback;
+  }
+  const peak = Math.max(...risks, 0);
+  return peak > 0 ? peak : fallback;
+}
+
+function getBugWaveEffectiveMaxRatio(peakRisk, config = STARLIGHT_VISUAL_CONFIG) {
+  if (peakRisk > 0 && peakRisk < config.bugWaveLowRiskThreshold) {
+    return Math.min(Math.max(config.bugWaveLowRiskMaxHeightRatio, 0), 1);
+  }
+  return config.bugWaveMaxHeightRatio;
+}
+
+function normalizeBugWaveHeight(risk, peakRisk, config = STARLIGHT_VISUAL_CONFIG) {
+  if (peakRisk <= 0) {
+    return 0;
+  }
+  const effectiveMaxRatio = getBugWaveEffectiveMaxRatio(peakRisk, config);
+  let normalizedRisk = Math.min(Math.max(risk / peakRisk, 0), 1);
+  if (risk > 0) {
+    normalizedRisk = Math.max(normalizedRisk, config.bugWaveMinHeightRatio);
+  }
+  return Math.min(Math.max(normalizedRisk * effectiveMaxRatio, 0), effectiveMaxRatio);
+}
+
+function buildBugWaveMetrics(snapshots, baselineY, config = STARLIGHT_VISUAL_CONFIG) {
+  // The wave apex maps to a starlight readiness height so sea and sky share one story scale.
+  const apexY = starlightToY(config.bugWaveApexStarlight);
+  const apexHeight = Math.max(baselineY - apexY, 1);
+  const rawRisks = snapshots.map(getBugRisk);
+  const smoothedRisks = smoothRiskSeries(rawRisks, config.bugWaveSmoothingWindow);
+  const releasePeakRisk = computePeakRisk(rawRisks, config);
+  const peaks = config.bugWaveUseRollingPeak
+    ? rawRisks.map((_risk, index) => computePeakRisk(rawRisks.slice(0, index + 1), config))
+    : smoothedRisks.map(() => releasePeakRisk);
+  const effectiveMaxRatio = getBugWaveEffectiveMaxRatio(releasePeakRisk, config);
+  const normalizedRisks = smoothedRisks.map((risk, index) => normalizeBugWaveHeight(risk, peaks[index], config));
+  const maxNormalizedRisk = normalizedRisks.length ? Math.max(...normalizedRisks, 0) : 0;
+  const peakPointY = baselineY - (maxNormalizedRisk * apexHeight);
+
+  return {
+    apexY,
+    apexHeight,
+    rawRisks,
+    smoothedRisks,
+    releasePeakRisk,
+    peaks,
+    effectiveMaxRatio,
+    normalizedRisks,
+    maxNormalizedRisk,
+    peakPointY,
+  };
+}
+
+function wavePointY(snapshot, metrics, index, baselineY = RELEASE_VIEWBOX.baselineY) {
+  const pointIndex = Number.isFinite(index) && index >= 0 ? index : 0;
+  const normalized = metrics.normalizedRisks[pointIndex] || 0;
+  return baselineY - (normalized * metrics.apexHeight);
+}
+
+function inspectBugWaveSeries(risks, baselineY = RELEASE_VIEWBOX.baselineY, config = STARLIGHT_VISUAL_CONFIG) {
+  const snapshots = risks.map((risk, index) => ({
+    open_bug_count: risk,
+    observed_at: new Date(Date.UTC(2026, 0, index + 1)).toISOString(),
+  }));
+  const metrics = buildBugWaveMetrics(snapshots, baselineY, config);
+  return {
+    config,
+    baselineY,
+    starlight75Y: starlightToY(config.bugWaveApexStarlight),
+    apexY: metrics.apexY,
+    sameSkyCoordinateSystem: metrics.apexY === starlightToY(config.bugWaveApexStarlight),
+    yAxisDirection: "smaller-y-is-higher",
+    releasePeakRisk: metrics.releasePeakRisk,
+    effectiveMaxRatio: metrics.effectiveMaxRatio,
+    maxNormalizedRisk: metrics.maxNormalizedRisk,
+    peakPointY: metrics.peakPointY,
+    points: snapshots.map((snapshot, index) => ({
+      risk: risks[index],
+      smoothedRisk: metrics.smoothedRisks[index],
+      peakRisk: metrics.peaks[index],
+      normalizedRisk: metrics.normalizedRisks[index],
+      y: wavePointY(snapshot, metrics, index, baselineY),
+    })),
+  };
+}
+
+function inspectBugWaveFixtures() {
+  return Object.fromEntries(
+    Object.entries(BUG_WAVE_MANUAL_FIXTURES).map(([name, risks]) => [name, inspectBugWaveSeries(risks)]),
+  );
 }
 
 function getReleasePalette(release, fallbackIndex = 0) {
@@ -1269,10 +2064,15 @@ function createInitialJourneyDraft() {
       createJourneyMilestone("GA Release", ga, "manager", "ga"),
     ],
     activeMilestoneId: null,
+    selectedMilestoneIds: [],
     dragMilestoneId: null,
     dragCandidateMilestoneId: null,
     dragStartX: null,
     dragMoved: false,
+    dragGroupSnapshot: null,
+    selectionAnchor: null,
+    selectionRect: null,
+    selectionMoved: false,
   };
 }
 
@@ -1433,6 +2233,109 @@ function closeJourneyMilestoneEditor() {
   renderJourneyPopover();
 }
 
+function clearJourneySelection() {
+  if (!state.journeyDraft) {
+    return;
+  }
+  state.journeyDraft.selectedMilestoneIds = [];
+  state.journeyDraft.selectionAnchor = null;
+  state.journeyDraft.selectionRect = null;
+  state.journeyDraft.selectionMoved = false;
+}
+
+function getJourneySelectedMilestoneIds() {
+  return state.journeyDraft?.selectedMilestoneIds ?? [];
+}
+
+function isJourneyMilestoneSelected(milestoneId) {
+  return getJourneySelectedMilestoneIds().includes(milestoneId);
+}
+
+function getJourneySvgPoint(clientX, clientY) {
+  const svg = elements.journeyTimeline;
+  if (!svg) {
+    return { x: 0, y: 0 };
+  }
+  const rect = svg.getBoundingClientRect();
+  const viewBox = svg.viewBox.baseVal;
+  const scaleX = viewBox.width / Math.max(rect.width, 1);
+  const scaleY = viewBox.height / Math.max(rect.height, 1);
+  return {
+    x: (clientX - rect.left) * scaleX,
+    y: (clientY - rect.top) * scaleY,
+  };
+}
+
+function getJourneyMilestoneSelectionBounds(milestone, x, nameY, dateY, baselineY) {
+  const top = Math.min(nameY - 14, dateY - 9, baselineY - 38);
+  const bottom = baselineY + 16;
+  return {
+    left: x - 54,
+    right: x + 74,
+    top,
+    bottom,
+  };
+}
+
+function getJourneyDragSnapshot(milestoneId) {
+  if (!state.journeyDraft) {
+    return null;
+  }
+  const selectedIds = isJourneyMilestoneSelected(milestoneId) && getJourneySelectedMilestoneIds().length > 1
+    ? [...getJourneySelectedMilestoneIds()]
+    : [milestoneId];
+  const milestones = [...state.journeyDraft.milestones]
+    .sort((left, right) => dateishTime(left.expected) - dateishTime(right.expected));
+  const oneDay = 24 * 60 * 60 * 1000;
+  const selectedSet = new Set(selectedIds);
+  const baseTimes = Object.fromEntries(selectedIds.map((id) => {
+    const milestone = milestones.find((item) => item.id === id);
+    return [id, milestone ? dateishTime(milestone.expected) : 0];
+  }));
+
+  let minDeltaDays = Number.NEGATIVE_INFINITY;
+  let maxDeltaDays = Number.POSITIVE_INFINITY;
+
+  milestones.forEach((milestone, index) => {
+    if (!selectedSet.has(milestone.id)) {
+      return;
+    }
+    const baseTime = baseTimes[milestone.id];
+    for (let prevIndex = index - 1; prevIndex >= 0; prevIndex -= 1) {
+      const prev = milestones[prevIndex];
+      if (selectedSet.has(prev.id)) {
+        continue;
+      }
+      minDeltaDays = Math.max(minDeltaDays, Math.ceil(((dateishTime(prev.expected) + oneDay) - baseTime) / oneDay));
+      break;
+    }
+    for (let nextIndex = index + 1; nextIndex < milestones.length; nextIndex += 1) {
+      const next = milestones[nextIndex];
+      if (selectedSet.has(next.id)) {
+        continue;
+      }
+      maxDeltaDays = Math.min(maxDeltaDays, Math.floor(((dateishTime(next.expected) - oneDay) - baseTime) / oneDay));
+      break;
+    }
+  });
+
+  if (!Number.isFinite(minDeltaDays)) {
+    minDeltaDays = -3650;
+  }
+  if (!Number.isFinite(maxDeltaDays)) {
+    maxDeltaDays = 3650;
+  }
+
+  return {
+    selectedIds,
+    baseTimes,
+    anchorMilestoneId: milestoneId,
+    anchorTime: baseTimes[milestoneId],
+    minDeltaDays,
+    maxDeltaDays,
+  };
+}
+
 function renderJourneyDraft() {
   if (!state.journeyDraft || !elements.journeyTimeline) {
     return;
@@ -1473,6 +2376,28 @@ function renderJourneyDraft() {
   defs.appendChild(filter);
   svg.appendChild(defs);
 
+  const backgroundHit = svgNode("rect", {
+    x: "0",
+    y: "0",
+    width: String(width),
+    height: "260",
+    fill: "transparent",
+    class: "journey-canvas-hit",
+  });
+  backgroundHit.addEventListener("pointerdown", (event) => {
+    if (!state.journeyDraft) {
+      return;
+    }
+    event.preventDefault();
+    const point = getJourneySvgPoint(event.clientX, event.clientY);
+    state.journeyDraft.selectionAnchor = point;
+    state.journeyDraft.selectionRect = { x: point.x, y: point.y, width: 0, height: 0 };
+    state.journeyDraft.selectionMoved = false;
+    state.journeyDraft.activeMilestoneId = null;
+    renderJourneyPopover();
+  });
+  svg.appendChild(backgroundHit);
+
   svg.appendChild(svgNode("path", {
     d: buildTimelineSpinePath(leftPad, width - rightPad, baselineY),
     class: "timeline-spine",
@@ -1481,6 +2406,7 @@ function renderJourneyDraft() {
   const orderedMilestones = [...state.journeyDraft.milestones]
     .sort((left, right) => dateishTime(left.expected) - dateishTime(right.expected));
   let activeMilestoneRatio = null;
+  const selectionBounds = [];
 
   const labelLevels = [];
   orderedMilestones.forEach((milestone, index) => {
@@ -1506,10 +2432,21 @@ function renderJourneyDraft() {
     const arrowTopY = baselineY - 15;
     const nameY = arrowTopY - 10 + verticalOffset;
     const dateY = arrowTopY + 1 + verticalOffset;
+    const isSelected = isJourneyMilestoneSelected(milestone.id);
     const isDraggable = state.journeyDraft.mode === "edit"
       ? true
       : milestone.type !== "custom" ? milestone.type === "kickoff" || milestone.type === "ga" : true;
-    const marker = svgNode("g", { class: "journey-marker" });
+    const marker = svgNode("g", { class: `journey-marker ${isSelected ? "is-selected" : ""}` });
+    if (isSelected) {
+      marker.appendChild(svgNode("rect", {
+        x: String(x - 32),
+        y: String(nameY - 24),
+        width: "64",
+        height: "54",
+        rx: "18",
+        class: "journey-selection-halo",
+      }));
+    }
     marker.appendChild(svgNode("line", {
       x1: String(x),
       x2: String(x),
@@ -1532,19 +2469,30 @@ function renderJourneyDraft() {
       width: "36",
       height: "54",
       fill: "transparent",
-      class: `journey-milestone-hit ${isDraggable ? "is-draggable" : ""}`,
+      class: `journey-milestone-hit ${isDraggable ? "is-draggable" : ""} ${isSelected ? "is-selected" : ""}`,
     });
     hit.addEventListener("pointerdown", (event) => {
       event.preventDefault();
+      state.journeyDraft.selectionAnchor = null;
+      state.journeyDraft.selectionRect = null;
+      state.journeyDraft.selectionMoved = false;
       state.journeyDraft.dragCandidateMilestoneId = milestone.id;
       state.journeyDraft.dragStartX = event.clientX;
       state.journeyDraft.dragMoved = false;
       if (isDraggable) {
+        if (!isSelected) {
+          clearJourneySelection();
+        }
         state.journeyDraft.dragMilestoneId = milestone.id;
+        state.journeyDraft.dragGroupSnapshot = getJourneyDragSnapshot(milestone.id);
       }
     });
     marker.appendChild(hit);
     svg.appendChild(marker);
+    selectionBounds.push({
+      id: milestone.id,
+      ...getJourneyMilestoneSelectionBounds(milestone, x, nameY, dateY, baselineY),
+    });
   });
 
   svg.appendChild(svgNode("path", {
@@ -1564,6 +2512,20 @@ function renderJourneyDraft() {
     svg.appendChild(monthText);
   });
 
+  if (state.journeyDraft.selectionRect) {
+    const { x, y, width: rectWidth, height: rectHeight } = state.journeyDraft.selectionRect;
+    svg.appendChild(svgNode("rect", {
+      x: String(x),
+      y: String(y),
+      width: String(rectWidth),
+      height: String(rectHeight),
+      rx: "10",
+      class: "journey-selection-box",
+    }));
+  }
+
+  state.journeyDraft.selectionBounds = selectionBounds;
+
   renderJourneyPopover(activeMilestoneRatio);
 }
 
@@ -1571,6 +2533,7 @@ function addJourneyMilestone() {
   if (!state.journeyDraft) {
     return;
   }
+  clearJourneySelection();
   const ordered = [...state.journeyDraft.milestones].sort((left, right) => dateishTime(left.expected) - dateishTime(right.expected));
   const gaMilestone = ordered.find((item) => item.type === "ga");
   const beforeGa = gaMilestone
@@ -1594,6 +2557,7 @@ function updateJourneyActiveMilestone(field, value) {
   if (!active) {
     return;
   }
+  clearJourneySelection();
   active[field] = value;
   renderJourneyDraft();
 }
@@ -1603,6 +2567,7 @@ function deleteJourneyMilestone() {
   if (!active || active.type !== "custom") {
     return;
   }
+  clearJourneySelection();
   state.journeyDraft.milestones = state.journeyDraft.milestones.filter((item) => item.id !== active.id);
   state.journeyDraft.activeMilestoneId = null;
   elements.journeyMilestoneMenuPanel.classList.add("hidden");
@@ -1624,56 +2589,46 @@ function updateJourneyDrag(clientX) {
     state.journeyDraft.activeMilestoneId = null;
     renderJourneyPopover();
   }
-  const scale = getJourneyTimelineScale();
-  const svgRect = elements.journeyTimeline.getBoundingClientRect();
-  const leftPad = 90;
-  const rightPad = 110;
-  const x = clientX - svgRect.left;
-  const clamped = Math.min(Math.max(x, leftPad), svgRect.width - rightPad);
-  const ratio = (clamped - leftPad) / Math.max(svgRect.width - leftPad - rightPad, 1);
-  const rawTime = scale.startTime + (ratio * scale.range);
-  const dragged = state.journeyDraft.milestones.find((item) => item.id === state.journeyDraft.dragMilestoneId);
-  if (!dragged) {
+  const snapshot = state.journeyDraft.dragGroupSnapshot || getJourneyDragSnapshot(state.journeyDraft.dragMilestoneId);
+  if (!snapshot) {
     return;
   }
-  const ordered = [...state.journeyDraft.milestones]
-    .sort((left, right) => dateishTime(left.expected) - dateishTime(right.expected));
-  const draggedIndex = ordered.findIndex((item) => item.id === dragged.id);
+  const scale = getJourneyTimelineScale();
+  const point = getJourneySvgPoint(clientX, 0);
+  const clamped = Math.min(Math.max(point.x, 90), 1120 - 110);
+  const ratio = (clamped - 90) / Math.max(1120 - 90 - 110, 1);
+  const rawTime = scale.startTime + (ratio * scale.range);
   const oneDay = 24 * 60 * 60 * 1000;
-  let snappedTime = Math.round(rawTime / oneDay) * oneDay;
-  if (dragged.type === "kickoff" && ordered[draggedIndex + 1]) {
-    const latestAllowed = dateishTime(ordered[draggedIndex + 1].expected) - oneDay;
-    snappedTime = Math.min(snappedTime, latestAllowed);
-  }
-  if (dragged.type === "ga" && ordered[draggedIndex - 1]) {
-    const earliestAllowed = dateishTime(ordered[draggedIndex - 1].expected) + oneDay;
-    snappedTime = Math.max(snappedTime, earliestAllowed);
-  }
-  if (dragged.type === "custom") {
-    if (ordered[draggedIndex - 1]) {
-      const earliestAllowed = dateishTime(ordered[draggedIndex - 1].expected) + oneDay;
-      snappedTime = Math.max(snappedTime, earliestAllowed);
+  const snappedTime = Math.round(rawTime / oneDay) * oneDay;
+  const rawDeltaDays = Math.round((snappedTime - snapshot.anchorTime) / oneDay);
+  const deltaDays = Math.min(Math.max(rawDeltaDays, snapshot.minDeltaDays), snapshot.maxDeltaDays);
+  snapshot.selectedIds.forEach((id) => {
+    const milestone = state.journeyDraft.milestones.find((item) => item.id === id);
+    if (!milestone) {
+      return;
     }
-    if (ordered[draggedIndex + 1]) {
-      const latestAllowed = dateishTime(ordered[draggedIndex + 1].expected) - oneDay;
-      snappedTime = Math.min(snappedTime, latestAllowed);
-    }
-  }
-  const snapped = new Date(snappedTime);
-  snapped.setHours(12, 0, 0, 0);
-  dragged.expected = snapped;
+    const shifted = new Date(snapshot.baseTimes[id] + (deltaDays * oneDay));
+    shifted.setHours(12, 0, 0, 0);
+    milestone.expected = shifted;
+  });
   renderJourneyDraft();
 }
 
 function finishJourneyDrag() {
   if (state.journeyDraft) {
     const shouldOpenEditor = state.journeyDraft.dragCandidateMilestoneId && !state.journeyDraft.dragMoved;
-    if (shouldOpenEditor) {
+    const selectedCount = getJourneySelectedMilestoneIds().length;
+    const candidateIsSelected = shouldOpenEditor
+      ? isJourneyMilestoneSelected(state.journeyDraft.dragCandidateMilestoneId)
+      : false;
+    if (shouldOpenEditor && !(candidateIsSelected && selectedCount > 1)) {
+      clearJourneySelection();
       state.journeyDraft.activeMilestoneId = state.journeyDraft.dragCandidateMilestoneId;
     }
     state.journeyDraft.dragMilestoneId = null;
     state.journeyDraft.dragCandidateMilestoneId = null;
     state.journeyDraft.dragStartX = null;
+    state.journeyDraft.dragGroupSnapshot = null;
     renderJourneyDraft();
     setTimeout(() => {
       if (state.journeyDraft) {
@@ -1681,6 +2636,50 @@ function finishJourneyDrag() {
       }
     }, 0);
   }
+}
+
+function updateJourneySelection(clientX, clientY) {
+  if (!state.journeyDraft?.selectionAnchor) {
+    return;
+  }
+  const current = getJourneySvgPoint(clientX, clientY);
+  const start = state.journeyDraft.selectionAnchor;
+  const rect = {
+    x: Math.min(start.x, current.x),
+    y: Math.min(start.y, current.y),
+    width: Math.abs(current.x - start.x),
+    height: Math.abs(current.y - start.y),
+  };
+  if (!state.journeyDraft.selectionMoved && rect.width < 6 && rect.height < 6) {
+    return;
+  }
+  state.journeyDraft.selectionMoved = true;
+  state.journeyDraft.selectionRect = rect;
+  const selectedIds = (state.journeyDraft.selectionBounds || [])
+    .filter((bounds) => (
+      rect.x <= bounds.right &&
+      rect.x + rect.width >= bounds.left &&
+      rect.y <= bounds.bottom &&
+      rect.y + rect.height >= bounds.top
+    ))
+    .map((bounds) => bounds.id);
+  state.journeyDraft.selectedMilestoneIds = selectedIds;
+  renderJourneyDraft();
+}
+
+function finishJourneySelection() {
+  if (!state.journeyDraft?.selectionAnchor) {
+    return;
+  }
+  const didMove = state.journeyDraft.selectionMoved;
+  state.journeyDraft.selectionAnchor = null;
+  state.journeyDraft.selectionRect = null;
+  state.journeyDraft.selectionMoved = false;
+  if (!didMove) {
+    state.journeyDraft.selectedMilestoneIds = [];
+    state.journeyDraft.activeMilestoneId = null;
+  }
+  renderJourneyDraft();
 }
 
 function openComposer(releaseId) {
@@ -2479,6 +3478,62 @@ async function seedDemo() {
       });
     }
 
+    const starlightMoments = [
+      {
+        observedOn: isoDateFromOffset(Math.min(kickoffSpec.dayOffset, -34)),
+        starlight: 20,
+        whisper: "Kickoff completed.",
+        detail: {
+          type: "markdown",
+          content: "## Completed\n\n- Journey kickoff aligned\n- Scope framed with engineering and PM\n\n## Risk\n\nOpen dependencies are still being mapped.",
+        },
+        metrics: { done: 4, total: 18, blocked: 1 },
+      },
+      {
+        observedOn: isoDateFromOffset(Math.min(devReadySpec.dayOffset, -18)),
+        starlight: 35,
+        whisper: "Core implementation completed.",
+        detail: {
+          type: "markdown",
+          content: "## Completed\n\n- Security API completed\n- RBAC flow connected\n- Core implementation settled\n\n## In Progress\n\n- Integration polish",
+        },
+        metrics: { done: 11, total: 18, blocked: 2 },
+      },
+      {
+        observedOn: isoDateFromOffset(Math.min(regressionSpec.dayOffset - 7, -3)),
+        starlight: 52,
+        whisper: "Regression path stabilized.",
+        detail: {
+          type: "markdown",
+          content: "## Completed\n\n- Regression path stabilized\n- Cross-team test rhythm re-established\n\n## Risk\n\nAwaiting one backend review before confidence can rise further.",
+        },
+        metrics: { done: 14, total: 18, blocked: 2 },
+      },
+      {
+        observedOn: isoDateFromOffset(0),
+        starlight: 78,
+        whisper: "Feature integration completed.",
+        detail: {
+          type: "markdown",
+          content: "## Completed\n\n- Feature integration completed\n- Release notes draft is ready\n- QA handoff is steady\n\n## In Progress\n\n- Final compatibility sweep\n\n## Risk\n\nA small auth edge case still needs confirmation.",
+        },
+        metrics: { done: 16, total: 18, blocked: 1 },
+      },
+    ];
+    for (const moment of starlightMoments) {
+      await request(`/api/releases/${releaseId}/starlight`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          observed_on: moment.observedOn,
+          starlight: moment.starlight,
+          whisper: moment.whisper,
+          detail: moment.detail,
+          metrics: moment.metrics,
+        }),
+      });
+    }
+
     await loadTimeline();
     const refreshed = state.releases.find((release) => release.id === releaseId);
     if (refreshed?.milestones?.length) {
@@ -2998,7 +4053,10 @@ function updateBoardSummary() {
     foldedNotes.push(`${upcomingReleases.length} not started folded below`);
   }
   const collapsedNote = foldedNotes.length ? ` • ${foldedNotes.join(" • ")}` : "";
-  elements.boardSummary.textContent = `${releaseCount} releases • ${milestoneCount} milestones • ${pendingCount} pending${collapsedNote}`;
+  const prefix = state.pageScope.mode === "galaxy"
+    ? `${state.pageScope.label || formatGalaxyTitle(state.pageScope.galaxySlug)} galaxy • `
+    : "";
+  elements.boardSummary.textContent = `${prefix}${releaseCount} releases • ${milestoneCount} milestones • ${pendingCount} pending${collapsedNote}`;
 }
 
 function getBoardReleaseGroups(releases) {
@@ -3142,9 +4200,13 @@ function syncSegmentedSelector(container, value, dataAttribute) {
 
 function applyBoardControls() {
   state.timeline = buildTimelineScale(state.releases);
+  syncBoardControls();
+  renderPreservingViewport();
+}
+
+function syncBoardControls() {
   syncSegmentedSelector(elements.horizonSelector, String(state.horizonMonths), "horizonMonths");
   syncSegmentedSelector(elements.perspectiveSelector, state.perspective, "perspective");
-  renderPreservingViewport();
 }
 
 function selectHorizon(months) {
@@ -3386,6 +4448,9 @@ document.addEventListener("click", (event) => {
   }, 0);
 });
 document.addEventListener("pointermove", (event) => {
+  if (state.journeyDraft?.selectionAnchor) {
+    updateJourneySelection(event.clientX, event.clientY);
+  }
   if (state.journeyDraft?.dragMilestoneId) {
     updateJourneyDrag(event.clientX);
   }
@@ -3404,6 +4469,9 @@ document.addEventListener("keydown", (event) => {
   }
 });
 document.addEventListener("pointerup", () => {
+  if (state.journeyDraft?.selectionAnchor) {
+    finishJourneySelection();
+  }
   if (state.journeyDraft?.dragMilestoneId || state.journeyDraft?.dragCandidateMilestoneId) {
     finishJourneyDrag();
   }
@@ -3418,10 +4486,33 @@ window.addEventListener("resize", () => {
   }
 });
 window.addEventListener("scroll", positionStoryGuides, { passive: true });
+const visualViewportRef = window.visualViewport;
+const handleVisualViewportChange = () => positionStoryGuides();
+if (visualViewportRef) {
+  visualViewportRef.addEventListener("resize", handleVisualViewportChange, { passive: true });
+  visualViewportRef.addEventListener("scroll", handleVisualViewportChange, { passive: true });
+  window.addEventListener("beforeunload", () => {
+    visualViewportRef.removeEventListener("resize", handleVisualViewportChange);
+    visualViewportRef.removeEventListener("scroll", handleVisualViewportChange);
+  }, { once: true });
+}
+window.BOA_DEBUG = {
+  BUG_WAVE_MANUAL_FIXTURES,
+  STARLIGHT_VISUAL_CONFIG,
+  starlightToY,
+  getBugRisk,
+  computePeakRisk,
+  getBugWaveEffectiveMaxRatio,
+  normalizeBugWaveHeight,
+  smoothRiskSeries,
+  buildBugWaveMetrics,
+  inspectBugWaveSeries,
+  inspectBugWaveFixtures,
+};
 
 async function init() {
   await loadAppConfig();
-  applyBoardControls();
+  syncBoardControls();
   await loadTimeline();
 }
 

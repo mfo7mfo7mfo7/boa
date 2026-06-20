@@ -120,6 +120,7 @@ class ReleaseTimeline:
     release: ReleaseRecord
     milestones: tuple[MilestoneTimelineItem, ...]
     bug_snapshots: tuple[BugSnapshot, ...]
+    starlight: "ReleaseStarlight | None" = None
 
 
 @dataclass(slots=True, frozen=True)
@@ -165,6 +166,58 @@ class BugSnapshotSubmission:
     signal_type: str = "total"
 
 
+@dataclass(slots=True, frozen=True)
+class StarlightDetail:
+    """Primary narrative observation stored as markdown."""
+
+    type: str
+    content: str
+
+
+@dataclass(slots=True, frozen=True)
+class StarlightMetrics:
+    """Optional structured facts that support the narrative observation."""
+
+    done: int
+    total: int
+    blocked: int
+
+
+@dataclass(slots=True, frozen=True)
+class StarlightStatus:
+    """Latest submitted journey-readiness signal for a release."""
+
+    release_id: int
+    starlight: int
+    whisper: str
+    detail: StarlightDetail
+    metrics: StarlightMetrics | None
+    observed_on: date
+    updated_at: datetime
+
+
+@dataclass(slots=True, frozen=True)
+class StarlightEvent:
+    """A meaningful readiness milestone retained in the starlight trail."""
+
+    id: int
+    release_id: int
+    observed_on: date
+    starlight: int
+    whisper: str
+    detail: StarlightDetail
+    metrics: StarlightMetrics | None
+    created_at: datetime
+
+
+@dataclass(slots=True, frozen=True)
+class ReleaseStarlight:
+    """Current release readiness plus its meaningful trail."""
+
+    current: StarlightStatus
+    trail: tuple[StarlightEvent, ...]
+
+
 def reminder_type_due_on_day(
     expected: date,
     reminder_type: str,
@@ -188,7 +241,7 @@ def pending_reminder_types(
     notifications: tuple[NotificationRecord, ...],
     as_of: date,
 ) -> tuple[str, ...]:
-    if acked_at is not None and acked_at.date() <= as_of:
+    if acked_at is not None:
         return ()
 
     pending: list[str] = []

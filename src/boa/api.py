@@ -9,8 +9,8 @@ from contextlib import asynccontextmanager
 from datetime import date, timedelta
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, status
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile, status
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from starlette.responses import FileResponse, PlainTextResponse
 from starlette.staticfiles import StaticFiles
 
@@ -21,11 +21,16 @@ from boa.domain import (
     NotificationRecord,
     PluginDescriptor,
     ReleaseBlueprint,
+    ReleaseStarlight,
     ReleaseRecord,
     ReleaseTimeline,
     ReminderState,
+    StarlightDetail,
+    StarlightEvent,
+    StarlightMetrics,
+    StarlightStatus,
 )
-from boa.storage import BoaStorage
+from boa.storage import BoaStorage, slugify_galaxy
 from boa.yaml_io import BlueprintValidationError, dump_release_blueprint, load_release_blueprint
 
 
@@ -35,6 +40,8 @@ MAX_SECRET_LENGTH = 200
 MAX_MILESTONE_NAME_LENGTH = 160
 MAX_OWNER_LENGTH = 160
 MAX_ACK_NOTE_LENGTH = 2000
+MAX_WHISPER_LENGTH = 280
+MAX_STARLIGHT_DETAIL_LENGTH = 20 * 1024
 
 
 def _clean_text(value: str, *, field: str, max_length: int) -> str:
@@ -166,6 +173,58 @@ class BugSnapshotCreateRequest(BaseModel):
         return cleaned
 
 
+class StarlightDetailRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: str
+    content: str
+
+    @field_validator("type")
+    @classmethod
+    def validate_type(cls, value: str) -> str:
+        if value.strip().lower() != "markdown":
+            raise ValueError("detail.type must equal markdown.")
+        return "markdown"
+
+    @field_validator("content")
+    @classmethod
+    def validate_content(cls, value: str) -> str:
+        if len(value) > MAX_STARLIGHT_DETAIL_LENGTH:
+            raise ValueError(f"detail.content must be {MAX_STARLIGHT_DETAIL_LENGTH} characters or fewer.")
+        return value
+
+
+class StarlightMetricsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    done: int = Field(ge=0)
+    total: int = Field(ge=0)
+    blocked: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_totals(self) -> "StarlightMetricsRequest":
+        if self.done > self.total:
+            raise ValueError("done must be less than or equal to total.")
+        if self.blocked > self.total:
+            raise ValueError("blocked must be less than or equal to total.")
+        return self
+
+
+class StarlightUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    starlight: int = Field(ge=0, le=100)
+    whisper: str
+    detail: StarlightDetailRequest
+    metrics: StarlightMetricsRequest | None = None
+    observed_on: date | None = None
+
+    @field_validator("whisper")
+    @classmethod
+    def clean_whisper(cls, value: str) -> str:
+        return _clean_text(value, field="whisper", max_length=MAX_WHISPER_LENGTH)
+
+
 class MilestoneResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -258,6 +317,47 @@ class ReleaseTimelineResponse(BaseModel):
     secret: str
     milestones: list[TimelineMilestoneResponse]
     bug_snapshots: list[BugSnapshotResponse]
+    starlight: "StarlightStatusResponse | None" = None
+    starlight_trail: list["StarlightEventResponse"] = []
+
+
+class StarlightDetailResponse(BaseModel):
+    type: str
+    content: str
+
+
+class StarlightMetricsResponse(BaseModel):
+    done: int
+    total: int
+    blocked: int
+
+
+class StarlightStatusResponse(BaseModel):
+    release_id: int
+    starlight: int
+    whisper: str
+    detail: StarlightDetailResponse
+    metrics: StarlightMetricsResponse | None = None
+    observed_on: date
+    updated_at: str
+
+
+class StarlightEventResponse(BaseModel):
+    date: date
+    starlight: int
+    whisper: str
+    detail: StarlightDetailResponse
+    metrics: StarlightMetricsResponse | None = None
+
+
+class ReleaseStarlightResponse(BaseModel):
+    release: str
+    starlight: int
+    whisper: str
+    detail: StarlightDetailResponse
+    metrics: StarlightMetricsResponse | None = None
+    observed_on: date
+    trail: list[StarlightEventResponse]
 
 
 def create_app(storage: BoaStorage | None = None) -> FastAPI:
@@ -291,6 +391,12 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
     def index() -> Path:
         return Path(__file__).parent / "static" / "index.html"
 
+    @app.get("/{galaxy_slug}", response_class=FileResponse)
+    def galaxy_page(galaxy_slug: str) -> Path:
+        if not slugify_galaxy(galaxy_slug):
+            raise HTTPException(status_code=404, detail="Galaxy was not found.")
+        return Path(__file__).parent / "static" / "index.html"
+
     @app.get("/api/health")
     def healthcheck() -> dict[str, str]:
         return {"status": "ok"}
@@ -305,10 +411,12 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
 
     @app.get("/api/timeline", response_model=list[ReleaseTimelineResponse])
     def list_release_timelines(
+        galaxy: str | None = Query(default=None),
         storage: BoaStorage = Depends(get_storage),
     ) -> list[ReleaseTimelineResponse]:
         storage.generate_due_notifications(as_of=date.today())
-        return [_timeline_response(item) for item in storage.list_release_timelines()]
+        normalized_galaxy = slugify_galaxy(galaxy) if galaxy is not None else None
+        return [_timeline_response(item) for item in storage.list_release_timelines(normalized_galaxy)]
 
     @app.get("/api/plugins", response_model=list[PluginDescriptorResponse])
     def list_plugins(
@@ -530,6 +638,55 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
             for snapshot in snapshots
         ]
 
+    @app.get("/api/releases/{release_id}/starlight", response_model=ReleaseStarlightResponse)
+    def get_release_starlight(
+        release_id: int,
+        storage: BoaStorage = Depends(get_storage),
+    ) -> ReleaseStarlightResponse:
+        try:
+            release = storage.get_release(release_id)
+            starlight = storage.get_release_starlight(release_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        if starlight is None:
+            raise HTTPException(status_code=404, detail=f"Release {release_id} has no starlight yet.")
+        return _release_starlight_response(release, starlight)
+
+    @app.post(
+        "/api/releases/{release_id}/starlight",
+        response_model=ReleaseStarlightResponse,
+        status_code=status.HTTP_201_CREATED,
+    )
+    def update_release_starlight(
+        release_id: int,
+        request: StarlightUpdateRequest,
+        storage: BoaStorage = Depends(get_storage),
+    ) -> ReleaseStarlightResponse:
+        try:
+            release = storage.get_release(release_id)
+            starlight = storage.update_release_starlight(
+                release_id,
+                starlight=request.starlight,
+                whisper=request.whisper,
+                detail=StarlightDetail(
+                    type=request.detail.type,
+                    content=request.detail.content,
+                ),
+                metrics=(
+                    StarlightMetrics(
+                        done=request.metrics.done,
+                        total=request.metrics.total,
+                        blocked=request.metrics.blocked,
+                    )
+                    if request.metrics is not None
+                    else None
+                ),
+                observed_on=request.observed_on or date.today(),
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return _release_starlight_response(release, starlight)
+
     @app.post("/api/notifications/run", response_model=list[NotificationResponse])
     def run_notifications(
         request: ReminderRunRequest,
@@ -739,4 +896,63 @@ def _timeline_response(timeline: ReleaseTimeline) -> ReleaseTimelineResponse:
             )
             for snapshot in timeline.bug_snapshots
         ],
+        starlight=_starlight_status_response(timeline.starlight.current) if timeline.starlight else None,
+        starlight_trail=[
+            _starlight_event_response(event)
+            for event in (timeline.starlight.trail if timeline.starlight else ())
+        ],
+    )
+
+
+def _starlight_detail_response(detail: StarlightDetail) -> StarlightDetailResponse:
+    return StarlightDetailResponse(
+        type=detail.type,
+        content=detail.content,
+    )
+
+
+def _starlight_metrics_response(metrics: StarlightMetrics | None) -> StarlightMetricsResponse | None:
+    if metrics is None:
+        return None
+    return StarlightMetricsResponse(
+        done=metrics.done,
+        total=metrics.total,
+        blocked=metrics.blocked,
+    )
+
+
+def _starlight_status_response(status: StarlightStatus) -> StarlightStatusResponse:
+    return StarlightStatusResponse(
+        release_id=status.release_id,
+        starlight=status.starlight,
+        whisper=status.whisper,
+        detail=_starlight_detail_response(status.detail),
+        metrics=_starlight_metrics_response(status.metrics),
+        observed_on=status.observed_on,
+        updated_at=status.updated_at.isoformat(),
+    )
+
+
+def _starlight_event_response(event: StarlightEvent) -> StarlightEventResponse:
+    return StarlightEventResponse(
+        date=event.observed_on,
+        starlight=event.starlight,
+        whisper=event.whisper,
+        detail=_starlight_detail_response(event.detail),
+        metrics=_starlight_metrics_response(event.metrics),
+    )
+
+
+def _release_starlight_response(
+    release: ReleaseRecord,
+    starlight: ReleaseStarlight,
+) -> ReleaseStarlightResponse:
+    return ReleaseStarlightResponse(
+        release=f"{release.blueprint.product}-{release.blueprint.version}",
+        starlight=starlight.current.starlight,
+        whisper=starlight.current.whisper,
+        detail=_starlight_detail_response(starlight.current.detail),
+        metrics=_starlight_metrics_response(starlight.current.metrics),
+        observed_on=starlight.current.observed_on,
+        trail=[_starlight_event_response(event) for event in starlight.trail],
     )

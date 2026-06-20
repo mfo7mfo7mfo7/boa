@@ -45,9 +45,19 @@ Its purpose is simple: help teams understand the shape of a release.
 - Acknowledgements
 - Notifications
 - Bug Wave
+- Starlight
 - YAML Import / Export
 - Timeline Shift
 - Plugin Framework
+
+## API Notes
+
+- [Bug Wave API](docs/bug-wave.md)
+- [Starlight API](docs/starlight.md)
+
+## Release Notes
+
+- [Boa 1.0](docs/release-notes-1.0.md)
 
 ## Example Release Definition
 
@@ -104,35 +114,148 @@ The container listens on port `8000`. SQLite data is stored at `/data/boa.db`, s
 
 The GHCR package should be set to public so others can pull it without logging in to GitHub.
 
-## Docker Compose
+## Docker
 
-Boa ships as one Compose service with SQLite persisted in a named volume. The first startup creates the database schema automatically at `/data/boa.db`.
+This repo ships:
+
+- `Dockerfile`
+- `compose.yaml`
+- `docker-compose.yml`
+
+Build locally:
+
+```bash
+docker build -t boa:local .
+```
+
+Run locally:
+
+```bash
+docker run --rm -p 8000:8000 -v boa-data:/data boa:local
+```
+
+Then open <http://localhost:8000>.
+
+The container default command is:
+
+```bash
+uvicorn boa.main:app --host 0.0.0.0 --port 8000
+```
+
+It also sets:
+
+```bash
+BOA_DB_PATH=/data/boa.db
+```
+
+### Docker Compose
+
+Start with defaults:
 
 ```bash
 docker compose up --build
 ```
 
-To run a published GHCR image instead of building locally:
+Or, if someone explicitly uses the legacy filename flow:
 
 ```bash
-BOA_IMAGE=ghcr.io/<github-user>/boa:latest docker compose up
+docker-compose up --build
 ```
 
-Or run the image directly:
+Run in the background:
+
+```bash
+docker compose up -d --build
+```
+
+Stop it:
+
+```bash
+docker compose down
+```
+
+Remove data volume too:
+
+```bash
+docker compose down -v
+```
+
+Use `.env.example` as a starting point:
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+### Docker Environment Variables
+
+Useful runtime knobs:
+
+```bash
+docker run --rm -p 8000:8000 \
+  -v boa-data:/data \
+  -e BOA_JOURNEY_FOLD_DAYS=21 \
+  boa:local
+```
+
+Available variables today:
+
+- `BOA_DB_PATH`
+  Default in container: `/data/boa.db`
+- `BOA_IMAGE`
+  Compose image tag, default `boa:local`
+- `BOA_PORT`
+  Host port mapped to container port `8000`
+- `BOA_JOURNEY_FOLD_DAYS`
+  Controls how many days ended / not-started journeys stay folded around the NOW line
+- `BOA_STALE_KICKOFF_DAYS`
+  Legacy fallback name still supported by the API code; `BOA_JOURNEY_FOLD_DAYS` takes precedence
+
+### Common Docker Examples
+
+Use a different host port:
+
+```bash
+docker run --rm -p 8080:8000 -v boa-data:/data boa:local
+```
+
+Use a published GHCR image:
 
 ```bash
 docker run --rm -p 8000:8000 -v boa-data:/data ghcr.io/<github-user>/boa:latest
 ```
 
-Useful knobs:
+Set folded-journey days:
 
 ```bash
-BOA_PORT=8080 docker compose up --build
-BOA_JOURNEY_FOLD_DAYS=21 docker compose up --build
+docker run --rm -p 8000:8000 \
+  -v boa-data:/data \
+  -e BOA_JOURNEY_FOLD_DAYS=21 \
+  ghcr.io/<github-user>/boa:latest
 ```
 
-Data lives in the `boa-data` Docker volume. To reset the Docker database:
+Same idea with Compose:
 
 ```bash
-docker compose down -v
+BOA_PORT=8080 BOA_JOURNEY_FOLD_DAYS=21 docker compose up --build
 ```
+
+Use a host-mounted database file instead of a Docker volume:
+
+```bash
+docker run --rm -p 8000:8000 \
+  -v "$(pwd)/data:/data" \
+  ghcr.io/<github-user>/boa:latest
+```
+
+### Reset Docker Data
+
+If you used the named volume `boa-data`, remove it with:
+
+```bash
+docker volume rm boa-data
+```
+
+## Environment Example
+
+See [.env.example](.env.example) for the current image / port / fold-day defaults used by local tooling and Compose.
