@@ -1,16 +1,16 @@
 # Bug Wave API
 
-Boa 的 `Bug Wave` 來自 release 的 bug snapshots。
+Boa's `Bug Wave` is derived from a release's bug snapshots.
 
-這份文件示範：
+This guide shows:
 
-- 怎麼建立一個 release
-- 怎麼送 bug snapshot
-- 怎麼查 timeline 裡的 bug wave 資料
+- how to create a release
+- how to submit bug snapshots
+- how to query the timeline data used by the Bug Wave
 
-## 1. 建立 Release
+## 1. Create a Release
 
-先建立一個 release，拿到 `release_id`。
+Create a release first so you have a `release_id`.
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/releases \
@@ -22,7 +22,7 @@ curl -X POST http://127.0.0.1:8000/api/releases \
   }'
 ```
 
-範例回應：
+Example response:
 
 ```json
 {
@@ -34,16 +34,16 @@ curl -X POST http://127.0.0.1:8000/api/releases \
 }
 ```
 
-## 2. 新增 Bug Snapshot
+## 2. Add a Bug Snapshot
 
-端點：
+Endpoint:
 
 `POST /api/releases/{release_id}/bug-snapshots`
 
-目前最小 payload 只需要：
+The minimum payload currently requires:
 
 - `open_bug_count`
-- `signal_type` 可省略，預設是 `total`
+- `signal_type` is optional and defaults to `total`
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/releases/21/bug-snapshots \
@@ -62,7 +62,7 @@ curl -X POST http://127.0.0.1:8000/api/releases/21/bug-snapshots \
   }'
 ```
 
-範例回應：
+Example response:
 
 ```json
 {
@@ -75,9 +75,9 @@ curl -X POST http://127.0.0.1:8000/api/releases/21/bug-snapshots \
 }
 ```
 
-## 3. 查詢單一 Release 的 Bug Snapshots
+## 3. Query Bug Snapshots for One Release
 
-端點：
+Endpoint:
 
 `GET /api/releases/{release_id}/bug-snapshots`
 
@@ -85,7 +85,7 @@ curl -X POST http://127.0.0.1:8000/api/releases/21/bug-snapshots \
 curl http://127.0.0.1:8000/api/releases/21/bug-snapshots
 ```
 
-範例回應：
+Example response:
 
 ```json
 [
@@ -108,13 +108,13 @@ curl http://127.0.0.1:8000/api/releases/21/bug-snapshots
 ]
 ```
 
-## 4. 查 Timeline 內的 Bug Wave 資料
+## 4. Query Timeline Data Used by Bug Wave
 
-端點：
+Endpoint:
 
 `GET /api/timeline`
 
-或單一 galaxy：
+Or for a single galaxy:
 
 `GET /api/timeline?galaxy=fortisase`
 
@@ -122,7 +122,7 @@ curl http://127.0.0.1:8000/api/releases/21/bug-snapshots
 curl http://127.0.0.1:8000/api/timeline?galaxy=fortisase
 ```
 
-回傳裡的 `bug_snapshots` 就是前端畫 Bug Wave 的資料來源。
+The `bug_snapshots` array in the response is the data source used by the frontend Bug Wave.
 
 ```json
 [
@@ -156,13 +156,13 @@ curl http://127.0.0.1:8000/api/timeline?galaxy=fortisase
 ]
 ```
 
-## 5. Plugin Ingest 版本
+## 5. Plugin Ingest Version
 
-如果是 plugin 在送 bug snapshot，可用：
+If a plugin is sending bug snapshots, use:
 
 `POST /api/plugins/{plugin_name}/releases/{release_id}/bug-snapshots`
 
-例如：
+For example:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/plugins/manual_bug_snapshot/releases/21/bug-snapshots \
@@ -175,6 +175,6 @@ curl -X POST http://127.0.0.1:8000/api/plugins/manual_bug_snapshot/releases/21/b
 
 ## Notes
 
-- `open_bug_count` 必須是非負整數。
-- Boa 目前會把 `bug_snapshots` 視為 Bug Wave 的原始資料。
-- 前端會把這些 snapshot 正規化成海浪高度，不是直接拿絕對 bug count 畫柱狀圖。
+- `open_bug_count` must be a non-negative integer.
+- Boa currently treats `bug_snapshots` as the raw source data for the Bug Wave.
+- The frontend normalizes these snapshots into wave height; it does not render raw absolute bug-count bars.

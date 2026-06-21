@@ -1,17 +1,17 @@
 # Starlight API
 
-Boa 的 `Starlight` 代表 journey readiness。
+Boa's `Starlight` represents journey readiness.
 
-這份文件示範：
+This guide shows:
 
-- 怎麼建立 release
-- 怎麼送目前的 starlight 狀態
-- 怎麼用 markdown detail 與 metrics
-- 怎麼查 trail 與 timeline
+- how to create a release
+- how to submit the current starlight state
+- how to use markdown detail and optional metrics
+- how to query the trail and timeline output
 
-## 1. 建立 Release
+## 1. Create a Release
 
-先建立一個 release，拿到 `release_id`。
+Create a release first so you have a `release_id`.
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/releases \
@@ -23,7 +23,7 @@ curl -X POST http://127.0.0.1:8000/api/releases \
   }'
 ```
 
-範例回應：
+Example response:
 
 ```json
 {
@@ -35,20 +35,20 @@ curl -X POST http://127.0.0.1:8000/api/releases \
 }
 ```
 
-## 2. 更新目前 Starlight
+## 2. Update the Current Starlight State
 
-端點：
+Endpoint:
 
 `POST /api/releases/{release_id}/starlight`
 
-payload 重點：
+Payload summary:
 
-- `starlight`: 0 到 100
-- `whisper`: 一行摘要
-- `detail.type`: 目前固定是 `markdown`
-- `detail.content`: markdown 內容
-- `metrics`: 可選
-- `observed_on`: 可選，不傳就用今天
+- `starlight`: 0 to 100
+- `whisper`: one-line summary
+- `detail.type`: currently fixed to `markdown`
+- `detail.content`: markdown content
+- `metrics`: optional
+- `observed_on`: optional; if omitted, today is used
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/releases/22/starlight \
@@ -69,7 +69,7 @@ curl -X POST http://127.0.0.1:8000/api/releases/22/starlight \
   }'
 ```
 
-範例回應：
+Example response:
 
 ```json
 {
@@ -105,14 +105,14 @@ curl -X POST http://127.0.0.1:8000/api/releases/22/starlight \
 }
 ```
 
-## 3. 只更新 Whisper / Detail，不新增 Trail Event
+## 3. Update Whisper or Detail Without Creating a New Trail Event
 
-Boa 的 trail 規則是：
+Boa's trail rule is:
 
-- `starlight` 改變時，建立新的 trail event
-- `starlight` 不變時，只更新目前狀態，不新增 event
+- if `starlight` changes, create a new trail event
+- if `starlight` stays the same, update the current state only
 
-例如同樣維持 `73`：
+For example, keeping the same `73`:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/releases/22/starlight \
@@ -133,11 +133,11 @@ curl -X POST http://127.0.0.1:8000/api/releases/22/starlight \
   }'
 ```
 
-這次會更新 current starlight，但不會多一顆新星。
+This updates the current starlight state, but does not add a new star to the trail.
 
-## 4. 查單一 Release 的 Starlight
+## 4. Query Starlight for One Release
 
-端點：
+Endpoint:
 
 `GET /api/releases/{release_id}/starlight`
 
@@ -145,21 +145,21 @@ curl -X POST http://127.0.0.1:8000/api/releases/22/starlight \
 curl http://127.0.0.1:8000/api/releases/22/starlight
 ```
 
-這會回：
+This returns:
 
 - current starlight
 - latest whisper
 - markdown detail
 - optional metrics
-- meaningful trail only
+- meaningful trail events only
 
-## 5. 從 Timeline 看 Starlight
+## 5. Query Starlight Through the Timeline
 
-端點：
+Endpoint:
 
 `GET /api/timeline`
 
-或單一 galaxy：
+Or for a single galaxy:
 
 `GET /api/timeline?galaxy=lighthouseos`
 
@@ -167,12 +167,12 @@ curl http://127.0.0.1:8000/api/releases/22/starlight
 curl http://127.0.0.1:8000/api/timeline?galaxy=lighthouseos
 ```
 
-回傳裡會有：
+The response includes:
 
 - `starlight`
 - `starlight_trail`
 
-範例片段：
+Example fragment:
 
 ```json
 [
@@ -219,11 +219,11 @@ curl http://127.0.0.1:8000/api/timeline?galaxy=lighthouseos
 
 ## Validation Notes
 
-- `starlight` 必須是 `0..100`
-- `detail.type` 目前必須是 `markdown`
-- `detail.content` 最多 20KB
-- `metrics` 可省略
-- 如果有 `metrics`：
+- `starlight` must be in `0..100`
+- `detail.type` must currently be `markdown`
+- `detail.content` is limited to 20KB
+- `metrics` is optional
+- if `metrics` is present:
   - `done >= 0`
   - `total >= 0`
   - `blocked >= 0`
@@ -232,7 +232,7 @@ curl http://127.0.0.1:8000/api/timeline?galaxy=lighthouseos
 
 ## Recommended Shape
 
-最推薦的 payload 會像這樣：
+The recommended payload shape looks like this:
 
 ```json
 {
