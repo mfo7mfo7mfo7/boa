@@ -18,6 +18,14 @@ def test_root_serves_boa_ui(tmp_path) -> None:
         assert "reveal the shape of a release" in response.text
 
 
+def test_galaxy_route_serves_boa_ui(tmp_path) -> None:
+    app = create_app(BoaStorage(tmp_path / "boa.db"))
+    with TestClient(app) as client:
+        response = client.get("/fortisase")
+        assert response.status_code == 200
+        assert "reveal the shape of a release" in response.text
+
+
 def test_release_crud_and_export(tmp_path) -> None:
     app = create_app(BoaStorage(tmp_path / "boa.db"))
     with TestClient(app) as client:
@@ -108,6 +116,102 @@ def test_timeline_endpoint_includes_ack_and_bug_wave_data(tmp_path) -> None:
         assert payload[0]["bug_snapshots"][0]["signal_type"] == "total"
         assert payload[0]["bug_snapshots"][0]["quality"] == "normal"
         assert datetime.fromisoformat(payload[0]["bug_snapshots"][0]["observed_at"]).tzinfo is not None
+        assert payload[0]["starlight"] is None
+        assert payload[0]["starlight_trail"] == []
+
+
+def test_timeline_endpoint_filters_by_galaxy_slug(tmp_path) -> None:
+    app = create_app(BoaStorage(tmp_path / "boa.db"))
+    with TestClient(app) as client:
+        client.post(
+            "/api/releases",
+            json={"product": "FortiSASE", "version": "26.2", "secret": "boa-262"},
+        )
+        client.post(
+            "/api/releases",
+            json={"product": "FortiSASE", "version": "26.3", "secret": "boa-263"},
+        )
+        client.post(
+            "/api/releases",
+            json={"product": "Lighthouse OS", "version": "5.7", "secret": "light-57"},
+        )
+
+        filtered = client.get("/api/timeline", params={"galaxy": "fortisase"})
+        normalized = client.get("/api/timeline", params={"galaxy": "lighthouse-os"})
+        missing = client.get("/api/timeline", params={"galaxy": "unknown-galaxy"})
+
+        assert filtered.status_code == 200
+        assert [item["version"] for item in filtered.json()] == ["26.2", "26.3"]
+        assert all(item["product"] == "FortiSASE" for item in filtered.json())
+
+        assert normalized.status_code == 200
+        assert len(normalized.json()) == 1
+        assert normalized.json()[0]["product"] == "Lighthouse OS"
+
+        assert missing.status_code == 200
+        assert missing.json() == []
+
+
+def test_starlight_updates_create_meaningful_trail_events_only_on_readiness_change(tmp_path) -> None:
+    app = create_app(BoaStorage(tmp_path / "boa.db"))
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/releases",
+            json={"product": "FortiSASE", "version": "26.2", "secret": "boa-262"},
+        ).json()
+        release_id = created["id"]
+
+        first = client.post(
+            f"/api/releases/{release_id}/starlight",
+            json={
+                "observed_on": "2026-06-05",
+                "starlight": 20,
+                "whisper": "Kickoff completed",
+                "detail": {"type": "markdown", "content": "## Completed\n\n- Kickoff completed"},
+                "metrics": {"done": 4, "total": 18, "blocked": 1},
+            },
+        )
+        second = client.post(
+            f"/api/releases/{release_id}/starlight",
+            json={
+                "observed_on": "2026-06-06",
+                "starlight": 20,
+                "whisper": "Documentation updated",
+                "detail": {"type": "markdown", "content": "Documentation updated."},
+                "metrics": {"done": 4, "total": 18, "blocked": 1},
+            },
+        )
+        third = client.post(
+            f"/api/releases/{release_id}/starlight",
+            json={
+                "observed_on": "2026-06-07",
+                "starlight": 35,
+                "whisper": "Core implementation completed",
+                "detail": {"type": "markdown", "content": "## Completed\n\n- Core implementation completed"},
+                "metrics": {"done": 9, "total": 18, "blocked": 2},
+            },
+        )
+
+        assert first.status_code == 201
+        assert second.status_code == 201
+        assert third.status_code == 201
+
+        body = third.json()
+        assert body["starlight"] == 35
+        assert body["whisper"] == "Core implementation completed"
+        assert body["detail"]["type"] == "markdown"
+        assert "Core implementation completed" in body["detail"]["content"]
+        assert body["metrics"] == {"done": 9, "total": 18, "blocked": 2}
+        assert [event["starlight"] for event in body["trail"]] == [20, 35]
+        assert body["trail"][0]["whisper"] == "Kickoff completed"
+        assert body["trail"][1]["whisper"] == "Core implementation completed"
+
+        timeline = client.get("/api/timeline")
+        assert timeline.status_code == 200
+        payload = timeline.json()[0]
+        assert payload["starlight"]["starlight"] == 35
+        assert payload["starlight"]["whisper"] == "Core implementation completed"
+        assert [event["starlight"] for event in payload["starlight_trail"]] == [20, 35]
 
 
 def test_config_exposes_journey_fold_days(tmp_path, monkeypatch) -> None:

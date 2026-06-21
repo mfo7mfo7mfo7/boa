@@ -105,6 +105,26 @@ def test_release_special_characters_are_parameterized_not_executed(tmp_path) -> 
     assert [item["product"] for item in listed.json()] == [product, "FortiGate"]
 
 
+def test_galaxy_filter_normalizes_case_spaces_and_symbols(tmp_path) -> None:
+    with make_client(tmp_path) as client:
+        create_release(client, product="Forti SASE++", version="26.2")
+        create_release(client, product="forti_sase", version="26.3", secret="boa-263")
+        create_release(client, product="Elsewhere", version="1.0", secret="else-10")
+
+        filtered = client.get("/api/timeline", params={"galaxy": "FoRTi---SaSe"})
+
+    assert filtered.status_code == 200
+    assert [item["version"] for item in filtered.json()] == ["26.2", "26.3"]
+
+
+def test_galaxy_route_does_not_shadow_static_assets(tmp_path) -> None:
+    with make_client(tmp_path) as client:
+        response = client.get("/static/app.css")
+
+    assert response.status_code == 200
+    assert ".masthead" in response.text
+
+
 def test_integer_path_parameters_reject_non_integer_values(tmp_path) -> None:
     cases = [
         ("get", "/api/releases/not-an-int", None),
@@ -113,6 +133,8 @@ def test_integer_path_parameters_reject_non_integer_values(tmp_path) -> None:
         ("post", "/api/releases/not-an-int/milestones", {"name": "x", "expected": "2026-01-01", "owner": "pm"}),
         ("get", "/api/releases/not-an-int/bug-snapshots", None),
         ("post", "/api/releases/not-an-int/bug-snapshots", {"open_bug_count": 0}),
+        ("get", "/api/releases/not-an-int/starlight", None),
+        ("post", "/api/releases/not-an-int/starlight", {"starlight": 12, "whisper": "x", "detail": {"type": "markdown", "content": "x"}, "metrics": {"done": 1, "total": 2, "blocked": 0}}),
         ("get", "/api/releases/not-an-int/notifications", None),
         ("get", "/api/milestones/not-an-int/notifications", None),
         ("post", "/api/milestones/not-an-int/ack", {"secret": "s"}),
@@ -131,6 +153,11 @@ def test_missing_release_and_milestone_resources_return_404(tmp_path) -> None:
     with make_client(tmp_path) as client:
         release_get = client.get("/api/releases/999999")
         release_delete = client.delete("/api/releases/999999")
+        starlight_get = client.get("/api/releases/999999/starlight")
+        starlight_post = client.post(
+            "/api/releases/999999/starlight",
+            json={"starlight": 12, "whisper": "Gathering signal", "detail": {"type": "markdown", "content": "Gathering signal"}, "metrics": {"done": 1, "total": 4, "blocked": 0}},
+        )
         milestone_update = client.put(
             "/api/milestones/999999",
             json={"name": "QA", "expected": "2026-01-01", "owner": "qa"},
@@ -140,6 +167,8 @@ def test_missing_release_and_milestone_resources_return_404(tmp_path) -> None:
 
     assert release_get.status_code == 404
     assert release_delete.status_code == 404
+    assert starlight_get.status_code == 404
+    assert starlight_post.status_code == 404
     assert milestone_update.status_code == 404
     assert milestone_delete.status_code == 404
     assert milestone_ack.status_code == 404
@@ -219,6 +248,43 @@ def test_ack_trims_note(tmp_path) -> None:
 
     assert response.status_code == 200
     assert response.json()["note"] == "ok"
+
+
+def test_starlight_rejects_invalid_ranges_and_unexpected_fields(tmp_path) -> None:
+    with make_client(tmp_path) as client:
+        release = create_release(client)
+        bad_range = client.post(
+            f"/api/releases/{release['id']}/starlight",
+            json={"starlight": 120, "whisper": "too bright", "detail": {"type": "markdown", "content": "too bright"}, "metrics": {"done": 1, "total": 2, "blocked": 0}},
+        )
+        bad_totals = client.post(
+            f"/api/releases/{release['id']}/starlight",
+            json={"starlight": 30, "whisper": "bad math", "detail": {"type": "markdown", "content": "bad math"}, "metrics": {"done": 3, "total": 2, "blocked": 0}},
+        )
+        bad_type = client.post(
+            f"/api/releases/{release['id']}/starlight",
+            json={"starlight": 30, "whisper": "wrong type", "detail": {"type": "html", "content": "<b>no</b>"}},
+        )
+        too_long = client.post(
+            f"/api/releases/{release['id']}/starlight",
+            json={"starlight": 30, "whisper": "too long", "detail": {"type": "markdown", "content": "x" * (20 * 1024 + 1)}},
+        )
+        extra = client.post(
+            f"/api/releases/{release['id']}/starlight",
+            json={
+                "starlight": 30,
+                "whisper": "extra field",
+                "detail": {"type": "markdown", "content": "extra field"},
+                "metrics": {"done": 1, "total": 2, "blocked": 0},
+                "history": True,
+            },
+        )
+
+    assert bad_range.status_code == 422
+    assert bad_totals.status_code == 422
+    assert bad_type.status_code == 422
+    assert too_long.status_code == 422
+    assert extra.status_code == 422
 
 
 def test_ack_rejects_unexpected_fields(tmp_path) -> None:

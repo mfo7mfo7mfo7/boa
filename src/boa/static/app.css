@@ -45,7 +45,7 @@ body::before {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  opacity: 0.2;
+  opacity: 0.11;
   background-image:
     repeating-radial-gradient(circle at 0 0,
       rgba(80, 60, 40, 0.055) 0,
@@ -71,8 +71,8 @@ body::after {
   background:
     radial-gradient(circle at 10% 18%, rgba(255, 255, 255, 0.16), transparent 24%),
     radial-gradient(circle at 84% 82%, rgba(188, 162, 118, 0.08), transparent 28%),
-    radial-gradient(circle at 50% 50%, rgba(255, 250, 240, 0.18), transparent 48%),
-    linear-gradient(180deg, rgba(122, 96, 63, 0.045) 0%, transparent 10%, transparent 90%, rgba(122, 96, 63, 0.05) 100%);
+    radial-gradient(circle at 50% 50%, rgba(255, 250, 240, 0.14), transparent 48%),
+    linear-gradient(180deg, rgba(122, 96, 63, 0.03) 0%, transparent 10%, transparent 90%, rgba(122, 96, 63, 0.036) 100%);
   z-index: 0;
 }
 
@@ -186,6 +186,14 @@ dd {
   text-transform: uppercase;
 }
 
+.board-scope {
+  color: rgba(95, 83, 70, 0.78);
+  font-size: 11px;
+  font-style: italic;
+  letter-spacing: 0.04em;
+  margin-top: 2px;
+}
+
 .masthead-actions {
   display: flex;
   align-items: flex-start;
@@ -245,6 +253,7 @@ dd {
 
 .segmented-selector-wide {
   --segment-count: 2;
+  min-width: 272px;
 }
 
 .segmented-selector::after {
@@ -277,6 +286,9 @@ dd {
 
 .segment-option {
   position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   z-index: 1;
   min-width: 0;
   min-height: 34px;
@@ -287,6 +299,8 @@ dd {
   color: var(--selector-inactive);
   font-size: 13px;
   font-family: "Libre Baskerville", "Georgia", serif;
+  font-weight: 600;
+  text-align: center;
   line-height: 1;
   opacity: 0.72;
   transition: color 180ms ease, opacity 180ms ease, transform 180ms ease;
@@ -295,7 +309,6 @@ dd {
 .segment-option.is-active {
   color: var(--selector-active);
   opacity: 1;
-  font-weight: 600;
 }
 
 .segment-option:not(.is-active) {
@@ -439,8 +452,42 @@ dd {
 }
 
 .release-stage {
+  position: relative;
   display: grid;
   gap: 14px;
+}
+
+.release-stage.is-empty-state {
+  min-height: calc(100dvh - 170px);
+  display: flex;
+  align-items: flex-start;
+  isolation: isolate;
+}
+
+.release-stage.is-empty-state::before {
+  content: "";
+  position: absolute;
+  inset: -12px -18px -28px;
+  z-index: -2;
+  border-radius: 34px;
+  background:
+    linear-gradient(90deg, rgba(249, 243, 231, 0.98) 0%, rgba(247, 240, 228, 0.88) 27%, rgba(245, 237, 224, 0.36) 54%, rgba(243, 235, 220, 0.08) 100%),
+    linear-gradient(180deg, rgba(251, 247, 238, 0.86) 0%, rgba(250, 244, 234, 0.16) 46%, rgba(248, 241, 229, 0.44) 100%),
+    url("/static/empty-galaxy-prince.png");
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center right;
+  box-shadow: inset 0 0 0 1px rgba(132, 107, 82, 0.06);
+}
+
+.release-stage.is-empty-state::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 140px;
+  z-index: -1;
+  background: linear-gradient(180deg, rgba(248, 242, 232, 0), rgba(248, 242, 232, 0.82));
+  pointer-events: none;
 }
 
 .summary-line,
@@ -646,7 +693,7 @@ dd {
 
 .release-identity {
   display: grid;
-  gap: 0;
+  gap: 12px;
   padding-top: 18px;
 }
 
@@ -762,7 +809,7 @@ dd {
 
 .release-track {
   position: relative;
-  min-height: 210px;
+  min-height: clamp(212px, 24vw, 280px);
   padding-left: 12px;
   overflow: visible;
   background: transparent !important;
@@ -770,25 +817,182 @@ dd {
   box-shadow: none !important;
 }
 
+.starlight-summary {
+  display: grid;
+  gap: 0;
+  max-width: 230px;
+  padding-left: 2px;
+}
+
+.starlight-whisper {
+  margin: 2px 0 0;
+  color: rgba(53, 58, 68, 0.82);
+  font-size: 12px;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .release-track::before {
   content: "";
   position: absolute;
-  inset: 32px 2% 24px;
+  inset: 18px 2% 48px;
   border-radius: 120px;
   background:
-    radial-gradient(circle at 50% 50%, rgba(var(--release-soft-rgb, 216, 227, 245), 0.16), transparent 58%);
-  filter: blur(28px);
-  opacity: 0.75;
+    radial-gradient(circle at 50% 28%, rgba(241, 229, 196, 0.22), transparent 42%),
+    radial-gradient(circle at 50% 54%, rgba(var(--release-soft-rgb, 216, 227, 245), 0.1), transparent 60%);
+  filter: blur(32px);
+  opacity: 0.88;
   pointer-events: none;
+}
+
+.release-track::after {
+  content: "";
+  position: absolute;
+  inset: 8px 9% 118px;
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(255, 251, 241, 0.24), rgba(255, 251, 241, 0)),
+    radial-gradient(circle at 50% 38%, rgba(248, 241, 224, 0.22), transparent 58%);
+  filter: blur(24px);
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.starlight-detail-card {
+  position: absolute;
+  z-index: 4;
+  min-width: 214px;
+  max-width: 260px;
+  padding: 14px 15px 13px;
+  border: 1px solid rgba(180, 158, 117, 0.14);
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 252, 245, 0.94), rgba(249, 242, 228, 0.9)),
+    radial-gradient(circle at 18% 14%, rgba(255, 248, 232, 0.56), transparent 40%);
+  box-shadow:
+    0 16px 38px rgba(112, 93, 66, 0.08),
+    inset 0 0 0 1px rgba(255, 248, 232, 0.34);
+  backdrop-filter: blur(7px);
+  pointer-events: auto;
+  opacity: 0;
+  filter: blur(7px);
+  transform: translate3d(0, 12px, 0);
+  transition: opacity 980ms ease, transform 980ms ease, filter 1080ms ease;
+}
+
+.starlight-detail-kicker,
+.starlight-detail-value,
+.starlight-detail-date,
+.starlight-detail-whisper,
+.starlight-detail-body,
+.starlight-detail-body p,
+.starlight-detail-body ul,
+.starlight-detail-body li,
+.starlight-detail-body h2,
+.starlight-detail-body h3,
+.starlight-detail-stats dd,
+.starlight-detail-stats dt {
+  margin: 0;
+}
+
+.starlight-detail-kicker {
+  color: rgba(120, 99, 67, 0.62);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.starlight-detail-value {
+  margin-top: 6px;
+  color: rgba(94, 77, 48, 0.92);
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.starlight-detail-date {
+  margin-top: 3px;
+  color: rgba(129, 109, 77, 0.68);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.starlight-detail-whisper {
+  margin-top: 9px;
+  color: rgba(60, 58, 56, 0.82);
+  font-size: 12px;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+.starlight-detail-body {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  color: rgba(67, 60, 48, 0.86);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.starlight-detail-body h2,
+.starlight-detail-body h3 {
+  color: rgba(96, 79, 50, 0.78);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.starlight-detail-body ul {
+  display: grid;
+  gap: 5px;
+  padding-left: 16px;
+}
+
+.starlight-detail-body a {
+  color: rgba(101, 119, 155, 0.88);
+}
+
+.starlight-detail-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 11px;
+}
+
+.starlight-detail-stats div {
+  display: grid;
+  gap: 4px;
+}
+
+.starlight-detail-stats dt {
+  color: rgba(129, 109, 77, 0.58);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.starlight-detail-stats dd {
+  color: rgba(65, 60, 54, 0.86);
+  font-size: 12px;
+}
+
+.starlight-detail-card.is-revealed {
+  opacity: 1;
+  filter: blur(0);
+  transform: translate3d(0, 0, 0);
 }
 
 .release-canvas {
   position: relative;
-  z-index: 1;
+  z-index: 2;
   display: block;
   width: 100%;
-  height: 210px;
-  overflow: visible;
+  height: auto;
+  aspect-ratio: 1120 / 280;
+  min-height: inherit;
+  overflow: hidden;
   background: transparent !important;
   border: 0 !important;
   box-shadow: none !important;
@@ -808,11 +1012,132 @@ dd {
   filter: url(#handdrawn);
 }
 
+.wave-wash {
+  filter: url(#handdrawn);
+}
+
+.wave-haze {
+  fill: none;
+  filter: blur(5.5px) url(#handdrawn);
+}
+
 .wave-stroke {
-  stroke-width: 2;
+  stroke-width: 2.05;
   stroke-linecap: round;
   stroke-linejoin: round;
   filter: url(#handdrawn);
+}
+
+.starlight-curve-glow {
+  fill: none !important;
+  stroke: rgba(236, 214, 170, 0.24);
+  stroke-width: 7.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: blur(3.8px);
+  opacity: 0.88;
+}
+
+.starlight-curve {
+  fill: none !important;
+  stroke: rgba(211, 181, 116, 0.66);
+  stroke-width: 1.22;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter:
+    drop-shadow(0 0 4px rgba(210, 170, 70, 0.14))
+    url(#handdrawn);
+  opacity: 0.92;
+}
+
+.starlight-glow {
+  fill: rgba(231, 205, 150, 0.18);
+  filter: blur(4.8px);
+  opacity: 0.3;
+  animation: starlightHaloBreath var(--halo-duration, 10.6s) ease-in-out infinite;
+}
+
+.starlight-star {
+  transform-box: fill-box;
+  transform-origin: center;
+  filter:
+    drop-shadow(0 0 4px rgba(231, 188, 82, 0.14))
+    drop-shadow(0 0 10px rgba(231, 188, 82, 0.08));
+  animation: starlightTwinkle var(--twinkle-duration, 8.6s) ease-in-out infinite;
+}
+
+.starlight-tail {
+  fill: none;
+  stroke: rgba(240, 221, 183, 0.44);
+  stroke-width: 1.1;
+  stroke-linecap: round;
+  filter: blur(0.5px);
+  opacity: 0.72;
+}
+
+.starlight-star path:first-child {
+  fill: rgba(228, 190, 112, 0.74) !important;
+  stroke: rgba(149, 114, 55, 0.14) !important;
+  stroke-width: 0.38 !important;
+}
+
+.starlight-star path:last-child {
+  fill: rgba(251, 240, 214, 0.58) !important;
+  opacity: 0.82;
+}
+
+.starlight-label-text {
+  font-family: "Libre Baskerville", "Georgia", serif;
+  opacity: 0.44;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+  filter: blur(0.1px);
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.starlight-event:is(:hover, :focus-visible) .starlight-label-text {
+  opacity: 0.72;
+  transform: translateY(-1px);
+}
+
+@keyframes starlightTwinkle {
+  0%, 100% {
+    opacity: 0.42;
+    filter:
+      drop-shadow(0 0 2px rgba(231, 188, 82, 0.08))
+      drop-shadow(0 0 4px rgba(231, 188, 82, 0.04));
+  }
+
+  42% {
+    opacity: 0.94;
+    filter:
+      drop-shadow(0 0 6px rgba(231, 188, 82, 0.2))
+      drop-shadow(0 0 16px rgba(231, 188, 82, 0.14));
+  }
+
+  64% {
+    opacity: 0.56;
+    filter:
+      drop-shadow(0 0 3px rgba(231, 188, 82, 0.1))
+      drop-shadow(0 0 7px rgba(231, 188, 82, 0.06));
+  }
+}
+
+@keyframes starlightHaloBreath {
+  0%, 100% {
+    opacity: 0.14;
+    transform: scale(0.84);
+  }
+
+  48% {
+    opacity: 0.42;
+    transform: scale(1.14);
+  }
+
+  68% {
+    opacity: 0.22;
+    transform: scale(0.96);
+  }
 }
 
 .marker-label,
@@ -916,8 +1241,12 @@ dd {
 }
 
 .empty-state {
-  max-width: 520px;
-  padding: 44px 0 22px;
+  max-width: 680px;
+  min-height: min(74dvh, 860px);
+  padding: clamp(48px, 8vw, 92px) 0 42px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .month-ruler-wrap {
@@ -977,11 +1306,175 @@ dd {
   line-height: 1.6;
 }
 
+.release-stage.is-empty-state .empty-eyebrow {
+  color: rgba(122, 100, 78, 0.78);
+}
+
+.release-stage.is-empty-state .empty-state h2 {
+  max-width: 10ch;
+  font-size: clamp(56px, 8.2vw, 92px);
+  line-height: 0.92;
+  letter-spacing: -0.04em;
+  margin-top: 14px;
+}
+
+.release-stage.is-empty-state .empty-state p:last-of-type {
+  max-width: 30ch;
+  margin-top: 20px;
+  color: rgba(98, 88, 79, 0.88);
+  font-size: clamp(19px, 2vw, 24px);
+  line-height: 1.5;
+}
+
 .empty-actions {
   display: flex;
-  gap: 12px;
-  margin-top: 22px;
+  align-items: center;
+  gap: 18px 24px;
+  margin-top: 30px;
   flex-wrap: wrap;
+}
+
+.release-stage.is-empty-state .empty-actions {
+  margin-top: 34px;
+}
+
+.empty-actions a {
+  text-decoration: none;
+}
+
+.empty-action-primary {
+  min-height: 52px;
+  padding: 0 28px;
+  border-color: rgba(118, 95, 76, 0.22);
+  background:
+    linear-gradient(180deg, rgba(255, 253, 249, 0.98), rgba(247, 240, 229, 0.94));
+  box-shadow:
+    0 14px 30px rgba(101, 84, 70, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82);
+  font-family: "Libre Baskerville", "Georgia", serif;
+  font-size: 16px;
+  letter-spacing: 0.01em;
+}
+
+.empty-action-primary:hover,
+.empty-action-primary:focus-visible {
+  border-color: rgba(118, 95, 76, 0.34);
+  background:
+    linear-gradient(180deg, rgba(255, 253, 249, 1), rgba(245, 237, 224, 0.96));
+  box-shadow:
+    0 18px 34px rgba(101, 84, 70, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.empty-action-secondary {
+  min-height: auto;
+  padding: 0 0 5px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: rgba(73, 67, 60, 0.8);
+  font-family: "Libre Baskerville", "Georgia", serif;
+  font-size: 16px;
+  line-height: 1.2;
+  position: relative;
+}
+
+.empty-action-secondary::after {
+  content: "";
+  position: absolute;
+  left: 1px;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(166, 134, 84, 0.55), rgba(166, 134, 84, 0.08));
+  transform-origin: left center;
+  transform: scaleX(0.72);
+  opacity: 0.66;
+  transition: transform 180ms ease, opacity 180ms ease;
+}
+
+.empty-action-secondary:hover,
+.empty-action-secondary:focus-visible {
+  transform: translateY(-1px);
+  color: rgba(47, 55, 70, 0.92);
+  outline: none;
+}
+
+.empty-action-secondary:hover::after,
+.empty-action-secondary:focus-visible::after {
+  transform: scaleX(1);
+  opacity: 0.92;
+}
+
+.empty-action-return {
+  color: rgba(55, 62, 78, 0.86);
+}
+
+.release-stage.is-empty-galaxy .empty-action-primary {
+  display: none;
+}
+
+.release-stage.is-empty-galaxy .empty-action-secondary {
+  font-size: 17px;
+}
+
+.release-stage.is-empty-universe .empty-state h2 {
+  max-width: 11ch;
+}
+
+@media (max-width: 980px) {
+  .release-stage.is-empty-state::before {
+    inset: -10px -12px -24px;
+    background-position: 66% center;
+  }
+
+  .release-stage.is-empty-state .empty-state h2 {
+    max-width: 12ch;
+    font-size: clamp(48px, 10vw, 76px);
+  }
+
+  .release-stage.is-empty-state .empty-state p:last-of-type {
+    max-width: 28ch;
+  }
+}
+
+@media (max-width: 720px) {
+  .release-stage.is-empty-state {
+    min-height: calc(100dvh - 132px);
+  }
+
+  .release-stage.is-empty-state::before {
+    inset: -8px -10px -18px;
+    background:
+      linear-gradient(180deg, rgba(248, 242, 232, 0.9) 0%, rgba(248, 242, 232, 0.44) 36%, rgba(247, 240, 228, 0.82) 100%),
+      linear-gradient(90deg, rgba(248, 242, 232, 0.96) 0%, rgba(247, 240, 228, 0.28) 100%),
+      url("/static/empty-galaxy-prince.png");
+    background-repeat: no-repeat;
+    background-size: cover;
+    background-position: 74% center;
+  }
+
+  .empty-state {
+    min-height: auto;
+    max-width: 100%;
+    padding: 28px 0 22px;
+  }
+
+  .release-stage.is-empty-state .empty-state h2 {
+    max-width: 9ch;
+    font-size: clamp(42px, 14vw, 62px);
+    line-height: 0.96;
+  }
+
+  .release-stage.is-empty-state .empty-state p:last-of-type {
+    max-width: 24ch;
+    font-size: 18px;
+  }
+
+  .release-stage.is-empty-state .empty-actions {
+    gap: 14px 18px;
+  }
 }
 
 .composer-dialog {
@@ -1176,6 +1669,7 @@ dd {
   width: 100%;
   height: 260px;
   overflow: visible;
+  user-select: none;
 }
 
 .journey-add-milestone {
@@ -1207,10 +1701,80 @@ dd {
   cursor: grab;
 }
 
+.journey-canvas-hit {
+  cursor: crosshair;
+}
+
+.journey-selection-box {
+  fill: rgba(226, 203, 148, 0.08);
+  stroke: rgba(164, 129, 70, 0.42);
+  stroke-width: 1;
+  stroke-dasharray: 3 7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 3px rgba(223, 191, 120, 0.12));
+}
+
+.journey-selection-halo {
+  fill: rgba(234, 216, 175, 0.12);
+  stroke: rgba(173, 137, 79, 0.22);
+  stroke-width: 0.85;
+  filter: blur(0.15px);
+  opacity: 0.92;
+}
+
+.journey-marker.is-selected .milestone-name,
+.journey-marker.is-selected .date-text {
+  fill: rgba(108, 84, 46, 0.94);
+}
+
+.journey-marker.is-selected .expected-marker {
+  fill: rgba(178, 141, 72, 0.9);
+}
+
+.journey-marker.is-selected line {
+  stroke: rgba(155, 128, 79, 0.34);
+}
+
+.journey-milestone-hit.is-selected.is-draggable {
+  cursor: grab;
+}
+
 .journey-drag-line {
   stroke: rgba(78, 121, 199, 0.4);
   stroke-width: 1.1;
   stroke-dasharray: 3 6;
+}
+
+.journey-timeline .timeline-spine,
+.journey-timeline .month-ruler-line,
+.journey-timeline .month-label,
+.journey-timeline .journey-marker text,
+.journey-timeline .journey-marker line,
+.journey-timeline .journey-marker polygon,
+.journey-selection-halo {
+  pointer-events: none;
+}
+
+.journey-marker.is-selected .journey-selection-halo {
+  animation: journey-selection-breathe 9.5s ease-in-out infinite;
+}
+
+@keyframes journey-selection-breathe {
+  0%, 100% {
+    opacity: 0.74;
+    transform: scale(0.985);
+  }
+
+  46% {
+    opacity: 1;
+    transform: scale(1.015);
+  }
+
+  68% {
+    opacity: 0.84;
+    transform: scale(0.996);
+  }
 }
 
 .composer-dialog::backdrop {
@@ -1641,8 +2205,8 @@ fieldset {
 
   .release-track,
   .release-canvas {
-    min-height: 258px;
-    height: 258px;
+    min-height: clamp(196px, 30vw, 258px);
+    height: auto;
   }
 
   .now-label {
@@ -1685,5 +2249,59 @@ fieldset {
     gap: 10px;
     flex-wrap: wrap;
     justify-content: flex-end;
+  }
+}
+
+/* ── journey-star ──────────────────────────────────────────────
+   One quiet star near the journey horizon.
+   Not magic. Not fantasy. Just a tiny suggestion that the
+   journey is still gathering starlight somewhere.
+   Reference feeling: a quiet old book page under afternoon sunlight.
+   ────────────────────────────────────────────────────────────── */
+.journey-star {
+  position: absolute;
+  /* near the horizon edge — offset, never centered, never obvious */
+  top: 34%;
+  right: 14%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  /* a grain of dust catching afternoon light — warm, barely luminous */
+  background: radial-gradient(
+    circle,
+    rgba(255, 250, 235, 0.95) 0%,
+    rgba(255, 246, 225, 0.4) 45%,
+    transparent 100%
+  );
+  opacity: 0.08;
+  filter: blur(0.5px);
+  pointer-events: none;
+  z-index: 5;
+  animation: journey-star-breathe 12s ease-in-out infinite;
+}
+
+@keyframes journey-star-breathe {
+  0%, 100% {
+    opacity: 0.04;
+    transform: scale(0.8);
+  }
+  42% {
+    opacity: 0.15;
+    transform: scale(1.15);
+  }
+  50% {
+    opacity: 0.13;
+    transform: scale(1.08);
+  }
+  58% {
+    opacity: 0.11;
+    transform: scale(1.0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .journey-star {
+    animation: none;
+    opacity: 0.08;
   }
 }

@@ -4,15 +4,15 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Boa</title>
-    <link rel="stylesheet" href="/static/app.css">
+    <link rel="stylesheet" href="/static/app.css?v=starlight-28">
   </head>
   <body>
-    <div class="now-label" aria-hidden="true">NOW</div>
-    <div class="now-line" aria-hidden="true"></div>
-    <button class="now-toggle now-toggle-top" type="button" aria-label="Expand upper Now line panel" aria-expanded="false" data-now-toggle="top">
+    <div class="now-label hidden" aria-hidden="true">NOW</div>
+    <div class="now-line hidden" aria-hidden="true"></div>
+    <button class="now-toggle now-toggle-top hidden" type="button" aria-label="Expand upper Now line panel" aria-expanded="false" data-now-toggle="top">
       <span aria-hidden="true">+</span>
     </button>
-    <button class="now-toggle now-toggle-bottom" type="button" aria-label="Expand lower Now line panel" aria-expanded="false" data-now-toggle="bottom">
+    <button class="now-toggle now-toggle-bottom hidden" type="button" aria-label="Expand lower Now line panel" aria-expanded="false" data-now-toggle="bottom">
       <span aria-hidden="true">+</span>
     </button>
     <div class="app-shell">
@@ -24,6 +24,7 @@
           <div class="brand-copy">
             <p class="brand-name">BOA</p>
             <h1 class="brand-tagline">reveal the shape of a release</h1>
+            <p id="board-scope" class="board-scope hidden"></p>
           </div>
         </div>
         <div class="masthead-actions">
@@ -62,20 +63,22 @@
 
       <main class="release-stage">
         <section id="empty-state" class="empty-state hidden">
-          <p class="empty-eyebrow">No release yet</p>
-          <h2>Start the first snake.</h2>
-          <p>The timeline appears as soon as a release arrives.</p>
+          <p id="empty-eyebrow" class="empty-eyebrow">No release yet</p>
+          <h2 id="empty-title">Start the first snake.</h2>
+          <p id="empty-body">The timeline appears as soon as a release arrives.</p>
           <div class="empty-actions">
-            <button id="empty-new-release-button" class="primary-button" type="button">New Release</button>
-            <button id="seed-button" class="ghost-button" type="button">Load Demo Release</button>
+            <button id="empty-new-release-button" class="primary-button empty-action-primary" type="button">Begin a Journey</button>
+            <button id="seed-button" class="ghost-button empty-action-secondary" type="button">Load Demo Release</button>
+            <a id="empty-return-link" class="ghost-button empty-action-secondary empty-action-return hidden" href="/">Return to the Universe</a>
           </div>
         </section>
 
         <section id="timeline-board" class="timeline-board" aria-live="polite">
         </section>
-        <section class="month-ruler-wrap" aria-hidden="true">
+        <section class="month-ruler-wrap hidden" aria-hidden="true">
           <svg id="month-ruler" class="month-ruler" viewBox="0 0 960 42" preserveAspectRatio="none"></svg>
         </section>
+        <div class="journey-star hidden" aria-hidden="true"></div>
       </main>
     </div>
 
@@ -378,13 +381,28 @@
               </div>
             </div>
           </div>
+          <section class="starlight-summary hidden" aria-label="Starlight readiness">
+            <p class="starlight-whisper"></p>
+          </section>
         </div>
         <div class="release-track">
-          <svg class="release-canvas" viewBox="0 0 1120 226" preserveAspectRatio="none"></svg>
+          <svg class="release-canvas" viewBox="0 0 1120 280" preserveAspectRatio="xMidYMid meet"></svg>
+          <aside class="starlight-detail-card hidden" aria-live="polite">
+            <p class="starlight-detail-kicker">Night Log</p>
+            <p class="starlight-detail-value"></p>
+            <p class="starlight-detail-date"></p>
+            <p class="starlight-detail-whisper"></p>
+            <div class="starlight-detail-body"></div>
+            <dl class="starlight-detail-stats hidden">
+              <div><dt>Done</dt><dd class="starlight-detail-done"></dd></div>
+              <div><dt>Total</dt><dd class="starlight-detail-total"></dd></div>
+              <div><dt>Blocked</dt><dd class="starlight-detail-blocked"></dd></div>
+            </dl>
+          </aside>
         </div>
       </article>
     </template>
 
-    <script src="/static/app.js" defer></script>
+    <script src="/static/app.js?v=starlight-28" defer></script>
   </body>
 </html>

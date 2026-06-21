@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from contextlib import contextmanager
 from datetime import date, datetime, timezone
@@ -21,8 +22,13 @@ from boa.domain import (
     PluginDescriptor,
     ReleaseBlueprint,
     ReleaseRecord,
+    ReleaseStarlight,
     ReleaseTimeline,
     ReminderState,
+    StarlightDetail,
+    StarlightEvent,
+    StarlightMetrics,
+    StarlightStatus,
     pending_reminder_types,
 )
 
@@ -104,6 +110,37 @@ class BoaStorage:
                     FOREIGN KEY (release_id) REFERENCES releases(id) ON DELETE CASCADE,
                     FOREIGN KEY (milestone_id) REFERENCES milestones(id) ON DELETE CASCADE
                 );
+
+                CREATE TABLE IF NOT EXISTS starlight_status (
+                    release_id INTEGER PRIMARY KEY,
+                    starlight INTEGER NOT NULL,
+                    whisper TEXT NOT NULL,
+                    detail_type TEXT NOT NULL DEFAULT 'markdown',
+                    detail_content TEXT NOT NULL DEFAULT '',
+                    metrics_present INTEGER NOT NULL DEFAULT 0,
+                    done_count INTEGER NOT NULL DEFAULT 0,
+                    total_count INTEGER NOT NULL DEFAULT 0,
+                    blocked_count INTEGER NOT NULL DEFAULT 0,
+                    observed_on TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY (release_id) REFERENCES releases(id) ON DELETE CASCADE
+                );
+
+                CREATE TABLE IF NOT EXISTS starlight_event (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    release_id INTEGER NOT NULL,
+                    observed_on TEXT NOT NULL,
+                    starlight INTEGER NOT NULL,
+                    whisper TEXT NOT NULL,
+                    detail_type TEXT NOT NULL DEFAULT 'markdown',
+                    detail_content TEXT NOT NULL DEFAULT '',
+                    metrics_present INTEGER NOT NULL DEFAULT 0,
+                    done_count INTEGER NOT NULL DEFAULT 0,
+                    total_count INTEGER NOT NULL DEFAULT 0,
+                    blocked_count INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (release_id) REFERENCES releases(id) ON DELETE CASCADE
+                );
                 """
             )
             ack_columns = {
@@ -133,6 +170,79 @@ class BoaStorage:
                 WHERE observed_at IS NULL
                 """
             )
+            starlight_status_columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(starlight_status)").fetchall()
+            }
+            if "done_count" not in starlight_status_columns:
+                connection.execute(
+                    "ALTER TABLE starlight_status ADD COLUMN done_count INTEGER NOT NULL DEFAULT 0"
+                )
+            if "detail_type" not in starlight_status_columns:
+                connection.execute(
+                    "ALTER TABLE starlight_status ADD COLUMN detail_type TEXT NOT NULL DEFAULT 'markdown'"
+                )
+            if "detail_content" not in starlight_status_columns:
+                connection.execute(
+                    "ALTER TABLE starlight_status ADD COLUMN detail_content TEXT NOT NULL DEFAULT ''"
+                )
+            if "metrics_present" not in starlight_status_columns:
+                connection.execute(
+                    "ALTER TABLE starlight_status ADD COLUMN metrics_present INTEGER NOT NULL DEFAULT 0"
+                )
+            if "total_count" not in starlight_status_columns:
+                connection.execute(
+                    "ALTER TABLE starlight_status ADD COLUMN total_count INTEGER NOT NULL DEFAULT 0"
+                )
+            if "blocked_count" not in starlight_status_columns:
+                connection.execute(
+                    "ALTER TABLE starlight_status ADD COLUMN blocked_count INTEGER NOT NULL DEFAULT 0"
+                )
+            connection.execute(
+                """
+                UPDATE starlight_status
+                SET metrics_present = 1
+                WHERE metrics_present = 0
+                  AND (done_count > 0 OR total_count > 0 OR blocked_count > 0)
+                """
+            )
+            starlight_event_columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(starlight_event)").fetchall()
+            }
+            if starlight_event_columns:
+                if "detail_type" not in starlight_event_columns:
+                    connection.execute(
+                        "ALTER TABLE starlight_event ADD COLUMN detail_type TEXT NOT NULL DEFAULT 'markdown'"
+                    )
+                if "detail_content" not in starlight_event_columns:
+                    connection.execute(
+                        "ALTER TABLE starlight_event ADD COLUMN detail_content TEXT NOT NULL DEFAULT ''"
+                    )
+                if "metrics_present" not in starlight_event_columns:
+                    connection.execute(
+                        "ALTER TABLE starlight_event ADD COLUMN metrics_present INTEGER NOT NULL DEFAULT 0"
+                    )
+                if "done_count" not in starlight_event_columns:
+                    connection.execute(
+                        "ALTER TABLE starlight_event ADD COLUMN done_count INTEGER NOT NULL DEFAULT 0"
+                    )
+                if "total_count" not in starlight_event_columns:
+                    connection.execute(
+                        "ALTER TABLE starlight_event ADD COLUMN total_count INTEGER NOT NULL DEFAULT 0"
+                    )
+                if "blocked_count" not in starlight_event_columns:
+                    connection.execute(
+                        "ALTER TABLE starlight_event ADD COLUMN blocked_count INTEGER NOT NULL DEFAULT 0"
+                    )
+                connection.execute(
+                    """
+                    UPDATE starlight_event
+                    SET metrics_present = 1
+                    WHERE metrics_present = 0
+                      AND (done_count > 0 OR total_count > 0 OR blocked_count > 0)
+                    """
+                )
 
     def create_release(self, blueprint: ReleaseBlueprint) -> ReleaseRecord:
         with self.connect() as connection:
@@ -170,6 +280,16 @@ class BoaStorage:
                 "SELECT id FROM releases ORDER BY id ASC"
             ).fetchall()
         return [self.get_release(int(row["id"])) for row in rows]
+
+    def list_releases_for_galaxy(self, galaxy_slug: str) -> list[ReleaseRecord]:
+        normalized_slug = slugify_galaxy(galaxy_slug)
+        if not normalized_slug:
+            return []
+        return [
+            release
+            for release in self.list_releases()
+            if slugify_galaxy(release.blueprint.product) == normalized_slug
+        ]
 
     def get_release(self, release_id: int) -> ReleaseRecord:
         with self.connect() as connection:
@@ -526,6 +646,203 @@ class BoaStorage:
             signal_type=submission.signal_type,
         )
 
+    def get_release_starlight(self, release_id: int) -> ReleaseStarlight | None:
+        self.get_release(release_id)
+        with self.connect() as connection:
+            current_row = connection.execute(
+                """
+                SELECT
+                    release_id,
+                    starlight,
+                    whisper,
+                    detail_type,
+                    detail_content,
+                    metrics_present,
+                    done_count,
+                    total_count,
+                    blocked_count,
+                    observed_on,
+                    updated_at
+                FROM starlight_status
+                WHERE release_id = ?
+                """,
+                (release_id,),
+            ).fetchone()
+            if current_row is None:
+                return None
+
+            event_rows = connection.execute(
+                """
+                SELECT
+                    id,
+                    release_id,
+                    observed_on,
+                    starlight,
+                    whisper,
+                    detail_type,
+                    detail_content,
+                    metrics_present,
+                    done_count,
+                    total_count,
+                    blocked_count,
+                    created_at
+                FROM starlight_event
+                WHERE release_id = ?
+                ORDER BY observed_on ASC, id ASC
+                """,
+                (release_id,),
+            ).fetchall()
+
+        current = StarlightStatus(
+            release_id=int(current_row["release_id"]),
+            starlight=int(current_row["starlight"]),
+            whisper=str(current_row["whisper"]),
+            detail=StarlightDetail(
+                type=str(current_row["detail_type"] or "markdown"),
+                content=str(current_row["detail_content"] or ""),
+            ),
+            metrics=(
+                StarlightMetrics(
+                    done=int(current_row["done_count"]),
+                    total=int(current_row["total_count"]),
+                    blocked=int(current_row["blocked_count"]),
+                )
+                if int(current_row["metrics_present"] or 0)
+                else None
+            ),
+            observed_on=date.fromisoformat(str(current_row["observed_on"])),
+            updated_at=datetime.fromisoformat(str(current_row["updated_at"])),
+        )
+        trail = tuple(
+            StarlightEvent(
+                id=int(row["id"]),
+                release_id=int(row["release_id"]),
+                observed_on=date.fromisoformat(str(row["observed_on"])),
+                starlight=int(row["starlight"]),
+                whisper=str(row["whisper"]),
+                detail=StarlightDetail(
+                    type=str(row["detail_type"] or "markdown"),
+                    content=str(row["detail_content"] or ""),
+                ),
+                metrics=(
+                    StarlightMetrics(
+                        done=int(row["done_count"]),
+                        total=int(row["total_count"]),
+                        blocked=int(row["blocked_count"]),
+                    )
+                    if int(row["metrics_present"] or 0)
+                    else None
+                ),
+                created_at=datetime.fromisoformat(str(row["created_at"])),
+            )
+            for row in event_rows
+        )
+        return ReleaseStarlight(current=current, trail=trail)
+
+    def update_release_starlight(
+        self,
+        release_id: int,
+        *,
+        starlight: int,
+        whisper: str,
+        detail: StarlightDetail,
+        metrics: StarlightMetrics | None,
+        observed_on: date,
+    ) -> ReleaseStarlight:
+        self.get_release(release_id)
+        updated_at = datetime.now(timezone.utc).replace(microsecond=0)
+        with self.connect() as connection:
+            current_row = connection.execute(
+                """
+                SELECT starlight
+                FROM starlight_status
+                WHERE release_id = ?
+                """,
+                (release_id,),
+            ).fetchone()
+
+            connection.execute(
+                """
+                INSERT INTO starlight_status (
+                    release_id,
+                    starlight,
+                    whisper,
+                    detail_type,
+                    detail_content,
+                    metrics_present,
+                    done_count,
+                    total_count,
+                    blocked_count,
+                    observed_on,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(release_id) DO UPDATE SET
+                    starlight = excluded.starlight,
+                    whisper = excluded.whisper,
+                    detail_type = excluded.detail_type,
+                    detail_content = excluded.detail_content,
+                    metrics_present = excluded.metrics_present,
+                    done_count = excluded.done_count,
+                    total_count = excluded.total_count,
+                    blocked_count = excluded.blocked_count,
+                    observed_on = excluded.observed_on,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    release_id,
+                    starlight,
+                    whisper,
+                    detail.type,
+                    detail.content,
+                    1 if metrics is not None else 0,
+                    metrics.done if metrics is not None else 0,
+                    metrics.total if metrics is not None else 0,
+                    metrics.blocked if metrics is not None else 0,
+                    observed_on.isoformat(),
+                    updated_at.isoformat(),
+                ),
+            )
+
+            current_starlight = int(current_row["starlight"]) if current_row is not None else None
+            if current_starlight is None or current_starlight != starlight:
+                connection.execute(
+                    """
+                    INSERT INTO starlight_event (
+                        release_id,
+                        observed_on,
+                        starlight,
+                        whisper,
+                        detail_type,
+                        detail_content,
+                        metrics_present,
+                        done_count,
+                        total_count,
+                        blocked_count,
+                        created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        release_id,
+                        observed_on.isoformat(),
+                        starlight,
+                        whisper,
+                        detail.type,
+                        detail.content,
+                        1 if metrics is not None else 0,
+                        metrics.done if metrics is not None else 0,
+                        metrics.total if metrics is not None else 0,
+                        metrics.blocked if metrics is not None else 0,
+                        updated_at.isoformat(),
+                    ),
+                )
+
+        result = self.get_release_starlight(release_id)
+        if result is None:
+            raise KeyError(f"Release {release_id} was not found.")
+        return result
+
     def log_notification(
         self,
         *,
@@ -719,7 +1036,17 @@ class BoaStorage:
                 for row in milestone_rows
             ),
             bug_snapshots=tuple(self.list_bug_snapshots(release_id)),
+            starlight=self.get_release_starlight(release_id),
         )
 
-    def list_release_timelines(self) -> list[ReleaseTimeline]:
-        return [self.get_release_timeline(release.id) for release in self.list_releases()]
+    def list_release_timelines(self, galaxy_slug: str | None = None) -> list[ReleaseTimeline]:
+        releases = (
+            self.list_releases_for_galaxy(galaxy_slug)
+            if galaxy_slug is not None
+            else self.list_releases()
+        )
+        return [self.get_release_timeline(release.id) for release in releases]
+
+
+def slugify_galaxy(value: str) -> str:
+    return re.sub(r"(^-|-$)", "", re.sub(r"[^a-z0-9]+", "-", value.strip().lower()))
