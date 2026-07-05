@@ -56,6 +56,7 @@ def dump_release_blueprint(blueprint: ReleaseBlueprint) -> str:
                 "name": milestone.name,
                 "expected": milestone.expected.isoformat(),
                 "owner": milestone.owner,
+                **({"email": milestone.email} if milestone.email else {}),
                 **({"note": {"content": milestone.note}} if milestone.note else {}),
             }
             for milestone in blueprint.milestones
