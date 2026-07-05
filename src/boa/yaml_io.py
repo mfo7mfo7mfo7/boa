@@ -56,6 +56,7 @@ def dump_release_blueprint(blueprint: ReleaseBlueprint) -> str:
                 "name": milestone.name,
                 "expected": milestone.expected.isoformat(),
                 "owner": milestone.owner,
+                **({"note": {"content": milestone.note}} if milestone.note else {}),
             }
             for milestone in blueprint.milestones
         ],
@@ -98,6 +99,7 @@ def _milestone_from_mapping(payload: Any) -> Milestone:
         name=_require_non_empty_string(payload["name"], field="name"),
         expected=_parse_date(payload["expected"], field="expected"),
         owner=_require_non_empty_string(payload["owner"], field="owner"),
+        note=_parse_optional_note(payload.get("note")),
     )
 
 
@@ -131,3 +133,15 @@ def _parse_date(value: Any, *, field: str) -> date:
         return date.fromisoformat(value)
     except ValueError as exc:
         raise BlueprintValidationError(f"{field} must be a valid ISO date.") from exc
+
+
+def _parse_optional_note(value: Any) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise BlueprintValidationError("note must be a mapping with a content field.")
+    content = value.get("content", "")
+    if not isinstance(content, str):
+        raise BlueprintValidationError("note.content must be a string.")
+    cleaned = content.strip()
+    return cleaned or None

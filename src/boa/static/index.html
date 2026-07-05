@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Boa</title>
-    <link rel="stylesheet" href="/static/app.css?v=starlight-28">
+    <link rel="stylesheet" href="/static/app.css?v=starlight-35">
   </head>
   <body>
     <div class="now-label hidden" aria-hidden="true">NOW</div>
@@ -18,9 +18,9 @@
     <div class="app-shell">
       <header class="masthead">
         <div class="brand">
-          <div class="brand-mark" aria-hidden="true">
+          <a class="brand-mark brand-home-link" href="/" aria-label="Return to the universe">
             <img src="/static/boa-logo.png" alt="" />
-          </div>
+          </a>
           <div class="brand-copy">
             <p class="brand-name">BOA</p>
             <h1 class="brand-tagline">reveal the shape of a release</h1>
@@ -28,6 +28,10 @@
           </div>
         </div>
         <div class="masthead-actions">
+          <button id="system-button" class="system-button" type="button" aria-label="System status" title="System status">
+            <span class="system-button-icon" aria-hidden="true">✦</span>
+            <span class="system-button-label">System</span>
+          </button>
           <div class="masthead-controls" aria-label="Board controls">
             <div class="selector-field">
               <span class="selector-label">Horizon</span>
@@ -121,12 +125,18 @@
                   </div>
                 </div>
               </div>
-              <label>
+              <p id="journey-milestone-date" class="journey-popover-date">April 23, 2026</p>
+              <label class="journey-popover-field">
+                <span>Name</span>
                 <input id="journey-milestone-name" type="text" placeholder="Regression Ready">
               </label>
-              <label>
-                Owner
+              <label class="journey-popover-field">
+                <span>Keeper</span>
                 <input id="journey-milestone-owner" type="text" placeholder="alice@example.com">
+              </label>
+              <label class="journey-popover-field">
+                <span>Note</span>
+                <textarea id="journey-milestone-note" rows="4" placeholder="A quiet note about why this milestone matters"></textarea>
               </label>
             </form>
             <div class="journey-canvas-shell">
@@ -142,8 +152,8 @@
       <div class="dialog-surface">
         <div class="dialog-head">
           <div>
-            <p class="dialog-kicker">Studio</p>
-            <h2>Release rituals</h2>
+            <p class="dialog-kicker">Management</p>
+            <h2>Release tools</h2>
           </div>
           <button id="close-dialog-button" class="icon-button" type="button" aria-label="Close">×</button>
         </div>
@@ -199,8 +209,8 @@
           <section class="dialog-panel">
             <div class="dialog-row">
               <div>
-                <h3>Edit release</h3>
-                <p class="summary-line">Adjust milestones without leaving the renderer.</p>
+                <h3>Release settings</h3>
+                <p class="summary-line">Adjust timeline structure and release metadata.</p>
               </div>
             </div>
             <form id="edit-form" class="stack-form">
@@ -239,6 +249,10 @@
                 <label>
                   Owner
                   <input id="edit-new-owner" type="text" placeholder="alice">
+                </label>
+                <label>
+                  Note <span class="field-optional">(optional)</span>
+                  <textarea id="edit-new-note" rows="4" placeholder="A quiet note about why this milestone matters"></textarea>
                 </label>
                 <button id="edit-add-button" class="ghost-button" type="submit">Add milestone</button>
               </div>
@@ -344,12 +358,98 @@
             <input id="ack-secret" name="secret" type="password" placeholder="boa-262" required>
           </label>
           <label>
+            Ack Name
+            <input id="ack-name" name="ack_name" type="text" placeholder="gui" required>
+          </label>
+          <label>
             Note <span class="field-optional">(optional)</span>
             <textarea id="ack-note" rows="4" placeholder="A short acknowledgement note"></textarea>
           </label>
           <p id="ack-hint" class="summary-line">The release secret is required to acknowledge or update the note.</p>
           <button id="ack-submit-button" class="primary-button" type="submit">Acknowledge</button>
           <p id="ack-message" class="form-note" aria-live="polite"></p>
+        </form>
+      </div>
+    </dialog>
+
+    <dialog id="observation-dialog" class="observation-dialog">
+      <div class="observation-surface">
+        <div class="dialog-head">
+          <div>
+            <p class="dialog-kicker">Observation</p>
+            <h2>Where are we now?</h2>
+          </div>
+          <button id="close-observation-dialog-button" class="icon-button" type="button" aria-label="Close">×</button>
+        </div>
+
+        <form id="observation-form" class="stack-form observation-form">
+          <div class="observation-header">
+            <div>
+              <p id="observation-release-name" class="observation-release-name"></p>
+              <p id="observation-release-version" class="observation-release-version"></p>
+            </div>
+            <div class="observation-header-meta">
+              <span id="observation-status-pill" class="status-pill">Ready</span>
+              <p id="observation-last-updated" class="summary-line"></p>
+            </div>
+          </div>
+
+          <label class="observation-field observation-field-primary">
+            <span>Where are we now?</span>
+            <input id="observation-whisper" type="text" maxlength="280" placeholder="Release confidence is gathering steadily.">
+          </label>
+
+          <section class="observation-section">
+            <div class="observation-section-head">
+              <div>
+                <h3>Starlight</h3>
+                <p class="summary-line">How far has the journey progressed?</p>
+              </div>
+              <p id="observation-starlight-readout" class="observation-starlight-readout">0% · Gathering</p>
+            </div>
+            <input id="observation-starlight" class="observation-starlight-slider" type="range" min="0" max="100" step="1" value="0">
+          </section>
+
+          <div class="observation-top-grid">
+            <label class="observation-field">
+              <span>Current Storms</span>
+              <input id="observation-storms" type="number" min="0" inputmode="numeric" placeholder="Unknown">
+              <small class="field-help">How many known troubles remain?</small>
+            </label>
+            <label class="observation-field">
+              <span>Observed on</span>
+              <input id="observation-date" type="date">
+            </label>
+          </div>
+
+          <label class="observation-field">
+            <span>Details</span>
+            <textarea id="observation-detail" rows="10" placeholder="Where are we now?&#10;&#10;You may write about:&#10;&#10;• A hill we crossed&#10;• A storm we discovered&#10;• A star that feels closer"></textarea>
+          </label>
+
+          <details class="observation-advanced">
+            <summary>Supporting Facts</summary>
+            <p class="summary-line">Optional. Keep this folded unless the journey needs extra structure.</p>
+            <div class="mini-grid observation-metrics-grid">
+              <label class="observation-field">
+                <span>Done</span>
+                <input id="observation-done" type="number" min="0" placeholder="16">
+              </label>
+              <label class="observation-field">
+                <span>Total</span>
+                <input id="observation-total" type="number" min="0" placeholder="20">
+              </label>
+              <label class="observation-field">
+                <span>Blocked</span>
+                <input id="observation-blocked" type="number" min="0" placeholder="1">
+              </label>
+            </div>
+          </details>
+
+          <div id="observation-state-summary" class="subtle-block">No starlight has been observed for this journey yet.</div>
+          <div id="observation-trail-summary" class="subtle-block">Meaningful starlight changes will appear here.</div>
+          <button id="observation-save-button" class="primary-button" type="submit">Continue the Journey</button>
+          <p id="observation-message" class="form-note" aria-live="polite"></p>
         </form>
       </div>
     </dialog>
@@ -367,13 +467,13 @@
         <div class="release-identity">
           <div class="release-heading">
             <div class="release-heading-copy">
-              <p class="release-product"></p>
+              <a class="release-product release-product-link"></a>
               <div class="release-version-row">
                 <h2 class="release-version"></h2>
                 <div class="release-menu-shell">
                   <button class="release-menu-button" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Release actions">⌄</button>
                   <div class="release-menu hidden" role="menu">
-                    <button class="release-menu-item" type="button" data-action="edit" role="menuitem">Edit</button>
+                    <button class="release-menu-item" type="button" data-action="settings" role="menuitem">Settings</button>
                     <button class="release-menu-item" type="button" data-action="export" role="menuitem">Download</button>
                     <button class="release-menu-item release-menu-item-danger" type="button" data-action="delete" role="menuitem">Delete</button>
                   </div>
@@ -383,16 +483,32 @@
           </div>
           <section class="starlight-summary hidden" aria-label="Starlight readiness">
             <p class="starlight-whisper"></p>
+            <button class="release-observe-button" type="button">Continue Observation</button>
           </section>
         </div>
         <div class="release-track">
           <svg class="release-canvas" viewBox="0 0 1120 280" preserveAspectRatio="xMidYMid meet"></svg>
+          <div class="starlight-legend-shell">
+            <button class="starlight-legend-button" type="button" aria-expanded="false">Starlight Legend</button>
+            <aside class="starlight-legend-card hidden" aria-label="Starlight readiness legend"></aside>
+          </div>
+          <aside class="milestone-note-card hidden" aria-live="polite">
+            <p class="milestone-note-kicker">Field Annotation</p>
+            <p class="milestone-note-title"></p>
+            <p class="milestone-note-date"></p>
+            <div class="milestone-note-body boa-note-body"></div>
+            <div class="milestone-ack-shell hidden">
+              <p class="milestone-ack-kicker">Acknowledgement</p>
+              <p class="milestone-ack-meta"></p>
+              <div class="milestone-ack-body boa-note-body"></div>
+            </div>
+          </aside>
           <aside class="starlight-detail-card hidden" aria-live="polite">
             <p class="starlight-detail-kicker">Night Log</p>
             <p class="starlight-detail-value"></p>
             <p class="starlight-detail-date"></p>
             <p class="starlight-detail-whisper"></p>
-            <div class="starlight-detail-body"></div>
+            <div class="starlight-detail-body boa-note-body"></div>
             <dl class="starlight-detail-stats hidden">
               <div><dt>Done</dt><dd class="starlight-detail-done"></dd></div>
               <div><dt>Total</dt><dd class="starlight-detail-total"></dd></div>
@@ -403,6 +519,50 @@
       </article>
     </template>
 
-    <script src="/static/app.js?v=starlight-28" defer></script>
+    <script src="/static/app.js?v=starlight-35" defer></script>
+
+    <dialog id="system-dialog" class="system-dialog">
+      <div class="system-surface">
+        <div class="dialog-head">
+          <div>
+            <p class="dialog-kicker">System Status</p>
+            <h2>The engine room</h2>
+          </div>
+          <button id="close-system-dialog-button" class="icon-button" type="button" aria-label="Close">×</button>
+        </div>
+
+        <section class="system-section" aria-labelledby="system-smtp-title">
+          <div class="system-section-head">
+            <h3 id="system-smtp-title">SMTP</h3>
+            <span id="system-smtp-status" class="status-pill">Disabled</span>
+          </div>
+          <p id="system-smtp-message" class="summary-line">Email delivery is disabled.</p>
+
+          <dl class="system-detail-list">
+            <div>
+              <dt>Host</dt>
+              <dd id="system-smtp-host">—</dd>
+            </div>
+            <div>
+              <dt>From</dt>
+              <dd id="system-smtp-from">—</dd>
+            </div>
+            <div>
+              <dt>Security</dt>
+              <dd id="system-smtp-security">None</dd>
+            </div>
+          </dl>
+
+          <form id="system-smtp-test-form" class="system-test-form">
+            <label class="system-field">
+              <span>Test recipient</span>
+              <input id="system-smtp-test-to" type="email" placeholder="admin@example.com">
+            </label>
+            <button id="system-smtp-send-button" class="primary-button" type="submit">Send Test Email</button>
+          </form>
+          <p id="system-smtp-test-message" class="form-note" aria-live="polite"></p>
+        </section>
+      </div>
+    </dialog>
   </body>
 </html>

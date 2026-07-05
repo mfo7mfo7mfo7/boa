@@ -135,6 +135,8 @@ def test_integer_path_parameters_reject_non_integer_values(tmp_path) -> None:
         ("post", "/api/releases/not-an-int/bug-snapshots", {"open_bug_count": 0}),
         ("get", "/api/releases/not-an-int/starlight", None),
         ("post", "/api/releases/not-an-int/starlight", {"starlight": 12, "whisper": "x", "detail": {"type": "markdown", "content": "x"}, "metrics": {"done": 1, "total": 2, "blocked": 0}}),
+        ("get", "/api/releases/not-an-int/observation", None),
+        ("put", "/api/releases/not-an-int/observation", {"starlight": 12, "whisper": "x", "detail": {"type": "markdown", "content": "x"}, "metrics": {"done": 1, "total": 2, "blocked": 0}}),
         ("get", "/api/releases/not-an-int/notifications", None),
         ("get", "/api/milestones/not-an-int/notifications", None),
         ("post", "/api/milestones/not-an-int/ack", {"secret": "s"}),
@@ -158,17 +160,24 @@ def test_missing_release_and_milestone_resources_return_404(tmp_path) -> None:
             "/api/releases/999999/starlight",
             json={"starlight": 12, "whisper": "Gathering signal", "detail": {"type": "markdown", "content": "Gathering signal"}, "metrics": {"done": 1, "total": 4, "blocked": 0}},
         )
+        observation_get = client.get("/api/releases/999999/observation")
+        observation_put = client.put(
+            "/api/releases/999999/observation",
+            json={"starlight": 12, "whisper": "Gathering signal", "detail": {"type": "markdown", "content": "Gathering signal"}, "metrics": {"done": 1, "total": 4, "blocked": 0}},
+        )
         milestone_update = client.put(
             "/api/milestones/999999",
             json={"name": "QA", "expected": "2026-01-01", "owner": "qa"},
         )
         milestone_delete = client.delete("/api/milestones/999999")
-        milestone_ack = client.post("/api/milestones/999999/ack", json={"secret": "boa-262"})
+        milestone_ack = client.post("/api/milestones/999999/ack", json={"secret": "boa-262", "ack_name": "qa"})
 
     assert release_get.status_code == 404
     assert release_delete.status_code == 404
     assert starlight_get.status_code == 404
     assert starlight_post.status_code == 404
+    assert observation_get.status_code == 404
+    assert observation_put.status_code == 404
     assert milestone_update.status_code == 404
     assert milestone_delete.status_code == 404
     assert milestone_ack.status_code == 404
@@ -222,7 +231,7 @@ def test_failed_ack_does_not_create_ack_state_or_persist_note(tmp_path) -> None:
 
         denied = client.post(
             f"/api/milestones/{milestone_id}/ack",
-            json={"secret": "wrong-secret", "note": "<script>alert(1)</script>"},
+            json={"secret": "wrong-secret", "ack_name": "gui", "note": {"content": "<script>alert(1)</script>"}},
         )
         state = client.get(
             f"/api/milestones/{milestone_id}/notifications",
@@ -243,11 +252,11 @@ def test_ack_trims_note(tmp_path) -> None:
 
         response = client.post(
             f"/api/milestones/{milestone_id}/ack",
-            json={"secret": "boa-262", "note": " ok "},
+            json={"secret": "boa-262", "ack_name": "gui", "note": {"content": " ok "}},
         )
 
     assert response.status_code == 200
-    assert response.json()["note"] == "ok"
+    assert response.json()["note"] == {"content": "ok"}
 
 
 def test_starlight_rejects_invalid_ranges_and_unexpected_fields(tmp_path) -> None:
@@ -294,7 +303,7 @@ def test_ack_rejects_unexpected_fields(tmp_path) -> None:
 
         extra = client.post(
             f"/api/milestones/{milestone_id}/ack",
-            json={"secret": "boa-262", "note": " ok ", "role": "admin"},
+            json={"secret": "boa-262", "ack_name": "gui", "note": {"content": " ok "}, "role": "admin"},
         )
 
     assert extra.status_code == 422

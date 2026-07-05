@@ -33,13 +33,21 @@ from boa.domain import (
 from boa.storage import BoaStorage, slugify_galaxy
 from boa.yaml_io import BlueprintValidationError, dump_release_blueprint, load_release_blueprint
 
+from boa.email import (
+    SmtpConfigurationError,
+    SmtpSendError,
+    get_smtp_status,
+    load_smtp_config,
+    send_test_email,
+)
+
 
 MAX_PRODUCT_LENGTH = 120
 MAX_VERSION_LENGTH = 80
 MAX_SECRET_LENGTH = 200
 MAX_MILESTONE_NAME_LENGTH = 160
 MAX_OWNER_LENGTH = 160
-MAX_ACK_NOTE_LENGTH = 2000
+MAX_NOTE_LENGTH = 5000
 MAX_WHISPER_LENGTH = 280
 MAX_STARLIGHT_DETAIL_LENGTH = 20 * 1024
 
@@ -105,6 +113,7 @@ class MilestoneCreateRequest(BaseModel):
     name: str
     expected: date
     owner: str
+    note: "NoteContentRequest | None" = None
 
     @field_validator("name")
     @classmethod
@@ -123,6 +132,7 @@ class MilestoneUpdateRequest(BaseModel):
     name: str
     expected: date
     owner: str
+    note: "NoteContentRequest | None" = None
 
     @field_validator("name")
     @classmethod
@@ -135,23 +145,55 @@ class MilestoneUpdateRequest(BaseModel):
         return _clean_text(value, field="owner", max_length=MAX_OWNER_LENGTH)
 
 
+class NoteContentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    content: str = ""
+
+    @field_validator("content")
+    @classmethod
+    def clean_content(cls, value: str) -> str:
+        if len(value.strip()) > MAX_NOTE_LENGTH:
+            raise ValueError(f"note.content must be {MAX_NOTE_LENGTH} characters or fewer.")
+        return value
+
+
 class AckRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     secret: str
-    note: str = ""
+    ack_name: str
+    note: NoteContentRequest | None = None
 
     @field_validator("secret")
     @classmethod
     def clean_secret(cls, value: str) -> str:
         return _clean_text(value, field="secret", max_length=MAX_SECRET_LENGTH)
 
-    @field_validator("note")
+    @field_validator("ack_name")
     @classmethod
-    def clean_note(cls, value: str) -> str:
-        if len(value.strip()) > MAX_ACK_NOTE_LENGTH:
-            raise ValueError(f"note must be {MAX_ACK_NOTE_LENGTH} characters or fewer.")
-        return value
+    def clean_ack_name(cls, value: str) -> str:
+        return _clean_text(value, field="ack_name", max_length=MAX_OWNER_LENGTH)
+
+
+class SmtpTestRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    to: str | None = None
+
+    @field_validator("to")
+    @classmethod
+    def clean_to(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
+
+class SmtpTestResponse(BaseModel):
+    ok: bool
+    message: str
+    error: str | None = None
 
 
 class BugSnapshotCreateRequest(BaseModel):
@@ -225,6 +267,10 @@ class StarlightUpdateRequest(BaseModel):
         return _clean_text(value, field="whisper", max_length=MAX_WHISPER_LENGTH)
 
 
+class NoteContentResponse(BaseModel):
+    content: str
+
+
 class MilestoneResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -232,6 +278,7 @@ class MilestoneResponse(BaseModel):
     name: str
     expected: date
     owner: str
+    note: NoteContentResponse | None = None
 
 
 class ReleaseResponse(BaseModel):
@@ -252,7 +299,8 @@ class ReleaseBlueprintResponse(BaseModel):
 class AckResponse(BaseModel):
     acked: bool
     acked_at: str
-    note: str
+    ack_name: str
+    note: NoteContentResponse | None = None
 
 
 class BugSnapshotResponse(BaseModel):
@@ -306,8 +354,10 @@ class TimelineMilestoneResponse(BaseModel):
     name: str
     expected: date
     owner: str
+    note: NoteContentResponse | None
     acked_at: str | None
-    ack_note: str | None
+    ack_name: str | None
+    ack_note: NoteContentResponse | None
 
 
 class ReleaseTimelineResponse(BaseModel):
@@ -360,6 +410,14 @@ class ReleaseStarlightResponse(BaseModel):
     trail: list[StarlightEventResponse]
 
 
+class ObservationWorkspaceResponse(BaseModel):
+    release_id: int
+    product: str
+    version: str
+    current: StarlightStatusResponse | None = None
+    trail: list[StarlightEventResponse] = []
+
+
 def create_app(storage: BoaStorage | None = None) -> FastAPI:
     db_path = Path(os.getenv("BOA_DB_PATH", Path(__file__).resolve().parents[2] / "boa.db"))
 
@@ -408,6 +466,66 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
             stale_kickoff_days=journey_fold_days,
             journey_fold_days=journey_fold_days,
         )
+
+    @app.get("/api/system/smtp")
+    def smtp_status() -> dict:
+        try:
+            config = load_smtp_config()
+        except SmtpConfigurationError as exc:
+            return {
+                "enabled": False,
+                "configured": False,
+                "ready": False,
+                "host": None,
+                "port": 587,
+                "from": None,
+                "from_name": "Boa",
+                "starttls": True,
+                "ssl": False,
+                "authenticated": False,
+                "test_to": None,
+                "message": str(exc),
+            }
+        return get_smtp_status(config)
+
+    @app.post("/api/system/smtp/test", response_model=SmtpTestResponse)
+    def smtp_test(request: SmtpTestRequest) -> SmtpTestResponse:
+        try:
+            config = load_smtp_config()
+        except SmtpConfigurationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            ) from exc
+
+        if not config.enabled:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="SMTP is disabled.",
+            )
+        if not config.ready:
+            status_msg = get_smtp_status(config)["message"]
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=status_msg,
+            )
+
+        try:
+            send_test_email(config, to=request.to)
+        except SmtpConfigurationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            ) from exc
+        except SmtpSendError as exc:
+            return SmtpTestResponse(
+                ok=False,
+                message="Failed to send test email.",
+                error=str(exc),
+            )
+
+        return SmtpTestResponse(ok=True, message="Test email sent.")
+
 
     @app.get("/api/timeline", response_model=list[ReleaseTimelineResponse])
     def list_release_timelines(
@@ -522,10 +640,15 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
         storage: BoaStorage = Depends(get_storage),
     ) -> MilestoneResponse:
         try:
-            milestone = storage.add_milestone(
-                release_id,
-                Milestone(name=request.name, expected=request.expected, owner=request.owner),
-            )
+                milestone = storage.add_milestone(
+                    release_id,
+                    Milestone(
+                        name=request.name,
+                        expected=request.expected,
+                        owner=request.owner,
+                        note=_note_content_or_none(request.note),
+                    ),
+                )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return _milestone_response(milestone)
@@ -537,10 +660,15 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
         storage: BoaStorage = Depends(get_storage),
     ) -> MilestoneResponse:
         try:
-            milestone = storage.update_milestone(
-                milestone_id,
-                Milestone(name=request.name, expected=request.expected, owner=request.owner),
-            )
+                milestone = storage.update_milestone(
+                    milestone_id,
+                    Milestone(
+                        name=request.name,
+                        expected=request.expected,
+                        owner=request.owner,
+                        note=_note_content_or_none(request.note),
+                    ),
+                )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return _milestone_response(milestone)
@@ -585,8 +713,17 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
         if request.secret != release.blueprint.secret:
             raise HTTPException(status_code=403, detail="Invalid release secret.")
 
-        ack = storage.ack_milestone(milestone_id, request.note.strip())
-        return AckResponse(acked=True, acked_at=ack.acked_at.isoformat(), note=ack.note)
+        ack = storage.ack_milestone(
+            milestone_id,
+            request.ack_name,
+            _note_content_or_none(request.note) or "",
+        )
+        return AckResponse(
+            acked=True,
+            acked_at=ack.acked_at.isoformat(),
+            ack_name=ack.ack_name,
+            note=_note_response(ack.note),
+        )
 
     @app.post(
         "/api/releases/{release_id}/bug-snapshots",
@@ -686,6 +823,49 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return _release_starlight_response(release, starlight)
+
+    @app.get("/api/releases/{release_id}/observation", response_model=ObservationWorkspaceResponse)
+    def get_release_observation_workspace(
+        release_id: int,
+        storage: BoaStorage = Depends(get_storage),
+    ) -> ObservationWorkspaceResponse:
+        try:
+            release = storage.get_release(release_id)
+            starlight = storage.get_release_starlight(release_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return _observation_workspace_response(release, starlight)
+
+    @app.put("/api/releases/{release_id}/observation", response_model=ObservationWorkspaceResponse)
+    def update_release_observation_workspace(
+        release_id: int,
+        request: StarlightUpdateRequest,
+        storage: BoaStorage = Depends(get_storage),
+    ) -> ObservationWorkspaceResponse:
+        try:
+            release = storage.get_release(release_id)
+            starlight = storage.update_release_starlight(
+                release_id,
+                starlight=request.starlight,
+                whisper=request.whisper,
+                detail=StarlightDetail(
+                    type=request.detail.type,
+                    content=request.detail.content,
+                ),
+                metrics=(
+                    StarlightMetrics(
+                        done=request.metrics.done,
+                        total=request.metrics.total,
+                        blocked=request.metrics.blocked,
+                    )
+                    if request.metrics is not None
+                    else None
+                ),
+                observed_on=request.observed_on or date.today(),
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return _observation_workspace_response(release, starlight)
 
     @app.post("/api/notifications/run", response_model=list[NotificationResponse])
     def run_notifications(
@@ -833,7 +1013,22 @@ def _milestone_response(milestone: Milestone | MilestoneRecord) -> MilestoneResp
         name=milestone.name,
         expected=milestone.expected,
         owner=milestone.owner,
+        note=_note_response(getattr(milestone, "note", None)),
     )
+
+
+def _note_response(content: str | None) -> NoteContentResponse | None:
+    cleaned = str(content).strip() if content is not None else ""
+    if not cleaned:
+        return None
+    return NoteContentResponse(content=cleaned)
+
+
+def _note_content_or_none(note: NoteContentRequest | None) -> str | None:
+    if note is None:
+        return None
+    cleaned = note.content.strip()
+    return cleaned or None
 
 
 def _notification_response(notification: NotificationRecord) -> NotificationResponse:
@@ -880,8 +1075,10 @@ def _timeline_response(timeline: ReleaseTimeline) -> ReleaseTimelineResponse:
                 name=milestone.name,
                 expected=milestone.expected,
                 owner=milestone.owner,
+                note=_note_response(milestone.note),
                 acked_at=milestone.acked_at.isoformat() if milestone.acked_at else None,
-                ack_note=milestone.ack_note,
+                ack_name=milestone.ack_name,
+                ack_note=_note_response(milestone.ack_note),
             )
             for milestone in timeline.milestones
         ],
@@ -955,4 +1152,17 @@ def _release_starlight_response(
         metrics=_starlight_metrics_response(starlight.current.metrics),
         observed_on=starlight.current.observed_on,
         trail=[_starlight_event_response(event) for event in starlight.trail],
+    )
+
+
+def _observation_workspace_response(
+    release: ReleaseRecord,
+    starlight: ReleaseStarlight | None,
+) -> ObservationWorkspaceResponse:
+    return ObservationWorkspaceResponse(
+        release_id=release.id,
+        product=release.blueprint.product,
+        version=release.blueprint.version,
+        current=_starlight_status_response(starlight.current) if starlight else None,
+        trail=[_starlight_event_response(event) for event in (starlight.trail if starlight else ())],
     )

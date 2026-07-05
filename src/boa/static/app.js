@@ -30,6 +30,12 @@ const STARLIGHT_VISUAL_CONFIG = {
   bugWaveFallbackPeakRisk: 1,
   bugWaveSmoothingWindow: 3,
 };
+const JOURNEY_INTERACTION_CONFIG = {
+  dragStartThresholdPx: 10,
+  dragPixelsPerDay: 12,
+  dragFallbackRangeDays: 3650,
+  selectionStartThresholdPx: 8,
+};
 const BUG_WAVE_MANUAL_FIXTURES = {
   normalConvergence: [10, 30, 80, 50, 20],
   newPeakToday: [10, 30, 80, 90],
@@ -49,6 +55,8 @@ const state = {
   activeMenuReleaseId: null,
   expandedReleaseIds: new Set(),
   ackContext: null,
+  observationContext: null,
+  observationByRelease: {},
   editReleaseId: null,
   reminderReleaseId: null,
   pluginReleaseId: null,
@@ -91,8 +99,10 @@ const elements = {
   journeyTimeline: document.querySelector("#journey-timeline"),
   journeyAddMilestone: document.querySelector("#journey-add-milestone"),
   journeyMilestonePopover: document.querySelector("#journey-milestone-popover"),
+  journeyMilestoneDate: document.querySelector("#journey-milestone-date"),
   journeyMilestoneName: document.querySelector("#journey-milestone-name"),
   journeyMilestoneOwner: document.querySelector("#journey-milestone-owner"),
+  journeyMilestoneNote: document.querySelector("#journey-milestone-note"),
   journeyMilestoneMenu: document.querySelector("#journey-milestone-menu"),
   journeyMilestoneMenuPanel: document.querySelector("#journey-milestone-menu-panel"),
   journeyMilestoneDelete: document.querySelector("#journey-milestone-delete"),
@@ -126,10 +136,44 @@ const elements = {
   ackMilestoneName: document.querySelector("#ack-milestone-name"),
   ackDate: document.querySelector("#ack-date"),
   ackSecret: document.querySelector("#ack-secret"),
+  ackName: document.querySelector("#ack-name"),
   ackNote: document.querySelector("#ack-note"),
   ackHint: document.querySelector("#ack-hint"),
   ackSubmitButton: document.querySelector("#ack-submit-button"),
   ackMessage: document.querySelector("#ack-message"),
+  observationDialog: document.querySelector("#observation-dialog"),
+  closeObservationDialogButton: document.querySelector("#close-observation-dialog-button"),
+  observationForm: document.querySelector("#observation-form"),
+  observationReleaseName: document.querySelector("#observation-release-name"),
+  observationReleaseVersion: document.querySelector("#observation-release-version"),
+  observationLastUpdated: document.querySelector("#observation-last-updated"),
+  observationStatusPill: document.querySelector("#observation-status-pill"),
+  observationStateSummary: document.querySelector("#observation-state-summary"),
+  observationStarlight: document.querySelector("#observation-starlight"),
+  observationStarlightReadout: document.querySelector("#observation-starlight-readout"),
+  observationStorms: document.querySelector("#observation-storms"),
+  observationDate: document.querySelector("#observation-date"),
+  observationWhisper: document.querySelector("#observation-whisper"),
+  observationDetail: document.querySelector("#observation-detail"),
+  observationDone: document.querySelector("#observation-done"),
+  observationTotal: document.querySelector("#observation-total"),
+  observationBlocked: document.querySelector("#observation-blocked"),
+  observationTrailSummary: document.querySelector("#observation-trail-summary"),
+  observationSaveButton: document.querySelector("#observation-save-button"),
+  observationMessage: document.querySelector("#observation-message"),
+  systemButton: document.querySelector("#system-button"),
+  systemDialog: document.querySelector("#system-dialog"),
+  closeSystemDialogButton: document.querySelector("#close-system-dialog-button"),
+  systemSmtpTitle: document.querySelector("#system-smtp-title"),
+  systemSmtpStatus: document.querySelector("#system-smtp-status"),
+  systemSmtpMessage: document.querySelector("#system-smtp-message"),
+  systemSmtpHost: document.querySelector("#system-smtp-host"),
+  systemSmtpFrom: document.querySelector("#system-smtp-from"),
+  systemSmtpSecurity: document.querySelector("#system-smtp-security"),
+  systemSmtpTestForm: document.querySelector("#system-smtp-test-form"),
+  systemSmtpTestTo: document.querySelector("#system-smtp-test-to"),
+  systemSmtpSendButton: document.querySelector("#system-smtp-send-button"),
+  systemSmtpTestMessage: document.querySelector("#system-smtp-test-message"),
   editForm: document.querySelector("#edit-form"),
   editRelease: document.querySelector("#edit-release"),
   editProduct: document.querySelector("#edit-product"),
@@ -140,6 +184,7 @@ const elements = {
   editNewName: document.querySelector("#edit-new-name"),
   editNewDate: document.querySelector("#edit-new-date"),
   editNewOwner: document.querySelector("#edit-new-owner"),
+  editNewNote: document.querySelector("#edit-new-note"),
   editMessage: document.querySelector("#edit-message"),
   reminderRelease: document.querySelector("#reminder-release"),
   reminderRunButton: document.querySelector("#reminder-run-button"),
@@ -223,10 +268,24 @@ async function loadTimeline() {
       : "";
     const timelinePayload = await request(`/api/timeline${query}`);
     state.releases = timelinePayload.map(normalizeTimelineRelease);
+    state.observationByRelease = Object.fromEntries(
+      state.releases.map((release) => [release.id, buildObservationWorkspaceFromRelease(release)]),
+    );
     if (state.pageScope.mode === "galaxy" && state.releases.length) {
       state.pageScope.label = state.releases[0].product;
     }
     state.timeline = buildTimelineScale(state.releases);
+    if (state.observationContext?.releaseId) {
+      const activeRelease = getReleaseById(state.observationContext.releaseId);
+      if (activeRelease) {
+        state.observationContext = buildObservationContext(
+          activeRelease,
+          state.observationByRelease[activeRelease.id] || buildObservationWorkspaceFromRelease(activeRelease),
+        );
+      } else {
+        state.observationContext = null;
+      }
+    }
     render();
     await refreshOptionalSurfaces(state.editReleaseId || state.releases[0]?.id);
     if (state.pageScope.mode === "galaxy" && !state.releases.length) {
@@ -287,7 +346,14 @@ function render(allowTimelineRealign = true) {
     const orderedMilestones = getOrderedMilestones(release);
     const palette = getReleasePalette(release, index);
 
-    fragment.querySelector(".release-product").textContent = release.product;
+    const productNode = fragment.querySelector(".release-product");
+    const galaxyHref = `/${slugify(release.product)}`;
+    productNode.textContent = release.product;
+    productNode.setAttribute("href", galaxyHref);
+    productNode.setAttribute("aria-label", `Open ${release.product} galaxy`);
+    if (state.pageScope.mode === "galaxy" && state.pageScope.galaxySlug === slugify(release.product)) {
+      productNode.setAttribute("aria-current", "page");
+    }
     const versionNode = fragment.querySelector(".release-version");
     versionNode.textContent = release.version;
     versionNode.style.color = palette.stroke;
@@ -304,6 +370,11 @@ function render(allowTimelineRealign = true) {
     menu.querySelectorAll(".release-menu-item").forEach((item) => {
       item.addEventListener("click", () => handleReleaseMenuAction(release, item.dataset.action));
     });
+    const observeButton = fragment.querySelector(".release-observe-button");
+    if (observeButton) {
+      observeButton.textContent = release.starlight ? "Continue Observation" : "Where are we now?";
+      observeButton.addEventListener("click", () => openObservationDialog(release.id));
+    }
 
     const row = fragment.querySelector(".release-row");
     row.setAttribute("aria-label", releaseTitle);
@@ -317,12 +388,13 @@ function render(allowTimelineRealign = true) {
 
     const svg = fragment.querySelector(".release-canvas");
     const detailCard = fragment.querySelector(".starlight-detail-card");
+    const milestoneCard = fragment.querySelector(".milestone-note-card");
     drawRelease(
       svg,
       { ...release, milestones: orderedMilestones },
       state.timeline,
       palette,
-      { detailCard },
+      { detailCard, milestoneCard },
     );
 
     elements.board.appendChild(fragment);
@@ -347,34 +419,68 @@ function render(allowTimelineRealign = true) {
 function renderReleaseStarlight(fragment, release) {
   const panel = fragment.querySelector(".starlight-summary");
   const starlight = release.starlight || null;
-  if (!panel || !starlight) {
-    panel?.classList.add("hidden");
+  const legendShell = fragment.querySelector(".starlight-legend-shell");
+  const legendButton = fragment.querySelector(".starlight-legend-button");
+  const legendCard = fragment.querySelector(".starlight-legend-card");
+  if (!panel) {
+    legendShell?.classList.add("hidden");
     return;
   }
 
   panel.classList.remove("hidden");
-  fragment.querySelector(".starlight-whisper").textContent = starlight.whisper;
+  const whisperNode = fragment.querySelector(".starlight-whisper");
+  if (!starlight) {
+    whisperNode.textContent = "The sky has not been written yet.";
+    panel.title = "Open the observation workspace to record where the journey is now.";
+    legendShell?.classList.add("hidden");
+    return;
+  }
+
+  legendShell?.classList.remove("hidden");
+  whisperNode.textContent = starlight.whisper;
   const metricBits = summarizeStarlightMetrics(starlight.metrics);
   panel.title = metricBits ? `${starlight.whisper} • ${metricBits}` : starlight.whisper;
+  if (legendCard && legendButton && !legendCard.dataset.ready) {
+    legendCard.innerHTML = getStarlightLegendItems()
+      .map((item) => `<div class="starlight-legend-row"><span>${item.label}</span><span>${item.state}</span></div>`)
+      .join("");
+    legendCard.dataset.ready = "true";
+    legendButton.addEventListener("click", () => {
+      const willOpen = legendCard.classList.contains("hidden");
+      legendCard.classList.toggle("hidden", !willOpen);
+      legendButton.setAttribute("aria-expanded", String(willOpen));
+    });
+    legendShell.addEventListener("mouseleave", () => {
+      legendCard.classList.add("hidden");
+      legendButton.setAttribute("aria-expanded", "false");
+    });
+  }
 }
 
 function describeStarlightState(value) {
-  if (value >= 100) {
-    return "Departure";
+  if (value >= 90) {
+    return "Release Ready";
   }
-  if (value >= 81) {
-    return "Ready";
+  if (value >= 75) {
+    return "Confident";
   }
-  if (value >= 61) {
+  if (value >= 50) {
     return "Advancing";
   }
-  if (value >= 41) {
-    return "Preparing";
+  if (value >= 25) {
+    return "Emerging";
   }
-  if (value >= 21) {
-    return "Building";
-  }
-  return "Gathering";
+  return "Faint";
+}
+
+function getStarlightLegendItems() {
+  return [
+    { label: "✦ 0-24", state: describeStarlightState(24) },
+    { label: "✦ 25-49", state: describeStarlightState(49) },
+    { label: "✦ 50-74", state: describeStarlightState(74) },
+    { label: "✦ 75-89", state: describeStarlightState(89) },
+    { label: "✦ 90-100", state: describeStarlightState(100) },
+  ];
 }
 
 function getPageScope() {
@@ -470,13 +576,29 @@ function syncBoardChromeVisibility(hasAnyReleases) {
 function normalizeTimelineRelease(release) {
   return {
     ...release,
-    milestones: Array.isArray(release.milestones) ? release.milestones.map((milestone) => ({ ...milestone })) : [],
+    milestones: Array.isArray(release.milestones) ? release.milestones.map(normalizeTimelineMilestone) : [],
     bug_snapshots: Array.isArray(release.bug_snapshots) ? release.bug_snapshots.map((snapshot) => ({ ...snapshot })) : [],
     starlight: normalizeStarlightStatus(release.starlight),
     starlight_trail: Array.isArray(release.starlight_trail)
       ? release.starlight_trail.map(normalizeStarlightEvent)
       : [],
   };
+}
+
+function normalizeTimelineMilestone(milestone) {
+  return {
+    ...milestone,
+    note: normalizeBoaNote(milestone?.note),
+    ack_note: normalizeBoaNote(milestone?.ack_note),
+  };
+}
+
+function normalizeBoaNote(note) {
+  const content = typeof note === "string"
+    ? note
+    : (note && typeof note === "object" ? note.content : "");
+  const cleaned = String(content || "").trim();
+  return cleaned ? { content: cleaned } : null;
 }
 
 function normalizeStarlightStatus(starlight) {
@@ -520,6 +642,35 @@ function normalizeStarlightMetrics(metrics) {
     total: Number(metrics?.total || 0),
     blocked: Number(metrics?.blocked || 0),
   };
+}
+
+function normalizeObservationWorkspace(payload, releaseFallback = null) {
+  const fallbackReleaseId = Number(releaseFallback?.id || payload?.release_id || 0);
+  return {
+    release_id: fallbackReleaseId,
+    product: String(payload?.product || releaseFallback?.product || ""),
+    version: String(payload?.version || releaseFallback?.version || ""),
+    current: normalizeStarlightStatus(payload?.current),
+    trail: Array.isArray(payload?.trail) ? payload.trail.map(normalizeStarlightEvent) : [],
+  };
+}
+
+function buildObservationWorkspaceFromRelease(release) {
+  return normalizeObservationWorkspace({
+    release_id: release?.id,
+    product: release?.product,
+    version: release?.version,
+    current: release?.starlight || null,
+    trail: release?.starlight_trail || [],
+  }, release);
+}
+
+function getBoaNoteContent(note) {
+  return String(note?.content || "").trim();
+}
+
+function hasBoaNote(note) {
+  return Boolean(getBoaNoteContent(note));
 }
 
 function getTimelineBoardMetrics() {
@@ -753,6 +904,145 @@ function renderEditForm(selectedReleaseId) {
   renderMilestoneEditors();
 }
 
+function getReleaseById(releaseId) {
+  return state.releases.find((item) => item.id === releaseId) || null;
+}
+
+function getLatestBugSnapshot(release) {
+  const snapshots = normalizeObservedBugSnapshots(release?.bug_snapshots);
+  return snapshots.at(-1) || null;
+}
+
+function getObservationRelease() {
+  return state.observationContext ? getReleaseById(state.observationContext.releaseId) : null;
+}
+
+function buildObservationContext(release, workspace = buildObservationWorkspaceFromRelease(release)) {
+  const current = workspace.current;
+  const metrics = current?.metrics || null;
+  const latestSnapshot = getLatestBugSnapshot(release);
+  return {
+    releaseId: release.id,
+    current,
+    trail: workspace.trail,
+    initialStorms: latestSnapshot ? Number(latestSnapshot.open_bug_count) : null,
+    fields: {
+      starlight: current?.starlight ?? 0,
+      observedOn: current?.observed_on || formatLocalDate(new Date()),
+      whisper: current?.whisper || "",
+      detail: current?.detail?.content || "",
+      storms: latestSnapshot ? String(latestSnapshot.open_bug_count) : "",
+      done: metrics ? String(metrics.done) : "",
+      total: metrics ? String(metrics.total) : "",
+      blocked: metrics ? String(metrics.blocked) : "",
+    },
+  };
+}
+
+function formatObservationTrail(trail) {
+  if (!trail.length) {
+    return "Meaningful starlight changes will appear here.";
+  }
+  const moments = trail.map((event) => `✦${event.starlight}`);
+  return `Trail remembers only readiness changes: ${moments.join(" → ")}.`;
+}
+
+function syncObservationStarlightReadout(value) {
+  const starlight = Math.min(Math.max(Number(value) || 0, 0), 100);
+  elements.observationStarlightReadout.textContent = `${starlight}% · ${describeStarlightState(starlight)}`;
+}
+
+function renderObservationWorkspace() {
+  const context = state.observationContext;
+  const release = getObservationRelease();
+  if (!context || !release) {
+    elements.observationStatusPill.textContent = "Waiting";
+    elements.observationReleaseName.textContent = "";
+    elements.observationReleaseVersion.textContent = "";
+    elements.observationLastUpdated.textContent = "";
+    elements.observationStateSummary.textContent = "Bring in a release to continue its observation.";
+    elements.observationTrailSummary.textContent = "Meaningful starlight changes will appear here.";
+    elements.observationMessage.textContent = "";
+    elements.observationForm.reset();
+    elements.observationSaveButton.disabled = true;
+    syncObservationStarlightReadout(0);
+    return;
+  }
+
+  const current = context.current;
+  const latestSnapshot = getLatestBugSnapshot(release);
+  const stormSummary = latestSnapshot
+    ? `Current storms observed at ${formatDateTime(latestSnapshot.observed_at)}.`
+    : "Current storms are still unknown.";
+  elements.observationSaveButton.disabled = false;
+  elements.observationReleaseName.textContent = release.product;
+  elements.observationReleaseVersion.textContent = release.version;
+  elements.observationStatusPill.textContent = current ? "Observed" : "Awaiting";
+  elements.observationStarlight.value = String(context.fields.starlight);
+  elements.observationDate.value = context.fields.observedOn;
+  elements.observationWhisper.value = context.fields.whisper;
+  elements.observationDetail.value = context.fields.detail;
+  elements.observationStorms.value = context.fields.storms;
+  elements.observationDone.value = context.fields.done;
+  elements.observationTotal.value = context.fields.total;
+  elements.observationBlocked.value = context.fields.blocked;
+  syncObservationStarlightReadout(context.fields.starlight);
+
+  if (current) {
+    const updatedLabel = current.updated_at ? formatDateTime(current.updated_at) : "just now";
+    elements.observationLastUpdated.textContent = `Last updated ${updatedLabel}`;
+    elements.observationStateSummary.innerHTML = `
+      <div class="observation-state-line">
+        <strong class="observation-state-value">✦ ${current.starlight}</strong>
+        <span class="observation-state-label">${describeStarlightState(current.starlight)}</span>
+      </div>
+      <div class="observation-state-meta">${escapeHtml(current.whisper || "No current observation yet.")}</div>
+      <div class="observation-state-meta">${stormSummary}</div>
+    `;
+  } else {
+    elements.observationLastUpdated.textContent = latestSnapshot
+      ? `Storms last observed ${formatDateTime(latestSnapshot.observed_at)}`
+      : "No observation yet";
+    elements.observationStateSummary.innerHTML = `
+      <div class="observation-state-line">
+        <strong class="observation-state-value">✦ Waiting</strong>
+        <span class="observation-state-label">The sky has not been written yet.</span>
+      </div>
+      <div class="observation-state-meta">Answer where we are now, then decide how bright the journey feels.</div>
+      <div class="observation-state-meta">${stormSummary}</div>
+    `;
+  }
+
+  elements.observationTrailSummary.textContent = formatObservationTrail(context.trail);
+}
+
+async function loadObservationWorkspace(releaseId, { silent = false } = {}) {
+  if (!releaseId) {
+    return null;
+  }
+
+  if (!silent) {
+    elements.observationStatusPill.textContent = "Loading";
+  }
+
+  const release = getReleaseById(releaseId);
+  const response = await requestOptional(`/api/releases/${releaseId}/observation`);
+  if (!response.ok) {
+    elements.observationStatusPill.textContent = "Unavailable";
+    if (!silent) {
+      elements.observationMessage.textContent = extractOptionalError(response);
+    }
+    return null;
+  }
+
+  state.observationByRelease[releaseId] = normalizeObservationWorkspace(response.payload, release);
+  if (state.observationContext?.releaseId === releaseId && release) {
+    state.observationContext = buildObservationContext(release, state.observationByRelease[releaseId]);
+    renderObservationWorkspace();
+  }
+  return state.observationByRelease[releaseId];
+}
+
 function renderReminderReleaseOptions(selectedReleaseId) {
   const currentReleaseId = selectedReleaseId ? String(selectedReleaseId) : (
     state.reminderReleaseId ? String(state.reminderReleaseId) : elements.reminderRelease.value
@@ -837,9 +1127,13 @@ function renderMilestoneEditors() {
           Owner
           <input type="text" data-field="owner" value="${escapeHtml(milestone.owner)}">
         </label>
+        <label class="milestone-editor-note">
+          Note
+          <textarea data-field="note" rows="4" placeholder="A quiet note about why this milestone matters">${escapeHtml(getBoaNoteContent(milestone.note))}</textarea>
+        </label>
       </div>
       <div class="milestone-editor-actions">
-        <span class="milestone-state">${milestone.acked_at ? `Acknowledged ${formatDateTime(milestone.acked_at)}` : "Pending acknowledgment"}</span>
+        <span class="milestone-state">${milestone.acked_at ? `Acknowledged ${milestone.ack_name || "someone"} ${formatDateTime(milestone.acked_at)}` : "Pending acknowledgment"}</span>
         <div>
           <button class="ghost-button" type="button" data-action="save">Save</button>
           <button class="text-button" type="button" data-action="delete">Delete</button>
@@ -944,6 +1238,7 @@ function syncAckFormState() {
   const milestone = getSelectedAckMilestone();
   const release = getSelectedAckRelease();
   if (!milestone) {
+    elements.ackName.value = "";
     elements.ackNote.value = "";
     elements.ackReleaseName.textContent = "No release selected";
     elements.ackMilestoneName.textContent = "";
@@ -955,7 +1250,8 @@ function syncAckFormState() {
 
   elements.ackReleaseName.textContent = release ? `${release.product} ${release.version}` : "";
   elements.ackMilestoneName.textContent = milestone.name;
-  elements.ackNote.value = milestone.ack_note || "";
+  elements.ackName.value = milestone.ack_name || "";
+  elements.ackNote.value = getBoaNoteContent(milestone.ack_note);
   elements.ackDate.value = milestone.acked_at ? formatCalendarDate(milestone.acked_at) : formatLocalDate(new Date());
   if (milestone.acked_at) {
     elements.ackSubmitButton.textContent = "Save note";
@@ -984,6 +1280,7 @@ function getSelectedAckMilestone() {
 function drawRelease(svg, release, timeline, palette, options = {}) {
   svg.innerHTML = "";
   const detailCard = options.detailCard || null;
+  const milestoneCard = options.milestoneCard || null;
 
   const { width, height, baselineY, leftPad, rightPad } = RELEASE_VIEWBOX;
 
@@ -1113,11 +1410,13 @@ function drawRelease(svg, release, timeline, palette, options = {}) {
 
   release.milestones.forEach((milestone) => {
     const x = xForDate(milestone.expected);
+    const notePoint = { x, y: baselineY - 24 };
     const expectedTime = dateishTime(milestone.expected);
     const ackTime = milestone.acked_at ? dateishTime(milestone.acked_at) : null;
     const isLateAck = typeof ackTime === "number" && ackTime > expectedTime;
     const isActionablePending = !milestone.acked_at && milestone.id === actionablePendingId;
     const shouldRenderAckMarker = milestone.acked_at || isActionablePending;
+    const hasMilestoneContext = hasBoaNote(milestone.note) || hasBoaNote(milestone.ack_note);
     const markerColor = milestone.acked_at
       ? (isLateAck ? "#c75b4a" : "#6f9f7a")
       : "#9c9c9c";
@@ -1143,6 +1442,12 @@ function drawRelease(svg, release, timeline, palette, options = {}) {
       milestone.name,
       formatCalendarDate(milestone.expected),
     ]));
+    if (hasMilestoneContext) {
+      expectedIcon.setAttribute("tabindex", "0");
+      expectedIcon.setAttribute("role", "button");
+      expectedIcon.setAttribute("aria-label", `${milestone.name} note`);
+      bindMilestoneNoteTrigger(expectedIcon, milestoneCard, svg, notePoint, milestone);
+    }
     milestoneGroup.appendChild(expectedIcon);
     milestoneGroup.appendChild(labelTextNode(milestone.name, x, baselineY - 22, "rgba(47, 55, 70, 0.88)", 12, "middle", "marker-label milestone-name milestone-expected-label"));
     milestoneGroup.appendChild(labelTextNode(formatCalendarDate(milestone.expected), x + 12, baselineY - 9, "var(--muted)", 10, "start", "marker-date date-text milestone-date milestone-expected"));
@@ -1162,12 +1467,19 @@ function drawRelease(svg, release, timeline, palette, options = {}) {
         points: `${x},${lowerAnchor.y - 12} ${x - 7},${lowerAnchor.y} ${x + 7},${lowerAnchor.y}`,
         fill: lowerAnchor.fill,
         class: lowerAnchor.className,
-        cursor: isActionablePending ? "pointer" : "default",
+        cursor: "pointer",
       });
       lowerIcon.appendChild(svgTitle(lowerAnchor.tooltip));
-      if (isActionablePending) {
-        lowerIcon.addEventListener("click", () => openAckDialog(release.id, milestone.id));
-      }
+      lowerIcon.setAttribute("tabindex", "0");
+      lowerIcon.setAttribute("role", "button");
+      lowerIcon.setAttribute("aria-label", `${milestone.name} acknowledgement`);
+      lowerIcon.addEventListener("click", () => openAckDialog(release.id, milestone.id));
+      lowerIcon.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openAckDialog(release.id, milestone.id);
+        }
+      });
       milestoneGroup.appendChild(lowerIcon);
     }
 
@@ -1423,7 +1735,7 @@ function showStarlightDetail(detailCard, svg, point, event) {
   detailCard.querySelector(".starlight-detail-value").textContent = `✦ ${event.starlight} ${describeStarlightState(event.starlight)}`;
   detailCard.querySelector(".starlight-detail-date").textContent = formatCalendarDate(event.date);
   detailCard.querySelector(".starlight-detail-whisper").textContent = event.whisper;
-  renderStarlightMarkdown(body, event.detail?.content || "");
+  renderBoaNote(body, event.detail?.content || "", { emptyFallback: "No night log recorded." });
 
   if (event.metrics) {
     detailCard.querySelector(".starlight-detail-done").textContent = String(event.metrics.done);
@@ -1469,6 +1781,104 @@ function hideStarlightDetail(detailCard) {
   }, 220);
 }
 
+function initializeMilestoneNoteCard(card) {
+  if (!card || card.dataset.ready === "true") {
+    return;
+  }
+  card.dataset.ready = "true";
+  card.dataset.hovering = "false";
+  card.dataset.markerHover = "false";
+  card.addEventListener("mouseenter", () => {
+    card.dataset.hovering = "true";
+    card.classList.remove("hidden");
+    card.classList.add("is-revealed");
+  });
+  card.addEventListener("mouseleave", () => {
+    card.dataset.hovering = "false";
+    hideMilestoneNoteCard(card);
+  });
+}
+
+function showMilestoneNoteCard(card, svg, point, milestone) {
+  if (!card) {
+    return;
+  }
+  initializeMilestoneNoteCard(card);
+  card.querySelector(".milestone-note-title").textContent = milestone.name;
+  card.querySelector(".milestone-note-date").textContent = formatCalendarDate(milestone.expected);
+  const noteBody = card.querySelector(".milestone-note-body");
+  renderBoaNote(noteBody, getBoaNoteContent(milestone.note));
+  noteBody.classList.toggle("hidden", !hasBoaNote(milestone.note));
+
+  const ackShell = card.querySelector(".milestone-ack-shell");
+  if (hasBoaNote(milestone.ack_note)) {
+    ackShell.classList.remove("hidden");
+    card.querySelector(".milestone-ack-meta").textContent = milestone.acked_at
+      ? `Acked by ${milestone.ack_name || "unknown"} on ${formatDateTime(milestone.acked_at)}`
+      : `Acked by ${milestone.ack_name || "unknown"}`;
+    renderBoaNote(card.querySelector(".milestone-ack-body"), getBoaNoteContent(milestone.ack_note));
+  } else {
+    ackShell.classList.add("hidden");
+    card.querySelector(".milestone-ack-meta").textContent = "";
+    card.querySelector(".milestone-ack-body").replaceChildren();
+  }
+
+  const box = svg.viewBox.baseVal;
+  const xPercent = (point.x / box.width) * 100;
+  const yPercent = (point.y / box.height) * 100;
+  card.style.left = `${Math.min(Math.max(xPercent + 2, 8), 72)}%`;
+  card.style.top = `${Math.min(Math.max(yPercent - 10, 10), 62)}%`;
+  card.classList.remove("hidden");
+  card.classList.remove("is-revealed");
+  window.clearTimeout(card._hideTimer);
+  window.clearTimeout(card._fadeTimer);
+  window.requestAnimationFrame(() => {
+    card.classList.add("is-revealed");
+  });
+}
+
+function hideMilestoneNoteCard(card) {
+  if (!card || card.dataset.hovering === "true" || card.dataset.markerHover === "true") {
+    return;
+  }
+  window.clearTimeout(card._hideTimer);
+  window.clearTimeout(card._fadeTimer);
+  card._fadeTimer = window.setTimeout(() => {
+    if (card.dataset.hovering === "true" || card.dataset.markerHover === "true") {
+      return;
+    }
+    card.classList.remove("is-revealed");
+    card._hideTimer = window.setTimeout(() => {
+      if (card.dataset.hovering === "true" || card.dataset.markerHover === "true") {
+        return;
+      }
+      card.classList.add("hidden");
+    }, 300);
+  }, 120);
+}
+
+function bindMilestoneNoteTrigger(target, card, svg, point, milestone) {
+  if (!target || !card) {
+    return;
+  }
+  const show = () => {
+    card.dataset.markerHover = "true";
+    showMilestoneNoteCard(card, svg, point, milestone);
+  };
+  const hide = () => {
+    card.dataset.markerHover = "false";
+    hideMilestoneNoteCard(card);
+  };
+  target.addEventListener("mouseenter", show);
+  target.addEventListener("focus", show);
+  target.addEventListener("mouseleave", hide);
+  target.addEventListener("blur", hide);
+  target.addEventListener("click", (event) => {
+    event.stopPropagation();
+    show();
+  });
+}
+
 function composeStarlightTitleLines(event) {
   const lines = [`Starlight ${event.starlight}`, event.whisper];
   const metricBits = summarizeStarlightMetrics(event.metrics);
@@ -1485,16 +1895,18 @@ function summarizeStarlightMetrics(metrics) {
   return `Done ${metrics.done} / Total ${metrics.total} / Blocked ${metrics.blocked}`;
 }
 
-function renderStarlightMarkdown(container, markdown) {
+function renderBoaNote(container, markdown, { emptyFallback = "" } = {}) {
   if (!container) {
     return;
   }
   container.replaceChildren();
   const blocks = safeMarkdownToBlocks(markdown);
   if (!blocks.length) {
-    const paragraph = document.createElement("p");
-    paragraph.textContent = markdown || "No night log recorded.";
-    container.appendChild(paragraph);
+    if (emptyFallback) {
+      const paragraph = document.createElement("p");
+      paragraph.textContent = emptyFallback;
+      container.appendChild(paragraph);
+    }
     return;
   }
   blocks.forEach((block) => {
@@ -1505,13 +1917,30 @@ function renderStarlightMarkdown(container, markdown) {
       return;
     }
     if (block.type === "list") {
-      const list = document.createElement("ul");
+      const list = document.createElement(block.ordered ? "ol" : "ul");
       block.items.forEach((item) => {
         const li = document.createElement("li");
-        appendInlineMarkdown(li, item);
+        if (item.checked !== undefined) {
+          const checkbox = document.createElement("span");
+          checkbox.className = "boa-note-checkbox";
+          checkbox.textContent = item.checked ? "☑" : "☐";
+          li.appendChild(checkbox);
+          li.appendChild(document.createTextNode(" "));
+          appendInlineMarkdown(li, item.text);
+        } else {
+          appendInlineMarkdown(li, item.text || item);
+        }
         list.appendChild(li);
       });
       container.appendChild(list);
+      return;
+    }
+    if (block.type === "code") {
+      const pre = document.createElement("pre");
+      const code = document.createElement("code");
+      code.textContent = block.text;
+      pre.appendChild(code);
+      container.appendChild(pre);
       return;
     }
     const paragraph = document.createElement("p");
@@ -1526,6 +1955,8 @@ function safeMarkdownToBlocks(markdown) {
   const blocks = [];
   let paragraph = [];
   let list = [];
+  let codeLines = [];
+  let inCodeBlock = false;
 
   const flushParagraph = () => {
     if (!paragraph.length) {
@@ -1538,12 +1969,34 @@ function safeMarkdownToBlocks(markdown) {
     if (!list.length) {
       return;
     }
-    blocks.push({ type: "list", items: list.slice() });
+    blocks.push({ type: "list", items: list.slice(), ordered: Boolean(list.ordered) });
     list = [];
+  };
+  const flushCode = () => {
+    if (!codeLines.length) {
+      return;
+    }
+    blocks.push({ type: "code", text: codeLines.join("\n") });
+    codeLines = [];
   };
 
   lines.forEach((line) => {
     const trimmed = line.trim();
+    if (trimmed.startsWith("```")) {
+      flushParagraph();
+      flushList();
+      if (inCodeBlock) {
+        flushCode();
+        inCodeBlock = false;
+      } else {
+        inCodeBlock = true;
+      }
+      return;
+    }
+    if (inCodeBlock) {
+      codeLines.push(line);
+      return;
+    }
     if (!trimmed) {
       flushParagraph();
       flushList();
@@ -1556,10 +2009,26 @@ function safeMarkdownToBlocks(markdown) {
       blocks.push({ type: "heading", level: headingMatch[1].length, text: headingMatch[2].trim() });
       return;
     }
-    const listMatch = trimmed.match(/^[-*]\s+(.*)$/);
-    if (listMatch) {
+    const checkboxMatch = trimmed.match(/^[-*]\s+\[( |x|X)\]\s+(.*)$/);
+    if (checkboxMatch) {
       flushParagraph();
-      list.push(listMatch[1].trim());
+      list.push({ checked: checkboxMatch[1].toLowerCase() === "x", text: checkboxMatch[2].trim() });
+      return;
+    }
+    const unorderedListMatch = trimmed.match(/^[-*]\s+(.*)$/);
+    if (unorderedListMatch) {
+      flushParagraph();
+      list.push({ text: unorderedListMatch[1].trim() });
+      return;
+    }
+    const orderedListMatch = trimmed.match(/^\d+\.\s+(.*)$/);
+    if (orderedListMatch) {
+      flushParagraph();
+      if (list.length && !list.ordered) {
+        flushList();
+      }
+      list.ordered = true;
+      list.push({ text: orderedListMatch[1].trim() });
       return;
     }
     flushList();
@@ -1568,6 +2037,7 @@ function safeMarkdownToBlocks(markdown) {
 
   flushParagraph();
   flushList();
+  flushCode();
   return blocks.filter((block) => {
     if (block.type === "list") {
       return block.items.length > 0;
@@ -2036,12 +2506,13 @@ function setStatus(text) {
   elements.statusPill.textContent = text;
 }
 
-function createJourneyMilestone(name, expected, owner = "", type = "custom") {
+function createJourneyMilestone(name, expected, owner = "", type = "custom", note = "") {
   return {
     id: `journey-${Math.random().toString(36).slice(2, 10)}`,
     name,
     expected,
     owner,
+    note,
     type,
   };
 }
@@ -2091,6 +2562,7 @@ function createJourneyDraftFromRelease(release) {
       new Date(milestone.expected),
       milestone.owner || "",
       milestone.name === "Kickoff" ? "kickoff" : milestone.name === "GA Release" ? "ga" : "custom",
+      getBoaNoteContent(milestone.note),
     ));
   return draft;
 }
@@ -2109,6 +2581,7 @@ function createJourneyDraftFromBlueprint(blueprint) {
       milestone.name === "Kickoff"
         ? "kickoff"
         : milestone.name === "GA Release" || index === milestones.length - 1 ? "ga" : "custom",
+      getBoaNoteContent(milestone.note),
     ));
   draft.activeMilestoneId = null;
   return draft;
@@ -2203,6 +2676,8 @@ function renderJourneyPopover(anchorRatio = null) {
   const isEditMode = state.journeyDraft?.mode === "edit";
   elements.journeyMilestoneName.value = active.name;
   elements.journeyMilestoneOwner.value = active.owner;
+  elements.journeyMilestoneNote.value = active.note || "";
+  elements.journeyMilestoneDate.textContent = formatCalendarDate(active.expected);
   elements.journeyMilestoneName.disabled = isEditMode;
   elements.journeyMilestoneMenu.disabled = isEditMode || active.type !== "custom";
   if (isEditMode || active.type !== "custom") {
@@ -2320,10 +2795,10 @@ function getJourneyDragSnapshot(milestoneId) {
   });
 
   if (!Number.isFinite(minDeltaDays)) {
-    minDeltaDays = -3650;
+    minDeltaDays = -JOURNEY_INTERACTION_CONFIG.dragFallbackRangeDays;
   }
   if (!Number.isFinite(maxDeltaDays)) {
-    maxDeltaDays = 3650;
+    maxDeltaDays = JOURNEY_INTERACTION_CONFIG.dragFallbackRangeDays;
   }
 
   return {
@@ -2439,11 +2914,11 @@ function renderJourneyDraft() {
     const marker = svgNode("g", { class: `journey-marker ${isSelected ? "is-selected" : ""}` });
     if (isSelected) {
       marker.appendChild(svgNode("rect", {
-        x: String(x - 32),
-        y: String(nameY - 24),
-        width: "64",
-        height: "54",
-        rx: "18",
+        x: String(x - 44),
+        y: String(nameY - 32),
+        width: "88",
+        height: "74",
+        rx: "24",
         class: "journey-selection-halo",
       }));
     }
@@ -2581,7 +3056,7 @@ function updateJourneyDrag(clientX) {
   if (!state.journeyDraft.dragMilestoneId || !state.journeyDraft.dragCandidateMilestoneId || state.journeyDraft.dragStartX === null) {
     return;
   }
-  if (!state.journeyDraft.dragMoved && Math.abs(clientX - state.journeyDraft.dragStartX) < 6) {
+  if (!state.journeyDraft.dragMoved && Math.abs(clientX - state.journeyDraft.dragStartX) < JOURNEY_INTERACTION_CONFIG.dragStartThresholdPx) {
     return;
   }
   if (!state.journeyDraft.dragMoved) {
@@ -2593,14 +3068,9 @@ function updateJourneyDrag(clientX) {
   if (!snapshot) {
     return;
   }
-  const scale = getJourneyTimelineScale();
-  const point = getJourneySvgPoint(clientX, 0);
-  const clamped = Math.min(Math.max(point.x, 90), 1120 - 110);
-  const ratio = (clamped - 90) / Math.max(1120 - 90 - 110, 1);
-  const rawTime = scale.startTime + (ratio * scale.range);
   const oneDay = 24 * 60 * 60 * 1000;
-  const snappedTime = Math.round(rawTime / oneDay) * oneDay;
-  const rawDeltaDays = Math.round((snappedTime - snapshot.anchorTime) / oneDay);
+  const pixelDelta = clientX - state.journeyDraft.dragStartX;
+  const rawDeltaDays = Math.round(pixelDelta / JOURNEY_INTERACTION_CONFIG.dragPixelsPerDay);
   const deltaDays = Math.min(Math.max(rawDeltaDays, snapshot.minDeltaDays), snapshot.maxDeltaDays);
   snapshot.selectedIds.forEach((id) => {
     const milestone = state.journeyDraft.milestones.find((item) => item.id === id);
@@ -2650,7 +3120,11 @@ function updateJourneySelection(clientX, clientY) {
     width: Math.abs(current.x - start.x),
     height: Math.abs(current.y - start.y),
   };
-  if (!state.journeyDraft.selectionMoved && rect.width < 6 && rect.height < 6) {
+  if (
+    !state.journeyDraft.selectionMoved &&
+    rect.width < JOURNEY_INTERACTION_CONFIG.selectionStartThresholdPx &&
+    rect.height < JOURNEY_INTERACTION_CONFIG.selectionStartThresholdPx
+  ) {
     return;
   }
   state.journeyDraft.selectionMoved = true;
@@ -2684,7 +3158,7 @@ function finishJourneySelection() {
 
 function openComposer(releaseId) {
   elements.composerDialog.classList.remove("import-only");
-  syncComposerHeading("Studio", "Release rituals");
+  syncComposerHeading("Management", "Release tools");
   renderEditForm(releaseId);
   renderReminderReleaseOptions(releaseId);
   renderPluginReleaseOptions(releaseId);
@@ -2741,17 +3215,143 @@ function openAckDialog(releaseId, milestoneId) {
   elements.ackSecret.focus();
 }
 
+async function openObservationDialog(releaseId) {
+  const release = getReleaseById(releaseId);
+  if (!release) {
+    return;
+  }
+
+  state.observationContext = buildObservationContext(
+    release,
+    state.observationByRelease[releaseId] || buildObservationWorkspaceFromRelease(release),
+  );
+  elements.observationMessage.textContent = "";
+  renderObservationWorkspace();
+  if (!elements.observationDialog.open) {
+    elements.observationDialog.showModal();
+  }
+  requestAnimationFrame(() => {
+    elements.observationWhisper.focus();
+    elements.observationWhisper.select();
+  });
+  await loadObservationWorkspace(releaseId, { silent: true });
+}
+
 function closeComposer() {
   if (elements.composerDialog.open) {
     elements.composerDialog.close();
   }
   elements.composerDialog.classList.remove("import-only");
-  syncComposerHeading("Studio", "Release rituals");
+  syncComposerHeading("Management", "Release tools");
 }
 
 function closeAckDialog() {
   if (elements.ackDialog.open) {
     elements.ackDialog.close();
+  }
+}
+
+function closeObservationDialog() {
+  if (elements.observationDialog.open) {
+    elements.observationDialog.close();
+  }
+  state.observationContext = null;
+}
+
+function openSystemDialog() {
+  elements.systemSmtpTestMessage.textContent = "";
+  if (!elements.systemDialog.open) {
+    elements.systemDialog.showModal();
+  }
+  loadSystemStatus();
+}
+
+function closeSystemDialog() {
+  if (elements.systemDialog.open) {
+    elements.systemDialog.close();
+  }
+}
+
+function formatSmtpFrom(status) {
+  const name = status.from_name || "Boa";
+  if (status.from) {
+    return `${name} <${status.from}>`;
+  }
+  return name;
+}
+
+function formatSmtpSecurity(status) {
+  if (status.ssl) {
+    return "SSL";
+  }
+  if (status.starttls) {
+    return "STARTTLS";
+  }
+  return "None";
+}
+
+function renderSystemSmtp(status) {
+  if (!status) {
+    elements.systemSmtpStatus.textContent = "Unknown";
+    elements.systemSmtpMessage.textContent = "System status is not available.";
+    elements.systemSmtpHost.textContent = "—";
+    elements.systemSmtpFrom.textContent = "—";
+    elements.systemSmtpSecurity.textContent = "None";
+    elements.systemSmtpSendButton.disabled = true;
+    return;
+  }
+
+  let statusLabel = "Disabled";
+  if (status.enabled) {
+    statusLabel = status.ready ? "Ready" : "Not configured";
+  }
+  if (status.message && status.message.startsWith("SMTP configuration is invalid")) {
+    statusLabel = "Error";
+  }
+  elements.systemSmtpStatus.textContent = statusLabel;
+
+  const message = status.ready
+    ? "Email delivery is ready."
+    : status.message || "Email delivery is not configured.";
+  elements.systemSmtpMessage.textContent = message;
+
+  elements.systemSmtpHost.textContent = status.host || "—";
+  elements.systemSmtpFrom.textContent = formatSmtpFrom(status);
+  elements.systemSmtpSecurity.textContent = formatSmtpSecurity(status);
+
+  elements.systemSmtpTestTo.value = status.test_to || "";
+  elements.systemSmtpSendButton.disabled = !status.ready;
+}
+
+async function loadSystemStatus() {
+  try {
+    const status = await request("/api/system/smtp");
+    renderSystemSmtp(status);
+  } catch (error) {
+    renderSystemSmtp(null);
+    elements.systemSmtpTestMessage.textContent = error.message;
+  }
+}
+
+async function submitSystemSmtpTest(event) {
+  event.preventDefault();
+  elements.systemSmtpTestMessage.textContent = "";
+  const to = elements.systemSmtpTestTo.value.trim();
+  elements.systemSmtpSendButton.disabled = true;
+  try {
+    const result = await request("/api/system/smtp/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(to ? { to } : {}),
+    });
+    elements.systemSmtpTestMessage.textContent = result.ok ? "Test email sent." : (result.message || "Unknown response.");
+    if (!result.ok && result.error) {
+      elements.systemSmtpTestMessage.textContent += ` ${result.error}`;
+    }
+  } catch (error) {
+    elements.systemSmtpTestMessage.textContent = error.message;
+  } finally {
+    loadSystemStatus();
   }
 }
 
@@ -3192,8 +3792,8 @@ function numberish(value) {
 
 async function handleReleaseMenuAction(release, action) {
   closeReleaseMenu();
-  if (action === "edit") {
-    openJourneyDialog(release);
+  if (action === "settings") {
+    openComposer(release.id);
     return;
   }
 
@@ -3545,7 +4145,7 @@ async function seedDemo() {
         await request(`/api/milestones/${target.id}/ack`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ secret }),
+          body: JSON.stringify({ secret, ack_name: milestoneSpec.owner || "qa" }),
         });
       }
     }
@@ -3647,6 +4247,7 @@ async function submitJourneyCreate(event) {
           name: kickoff.name,
           expected: formatCalendarDate(kickoff.expected),
           owner: kickoff.owner || "pm",
+          note: kickoff.note?.trim() ? { content: kickoff.note.trim() } : null,
         }),
       });
     }
@@ -3659,6 +4260,7 @@ async function submitJourneyCreate(event) {
           name: gaRelease.name,
           expected: formatCalendarDate(gaRelease.expected),
           owner: gaRelease.owner || "manager",
+          note: gaRelease.note?.trim() ? { content: gaRelease.note.trim() } : null,
         }),
       });
     }
@@ -3671,6 +4273,7 @@ async function submitJourneyCreate(event) {
           name: milestone.name.trim(),
           expected: formatCalendarDate(milestone.expected),
           owner: milestone.owner.trim(),
+          note: milestone.note?.trim() ? { content: milestone.note.trim() } : null,
         }),
       });
     }
@@ -3719,6 +4322,7 @@ async function submitJourneyEdit() {
           name: target.name,
           expected: formatCalendarDate(draftMilestone.expected),
           owner: draftMilestone.owner?.trim() || target.owner || "",
+          note: draftMilestone.note?.trim() ? { content: draftMilestone.note.trim() } : null,
         }),
       });
     }
@@ -3784,9 +4388,14 @@ async function submitAck(event) {
   const release = getSelectedAckRelease();
   const milestoneId = milestone?.id;
   const secret = elements.ackSecret.value.trim();
+  const ackName = elements.ackName.value.trim();
   const note = elements.ackNote.value.trim();
-  if (!milestoneId || !secret) {
-    elements.ackMessage.textContent = !secret ? "Secret is required." : "No milestone selected.";
+  if (!milestoneId || !secret || !ackName) {
+    elements.ackMessage.textContent = !secret
+      ? "Secret is required."
+      : !ackName
+        ? "Ack name is required."
+        : "No milestone selected.";
     return;
   }
 
@@ -3794,7 +4403,11 @@ async function submitAck(event) {
     const ack = await request(`/api/milestones/${milestoneId}/ack`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ secret, note }),
+      body: JSON.stringify({
+        secret,
+        ack_name: ackName,
+        note: note ? { content: note } : null,
+      }),
     });
     elements.ackMessage.textContent = milestone?.acked_at
       ? "Acknowledgement note updated."
@@ -3804,13 +4417,176 @@ async function submitAck(event) {
       state.ackContext = { releaseId: release.id, milestoneId };
     }
     const refreshed = getSelectedAckMilestone();
-    elements.ackNote.value = refreshed?.ack_note || ack.note || "";
+    elements.ackName.value = refreshed?.ack_name || ack.ack_name || ackName;
+    elements.ackNote.value = getBoaNoteContent(refreshed?.ack_note) || getBoaNoteContent(ack.note);
     syncAckFormState();
     setStatus("Acknowledged");
   } catch (error) {
     console.error(error);
     elements.ackMessage.textContent = error.message;
     setStatus("Ack failed");
+  }
+}
+
+function normalizeObservationMetricsInput(doneRaw, totalRaw, blockedRaw) {
+  if (!doneRaw && !totalRaw && !blockedRaw) {
+    return null;
+  }
+  return {
+    done: Number(doneRaw || 0),
+    total: Number(totalRaw || 0),
+    blocked: Number(blockedRaw || 0),
+  };
+}
+
+function areMetricsEqual(left, right) {
+  if (!left && !right) {
+    return true;
+  }
+  if (!left || !right) {
+    return false;
+  }
+  return left.done === right.done && left.total === right.total && left.blocked === right.blocked;
+}
+
+async function submitObservation(event) {
+  event.preventDefault();
+  const context = state.observationContext;
+  const release = getObservationRelease();
+  if (!context || !release) {
+    elements.observationMessage.textContent = "Open a release observation first.";
+    return;
+  }
+
+  const starlight = Number(elements.observationStarlight.value);
+  const observedOn = elements.observationDate.value;
+  const whisper = elements.observationWhisper.value.trim();
+  const detailContent = elements.observationDetail.value;
+  const stormsRaw = elements.observationStorms.value.trim();
+  const doneRaw = elements.observationDone.value.trim();
+  const totalRaw = elements.observationTotal.value.trim();
+  const blockedRaw = elements.observationBlocked.value.trim();
+  const metrics = normalizeObservationMetricsInput(doneRaw, totalRaw, blockedRaw);
+  const initialMetrics = normalizeStarlightMetrics(context.current?.metrics);
+  const observationChanged = (
+    starlight !== (context.current?.starlight ?? 0) ||
+    observedOn !== (context.current?.observed_on || context.fields.observedOn) ||
+    whisper !== (context.current?.whisper || "") ||
+    detailContent !== (context.current?.detail?.content || "") ||
+    !areMetricsEqual(metrics, initialMetrics)
+  );
+
+  if (observationChanged) {
+    if (!Number.isFinite(starlight) || starlight < 0 || starlight > 100) {
+      elements.observationMessage.textContent = "Starlight must stay between 0 and 100.";
+      return;
+    }
+    if (!observedOn) {
+      elements.observationMessage.textContent = "Observed-on date is required.";
+      return;
+    }
+    if (!whisper) {
+      elements.observationMessage.textContent = "Where are we now? is required.";
+      return;
+    }
+  }
+
+  if (context.initialStorms !== null && stormsRaw === "") {
+    elements.observationMessage.textContent = "Current Storms can stay blank only while they are still unknown.";
+    return;
+  }
+
+  const storms = stormsRaw === "" ? null : Number(stormsRaw);
+  if (storms !== null && (!Number.isFinite(storms) || storms < 0)) {
+    elements.observationMessage.textContent = "Current Storms must be zero or higher.";
+    return;
+  }
+  const stormsChanged = storms !== context.initialStorms;
+
+  if (!observationChanged && !stormsChanged) {
+    elements.observationMessage.textContent = "Nothing changed yet.";
+    return;
+  }
+
+  setStatus("Saving observation");
+  elements.observationSaveButton.disabled = true;
+  try {
+    const results = await Promise.allSettled([
+      observationChanged
+        ? request(`/api/releases/${release.id}/observation`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            starlight,
+            whisper,
+            detail: {
+              type: "markdown",
+              content: detailContent,
+            },
+            metrics,
+            observed_on: observedOn,
+          }),
+        })
+        : Promise.resolve(null),
+      stormsChanged && storms !== null
+        ? request(`/api/releases/${release.id}/bug-snapshots`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            open_bug_count: storms,
+          }),
+        })
+        : Promise.resolve(null),
+    ]);
+
+    const [observationResult, stormsResult] = results;
+    const messages = [];
+    const failures = [];
+    let didSave = false;
+
+    if (observationChanged) {
+      if (observationResult.status === "fulfilled") {
+        didSave = true;
+        state.observationByRelease[release.id] = normalizeObservationWorkspace(observationResult.value, release);
+        messages.push("Starlight updated.");
+      } else {
+        failures.push(`Starlight could not be updated: ${observationResult.reason.message}`);
+      }
+    }
+
+    if (stormsChanged && storms !== null) {
+      if (stormsResult.status === "fulfilled") {
+        didSave = true;
+        messages.push("Storms updated.");
+      } else {
+        failures.push(`Storms could not be updated: ${stormsResult.reason.message}`);
+      }
+    }
+
+    if (didSave) {
+      await loadTimeline();
+      const refreshedRelease = getReleaseById(release.id);
+      if (refreshedRelease) {
+        state.observationContext = buildObservationContext(
+          refreshedRelease,
+          state.observationByRelease[release.id] || buildObservationWorkspaceFromRelease(refreshedRelease),
+        );
+        renderObservationWorkspace();
+      }
+    }
+
+    elements.observationMessage.textContent = [...messages, ...failures].join(" ");
+    if (failures.length && !didSave) {
+      setStatus("Observation save failed");
+    } else {
+      setStatus(failures.length ? "Observation partially saved" : "Observation saved");
+    }
+  } catch (error) {
+    console.error(error);
+    elements.observationMessage.textContent = error.message;
+    setStatus("Observation save failed");
+  } finally {
+    elements.observationSaveButton.disabled = false;
   }
 }
 
@@ -3852,6 +4628,7 @@ async function saveMilestone(milestoneId, container) {
   const name = container.querySelector('[data-field="name"]').value.trim();
   const expected = container.querySelector('[data-field="expected"]').value;
   const owner = container.querySelector('[data-field="owner"]').value.trim();
+  const note = container.querySelector('[data-field="note"]').value.trim();
 
   if (!name || !expected || !owner) {
     elements.editMessage.textContent = "Each milestone needs name, date, and owner.";
@@ -3863,7 +4640,12 @@ async function saveMilestone(milestoneId, container) {
     await request(`/api/milestones/${milestoneId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, expected, owner }),
+      body: JSON.stringify({
+        name,
+        expected,
+        owner,
+        note: note ? { content: note } : null,
+      }),
     });
     elements.editMessage.textContent = `${name} updated.`;
     await loadTimeline();
@@ -4005,6 +4787,7 @@ async function submitEdit(event) {
   const name = elements.editNewName.value.trim();
   const expected = elements.editNewDate.value;
   const owner = elements.editNewOwner.value.trim();
+  const note = elements.editNewNote.value.trim();
 
   if (!release) {
     elements.editMessage.textContent = "Choose a release first.";
@@ -4021,12 +4804,18 @@ async function submitEdit(event) {
     await request(`/api/releases/${release.id}/milestones`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, expected, owner }),
+      body: JSON.stringify({
+        name,
+        expected,
+        owner,
+        note: note ? { content: note } : null,
+      }),
     });
     elements.editMessage.textContent = `${name} added to ${release.product} ${release.version}.`;
     elements.editNewName.value = "";
     elements.editNewDate.value = "";
     elements.editNewOwner.value = "";
+    elements.editNewNote.value = "";
     await loadTimeline();
     renderEditForm(release.id);
     setStatus("Milestone added");
@@ -4350,15 +5139,45 @@ elements.journeySecret.addEventListener("input", () => {
 });
 elements.journeyMilestoneName.addEventListener("input", () => updateJourneyActiveMilestone("name", elements.journeyMilestoneName.value));
 elements.journeyMilestoneOwner.addEventListener("input", () => updateJourneyActiveMilestone("owner", elements.journeyMilestoneOwner.value));
+elements.journeyMilestoneNote.addEventListener("input", () => updateJourneyActiveMilestone("note", elements.journeyMilestoneNote.value));
 elements.closeDialogButton.addEventListener("click", closeComposer);
 elements.closeAckDialogButton.addEventListener("click", closeAckDialog);
+elements.closeObservationDialogButton.addEventListener("click", closeObservationDialog);
+elements.systemButton.addEventListener("click", openSystemDialog);
+elements.closeSystemDialogButton.addEventListener("click", closeSystemDialog);
+elements.systemSmtpTestForm.addEventListener("submit", submitSystemSmtpTest);
 elements.createForm.addEventListener("submit", submitCreate);
 elements.importForm.addEventListener("submit", submitImport);
 elements.ackForm.addEventListener("submit", submitAck);
+elements.observationForm.addEventListener("submit", submitObservation);
 elements.ackSecret.addEventListener("input", () => {
   if (elements.ackMessage.textContent) {
     elements.ackMessage.textContent = "";
   }
+});
+elements.ackName.addEventListener("input", () => {
+  if (elements.ackMessage.textContent) {
+    elements.ackMessage.textContent = "";
+  }
+});
+[
+  elements.observationStarlight,
+  elements.observationStorms,
+  elements.observationDate,
+  elements.observationWhisper,
+  elements.observationDetail,
+  elements.observationDone,
+  elements.observationTotal,
+  elements.observationBlocked,
+].forEach((field) => {
+  field?.addEventListener("input", () => {
+    if (elements.observationMessage.textContent) {
+      elements.observationMessage.textContent = "";
+    }
+  });
+});
+elements.observationStarlight.addEventListener("input", () => {
+  syncObservationStarlightReadout(elements.observationStarlight.value);
 });
 elements.editForm.addEventListener("submit", submitEdit);
 elements.editReleaseSaveButton.addEventListener("click", saveReleaseBasics);
@@ -4406,6 +5225,24 @@ elements.ackDialog.addEventListener("click", (event) => {
   if (event.target === elements.ackDialog) {
     closeAckDialog();
   }
+});
+elements.observationDialog.addEventListener("click", (event) => {
+  if (event.target === elements.observationDialog) {
+    closeObservationDialog();
+  }
+});
+elements.observationDialog.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  closeObservationDialog();
+});
+elements.systemDialog.addEventListener("click", (event) => {
+  if (event.target === elements.systemDialog) {
+    closeSystemDialog();
+  }
+});
+elements.systemDialog.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  closeSystemDialog();
 });
 elements.journeyDialog.addEventListener("click", (event) => {
   if (event.target === elements.journeyDialog) {
@@ -4459,6 +5296,10 @@ document.addEventListener("pointermove", (event) => {
   }
 });
 document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && elements.observationDialog.open) {
+    closeObservationDialog();
+    return;
+  }
   if (event.key === "Escape" && elements.journeyDialog.open) {
     if (state.journeyDraft?.activeMilestoneId) {
       elements.journeyMilestoneMenuPanel.classList.add("hidden");

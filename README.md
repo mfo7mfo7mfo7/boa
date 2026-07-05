@@ -58,6 +58,9 @@ Its purpose is simple: help teams understand the shape of a release.
 ## Release Notes
 
 - [Boa 1.0](docs/release-notes-1.0.md)
+- [Boa 1.5](docs/release-notes-1.5.md)
+- [Boa 1.6](docs/release-notes-1.6.md)
+- [Boa 1.7](docs/release-notes-1.7.md)
 
 ## Example Release Definition
 
@@ -210,6 +213,84 @@ Available variables today:
   Controls how many days ended / not-started journeys stay folded around the NOW line
 - `BOA_STALE_KICKOFF_DAYS`
   Legacy fallback name still supported by the API code; `BOA_JOURNEY_FOLD_DAYS` takes precedence
+
+### SMTP (Boa 1.7 Foundation)
+
+Boa can send outbound email through a configurable SMTP relay. This is the foundation for the upcoming Email Ack Workflow; Boa 1.7 itself only exposes status and a test-sending UI.
+
+Configure SMTP through environment variables:
+
+| Variable | Default | Notes |
+|---|---|---|
+| `BOA_SMTP_ENABLED` | `false` | Set to `true` to enable outbound email |
+| `BOA_SMTP_HOST` | — | SMTP server host, e.g. `smtp.example.com` |
+| `BOA_SMTP_PORT` | `587` | SMTP server port |
+| `BOA_SMTP_USERNAME` | — | Optional SMTP username |
+| `BOA_SMTP_PASSWORD` | — | Optional SMTP password |
+| `BOA_SMTP_FROM` | — | Required sender address when enabled |
+| `BOA_SMTP_FROM_NAME` | `Boa` | Display name for the sender |
+| `BOA_SMTP_STARTTLS` | `true` | Use STARTTLS |
+| `BOA_SMTP_SSL` | `false` | Use SMTP_SSL directly; do not enable with STARTTLS |
+| `BOA_SMTP_TIMEOUT` | `15` | Connection timeout in seconds |
+| `BOA_SMTP_TEST_TO` | — | Default recipient for test emails from the System panel |
+
+Validation rules:
+
+- Port must be an integer between 1 and 65535.
+- STARTTLS and SSL cannot both be enabled.
+- Timeout must be a positive number.
+- When enabled, `BOA_SMTP_HOST` and `BOA_SMTP_FROM` are required.
+- Passwords are never returned in the UI, API, or logs.
+
+Common provider examples:
+
+Gmail / Google Workspace:
+
+```bash
+BOA_SMTP_HOST=smtp.gmail.com
+BOA_SMTP_PORT=587
+BOA_SMTP_STARTTLS=true
+BOA_SMTP_SSL=false
+BOA_SMTP_USERNAME=boa@example.com
+BOA_SMTP_PASSWORD=<app-password>
+BOA_SMTP_FROM=boa@example.com
+```
+
+Microsoft 365:
+
+```bash
+BOA_SMTP_HOST=smtp.office365.com
+BOA_SMTP_PORT=587
+BOA_SMTP_STARTTLS=true
+BOA_SMTP_SSL=false
+BOA_SMTP_USERNAME=boa@example.com
+BOA_SMTP_PASSWORD=<password>
+BOA_SMTP_FROM=boa@example.com
+```
+
+SendGrid:
+
+```bash
+BOA_SMTP_HOST=smtp.sendgrid.net
+BOA_SMTP_PORT=587
+BOA_SMTP_USERNAME=apikey
+BOA_SMTP_PASSWORD=<SENDGRID_API_KEY>
+BOA_SMTP_FROM=boa@example.com
+```
+
+Amazon SES:
+
+```bash
+BOA_SMTP_HOST=email-smtp.<region>.amazonaws.com
+BOA_SMTP_PORT=587
+BOA_SMTP_USERNAME=<SMTP_USERNAME>
+BOA_SMTP_PASSWORD=<SMTP_PASSWORD>
+BOA_SMTP_FROM=boa@example.com
+```
+
+Production email delivery requires a valid SMTP provider. Boa does not ship a public email service. Mailpit and similar local catchers are useful for development but are not a production email delivery solution.
+
+Use the System panel in the top-right corner of the Boa UI to check SMTP status and send a test email.
 
 ### Common Docker Examples
 

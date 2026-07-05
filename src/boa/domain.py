@@ -22,12 +22,14 @@ class Milestone:
     name: str
     expected: date
     owner: str
+    note: str | None = None
 
     def shift(self, delta: timedelta) -> "Milestone":
         return Milestone(
             name=self.name,
             expected=self.expected + delta,
             owner=self.owner,
+            note=self.note,
         )
 
 
@@ -73,6 +75,7 @@ class MilestoneRecord:
     name: str
     expected: date
     owner: str
+    note: str | None = None
 
 
 @dataclass(slots=True, frozen=True)
@@ -82,7 +85,7 @@ class AckRecord:
     id: int
     release_id: int
     milestone_id: int
-    owner: str
+    ack_name: str
     acked_at: datetime
     note: str
 
@@ -109,7 +112,9 @@ class MilestoneTimelineItem:
     name: str
     expected: date
     owner: str
+    note: str | None
     acked_at: datetime | None
+    ack_name: str | None
     ack_note: str | None
 
 

@@ -75,6 +75,7 @@ class BoaStorage:
                     name TEXT NOT NULL,
                     expected TEXT NOT NULL,
                     owner TEXT NOT NULL,
+                    note TEXT NOT NULL DEFAULT '',
                     FOREIGN KEY (release_id) REFERENCES releases(id) ON DELETE CASCADE
                 );
 
@@ -83,6 +84,7 @@ class BoaStorage:
                     release_id INTEGER NOT NULL,
                     milestone_id INTEGER NOT NULL,
                     owner TEXT NOT NULL,
+                    ack_name TEXT NOT NULL DEFAULT '',
                     acked_at TEXT NOT NULL,
                     note TEXT NOT NULL DEFAULT '',
                     FOREIGN KEY (release_id) REFERENCES releases(id) ON DELETE CASCADE,
@@ -150,6 +152,25 @@ class BoaStorage:
             if "note" not in ack_columns:
                 connection.execute(
                     "ALTER TABLE milestone_ack ADD COLUMN note TEXT NOT NULL DEFAULT ''"
+                )
+            if "ack_name" not in ack_columns:
+                connection.execute(
+                    "ALTER TABLE milestone_ack ADD COLUMN ack_name TEXT NOT NULL DEFAULT ''"
+                )
+            connection.execute(
+                """
+                UPDATE milestone_ack
+                SET ack_name = owner
+                WHERE ack_name = ''
+                """
+            )
+            milestone_columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(milestones)").fetchall()
+            }
+            if "note" not in milestone_columns:
+                connection.execute(
+                    "ALTER TABLE milestones ADD COLUMN note TEXT NOT NULL DEFAULT ''"
                 )
             bug_snapshot_columns = {
                 str(row["name"])
@@ -258,8 +279,8 @@ class BoaStorage:
 
             connection.executemany(
                 """
-                INSERT INTO milestones (release_id, name, expected, owner)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO milestones (release_id, name, expected, owner, note)
+                VALUES (?, ?, ?, ?, ?)
                 """,
                 [
                     (
@@ -267,6 +288,7 @@ class BoaStorage:
                         milestone.name,
                         milestone.expected.isoformat(),
                         milestone.owner,
+                        milestone.note or "",
                     )
                     for milestone in blueprint.milestones
                 ],
@@ -306,7 +328,7 @@ class BoaStorage:
 
             milestone_rows = connection.execute(
                 """
-                SELECT id, release_id, name, expected, owner
+                SELECT id, release_id, name, expected, owner, note
                 FROM milestones
                 WHERE release_id = ?
                 ORDER BY expected ASC, id ASC
@@ -323,6 +345,7 @@ class BoaStorage:
                     name=str(row["name"]),
                     expected=date.fromisoformat(str(row["expected"])),
                     owner=str(row["owner"]),
+                    note=str(row["note"]) if row["note"] else None,
                 )
                 for row in milestone_rows
             ),
@@ -334,7 +357,7 @@ class BoaStorage:
         with self.connect() as connection:
             rows = connection.execute(
                 """
-                SELECT id, release_id, name, expected, owner
+                SELECT id, release_id, name, expected, owner, note
                 FROM milestones
                 WHERE release_id = ?
                 ORDER BY expected ASC, id ASC
@@ -349,6 +372,7 @@ class BoaStorage:
                 name=str(row["name"]),
                 expected=date.fromisoformat(str(row["expected"])),
                 owner=str(row["owner"]),
+                note=str(row["note"]) if row["note"] else None,
             )
             for row in rows
         ]
@@ -417,10 +441,16 @@ class BoaStorage:
         with self.connect() as connection:
             cursor = connection.execute(
                 """
-                INSERT INTO milestones (release_id, name, expected, owner)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO milestones (release_id, name, expected, owner, note)
+                VALUES (?, ?, ?, ?, ?)
                 """,
-                (release_id, milestone.name, milestone.expected.isoformat(), milestone.owner),
+                (
+                    release_id,
+                    milestone.name,
+                    milestone.expected.isoformat(),
+                    milestone.owner,
+                    (milestone.note or ""),
+                ),
             )
             milestone_id = int(cursor.lastrowid)
         return self.get_milestone(milestone_id)
@@ -430,10 +460,16 @@ class BoaStorage:
             cursor = connection.execute(
                 """
                 UPDATE milestones
-                SET name = ?, expected = ?, owner = ?
+                SET name = ?, expected = ?, owner = ?, note = ?
                 WHERE id = ?
                 """,
-                (milestone.name, milestone.expected.isoformat(), milestone.owner, milestone_id),
+                (
+                    milestone.name,
+                    milestone.expected.isoformat(),
+                    milestone.owner,
+                    (milestone.note or ""),
+                    milestone_id,
+                ),
             )
             if cursor.rowcount == 0:
                 raise KeyError(f"Milestone {milestone_id} was not found.")
@@ -449,7 +485,7 @@ class BoaStorage:
         with self.connect() as connection:
             row = connection.execute(
                 """
-                SELECT id, release_id, name, expected, owner
+                SELECT id, release_id, name, expected, owner, note
                 FROM milestones
                 WHERE id = ?
                 """,
@@ -464,14 +500,15 @@ class BoaStorage:
             name=str(row["name"]),
             expected=date.fromisoformat(str(row["expected"])),
             owner=str(row["owner"]),
+            note=str(row["note"]) if row["note"] else None,
         )
 
-    def ack_milestone(self, milestone_id: int, note: str) -> AckRecord:
+    def ack_milestone(self, milestone_id: int, ack_name: str, note: str) -> AckRecord:
         milestone = self.get_milestone(milestone_id)
         with self.connect() as connection:
             existing = connection.execute(
                 """
-                SELECT id, release_id, milestone_id, owner, acked_at, note
+                SELECT id, release_id, milestone_id, owner, ack_name, acked_at, note
                 FROM milestone_ack
                 WHERE milestone_id = ?
                 ORDER BY acked_at DESC, id DESC
@@ -492,7 +529,7 @@ class BoaStorage:
                     id=int(existing["id"]),
                     release_id=int(existing["release_id"]),
                     milestone_id=int(existing["milestone_id"]),
-                    owner=str(existing["owner"]),
+                    ack_name=str(existing["ack_name"]) if existing["ack_name"] else str(existing["owner"]),
                     acked_at=datetime.fromisoformat(str(existing["acked_at"])),
                     note=note,
                 )
@@ -500,13 +537,14 @@ class BoaStorage:
             acked_at = datetime.now(timezone.utc).replace(microsecond=0)
             cursor = connection.execute(
                 """
-                INSERT INTO milestone_ack (release_id, milestone_id, owner, acked_at, note)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO milestone_ack (release_id, milestone_id, owner, ack_name, acked_at, note)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
                     milestone.release_id,
                     milestone.id,
                     milestone.owner,
+                    ack_name,
                     acked_at.isoformat(),
                     note,
                 ),
@@ -516,7 +554,7 @@ class BoaStorage:
             id=ack_id,
             release_id=milestone.release_id,
             milestone_id=milestone.id,
-            owner=milestone.owner,
+            ack_name=ack_name,
             acked_at=acked_at,
             note=note,
         )
@@ -995,6 +1033,15 @@ class BoaStorage:
                     milestones.name,
                     milestones.expected,
                     milestones.owner,
+                    milestones.note,
+                    (
+                        SELECT milestone_ack.ack_name
+                        FROM milestone_ack
+                        WHERE milestone_ack.milestone_id = milestones.id
+                        ORDER BY milestone_ack.acked_at DESC, milestone_ack.id DESC
+                        LIMIT 1
+                    ) AS ack_name
+                    ,
                     (
                         SELECT milestone_ack.acked_at
                         FROM milestone_ack
@@ -1026,11 +1073,13 @@ class BoaStorage:
                     name=str(row["name"]),
                     expected=date.fromisoformat(str(row["expected"])),
                     owner=str(row["owner"]),
+                    note=str(row["note"]) if row["note"] else None,
                     acked_at=(
                         datetime.fromisoformat(str(row["acked_at"]))
                         if row["acked_at"] is not None
                         else None
                     ),
+                    ack_name=str(row["ack_name"]) if row["ack_name"] else None,
                     ack_note=str(row["ack_note"]) if row["ack_note"] is not None else None,
                 )
                 for row in milestone_rows

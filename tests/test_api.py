@@ -104,14 +104,15 @@ def test_timeline_endpoint_includes_ack_and_bug_wave_data(tmp_path) -> None:
             f"/api/releases/{release_id}/bug-snapshots",
             json={"open_bug_count": 37},
         )
-        client.post(f"/api/milestones/{kickoff_id}/ack", json={"secret": "boa-262"})
+        client.post(f"/api/milestones/{kickoff_id}/ack", json={"secret": "boa-262", "ack_name": "qa"})
 
         timeline = client.get("/api/timeline")
         assert timeline.status_code == 200
         payload = timeline.json()
         assert len(payload) == 1
         assert payload[0]["milestones"][0]["acked_at"] is not None
-        assert payload[0]["milestones"][0]["ack_note"] == ""
+        assert payload[0]["milestones"][0]["ack_name"] == "qa"
+        assert payload[0]["milestones"][0]["ack_note"] is None
         assert payload[0]["bug_snapshots"][0]["open_bug_count"] == 37
         assert payload[0]["bug_snapshots"][0]["signal_type"] == "total"
         assert payload[0]["bug_snapshots"][0]["quality"] == "normal"
@@ -214,6 +215,66 @@ def test_starlight_updates_create_meaningful_trail_events_only_on_readiness_chan
         assert [event["starlight"] for event in payload["starlight_trail"]] == [20, 35]
 
 
+def test_observation_workspace_returns_empty_current_before_first_starlight(tmp_path) -> None:
+    app = create_app(BoaStorage(tmp_path / "boa.db"))
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/releases",
+            json={"product": "LighthouseOS", "version": "5.7", "secret": "light-57"},
+        ).json()
+
+        response = client.get(f"/api/releases/{created['id']}/observation")
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "release_id": created["id"],
+            "product": "LighthouseOS",
+            "version": "5.7",
+            "current": None,
+            "trail": [],
+        }
+
+
+def test_observation_workspace_updates_current_state_without_duplicate_trail_events(tmp_path) -> None:
+    app = create_app(BoaStorage(tmp_path / "boa.db"))
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/releases",
+            json={"product": "NimbusCore", "version": "9.4", "secret": "nimbus-94"},
+        ).json()
+        release_id = created["id"]
+
+        first = client.put(
+            f"/api/releases/{release_id}/observation",
+            json={
+                "observed_on": "2026-06-18",
+                "starlight": 52,
+                "whisper": "Regression path stabilized.",
+                "detail": {"type": "markdown", "content": "## Completed\n\n- Regression path stabilized"},
+                "metrics": {"done": 14, "total": 18, "blocked": 2},
+            },
+        )
+        second = client.put(
+            f"/api/releases/{release_id}/observation",
+            json={
+                "observed_on": "2026-06-19",
+                "starlight": 52,
+                "whisper": "Support notes are nearly ready.",
+                "detail": {"type": "markdown", "content": "Support notes are nearly ready."},
+                "metrics": {"done": 15, "total": 18, "blocked": 1},
+            },
+        )
+
+        assert first.status_code == 200
+        assert second.status_code == 200
+        body = second.json()
+        assert body["current"]["starlight"] == 52
+        assert body["current"]["whisper"] == "Support notes are nearly ready."
+        assert body["current"]["metrics"] == {"done": 15, "total": 18, "blocked": 1}
+        assert [event["starlight"] for event in body["trail"]] == [52]
+        assert body["trail"][0]["whisper"] == "Regression path stabilized."
+
+
 def test_config_exposes_journey_fold_days(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("BOA_JOURNEY_FOLD_DAYS", "21")
     app = create_app(BoaStorage(tmp_path / "boa.db"))
@@ -254,15 +315,16 @@ def test_ack_requires_matching_secret(tmp_path) -> None:
         ).json()
         milestone_id = created["milestones"][0]["id"]
 
-        denied = client.post(f"/api/milestones/{milestone_id}/ack", json={"secret": "wrong"})
+        denied = client.post(f"/api/milestones/{milestone_id}/ack", json={"secret": "wrong", "ack_name": "qa"})
         assert denied.status_code == 403
 
-        accepted = client.post(f"/api/milestones/{milestone_id}/ack", json={"secret": "boa-262"})
+        accepted = client.post(f"/api/milestones/{milestone_id}/ack", json={"secret": "boa-262", "ack_name": "qa"})
         assert accepted.status_code == 200
         body = accepted.json()
         assert body["acked"] is True
         assert "acked_at" in body
-        assert body["note"] == ""
+        assert body["ack_name"] == "qa"
+        assert body["note"] is None
 
 
 def test_ack_note_can_be_saved_and_edited_without_changing_ack_time(tmp_path) -> None:
@@ -276,25 +338,55 @@ def test_ack_note_can_be_saved_and_edited_without_changing_ack_time(tmp_path) ->
 
         first = client.post(
             f"/api/milestones/{milestone_id}/ack",
-            json={"secret": "boa-262", "note": "first acknowledgement"},
+            json={"secret": "boa-262", "ack_name": "gui", "note": {"content": "first acknowledgement"}},
         )
         assert first.status_code == 200
         first_body = first.json()
-        assert first_body["note"] == "first acknowledgement"
+        assert first_body["ack_name"] == "gui"
+        assert first_body["note"] == {"content": "first acknowledgement"}
 
         second = client.post(
             f"/api/milestones/{milestone_id}/ack",
-            json={"secret": "boa-262", "note": "updated note"},
+            json={"secret": "boa-262", "ack_name": "qa", "note": {"content": "updated note"}},
         )
         assert second.status_code == 200
         second_body = second.json()
         assert second_body["acked_at"] == first_body["acked_at"]
-        assert second_body["note"] == "updated note"
+        assert second_body["ack_name"] == "gui"
+        assert second_body["note"] == {"content": "updated note"}
 
         timeline = client.get("/api/timeline")
         milestone = timeline.json()[0]["milestones"][0]
         assert milestone["acked_at"] == first_body["acked_at"]
-        assert milestone["ack_note"] == "updated note"
+        assert milestone["ack_name"] == "gui"
+        assert milestone["ack_note"] == {"content": "updated note"}
+
+
+def test_milestone_note_persists_in_release_and_timeline(tmp_path) -> None:
+    app = create_app(BoaStorage(tmp_path / "boa.db"))
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/releases",
+            json={"product": "FortiSASE", "version": "26.2", "secret": "boa-262"},
+        ).json()
+        milestone_id = created["milestones"][0]["id"]
+
+        updated = client.put(
+            f"/api/milestones/{milestone_id}",
+            json={
+                "name": "Kickoff",
+                "expected": created["milestones"][0]["expected"],
+                "owner": "pm",
+                "note": {"content": "## Context\n\n- Scope aligned\n- Team ready"},
+            },
+        )
+
+        assert updated.status_code == 200
+        assert updated.json()["note"] == {"content": "## Context\n\n- Scope aligned\n- Team ready"}
+
+        timeline = client.get("/api/timeline")
+        milestone = timeline.json()[0]["milestones"][0]
+        assert milestone["note"] == {"content": "## Context\n\n- Scope aligned\n- Team ready"}
 
 
 def test_import_with_timeline_shift_and_bug_snapshots(tmp_path) -> None:
@@ -423,7 +515,7 @@ def test_delete_release_removes_related_rows(tmp_path) -> None:
         )
         assert snapshot.status_code == 201
 
-        ack = client.post(f"/api/milestones/{milestone_id}/ack", json={"secret": "boa-262"})
+        ack = client.post(f"/api/milestones/{milestone_id}/ack", json={"secret": "boa-262", "ack_name": "qa"})
         assert ack.status_code == 200
 
         deleted = client.delete(f"/api/releases/{release_id}")
@@ -498,7 +590,7 @@ milestones:
         assert duplicate_daily.status_code == 200
         assert duplicate_daily.json() == []
 
-        ack = client.post(f"/api/milestones/{milestone_id}/ack", json={"secret": "boa-262"})
+        ack = client.post(f"/api/milestones/{milestone_id}/ack", json={"secret": "boa-262", "ack_name": "qa"})
         assert ack.status_code == 200
 
         after_ack = client.post("/api/notifications/run", json={"as_of": "2026-06-11"})

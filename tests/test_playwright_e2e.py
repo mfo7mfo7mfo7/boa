@@ -122,17 +122,17 @@ def update_milestone_via_api(page: Page, milestone: dict, *, expected: date, own
     )
 
 
-def ack_milestone_via_api(page: Page, milestone_id: int, *, secret: str = "secret") -> None:
+def ack_milestone_via_api(page: Page, milestone_id: int, *, secret: str = "secret", ack_name: str = "qa") -> None:
     page.evaluate(
-        """async ([milestoneId, secret]) => {
+        """async ([milestoneId, secret, ackName]) => {
             const response = await fetch(`/api/milestones/${milestoneId}/ack`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ secret }),
+              body: JSON.stringify({ secret, ack_name: ackName }),
             });
             if (!response.ok) throw new Error(await response.text());
         }""",
-        [milestone_id, secret],
+        [milestone_id, secret, ack_name],
     )
 
 
@@ -400,3 +400,19 @@ def test_download_delete_fold_hover_and_ack_date_states(page: Page) -> None:
     expect(release_row(page, "DeleteMe")).to_have_count(0)
     releases = page.evaluate("fetch('/api/timeline').then((response) => response.json())")
     assert all(release["id"] != removable["id"] for release in releases)
+
+
+def test_system_panel_shows_smtp_disabled(page: Page) -> None:
+    """The System panel exposes SMTP status without leaking credentials."""
+    page.locator("#system-button").click()
+    expect(page.locator("#system-dialog")).to_be_visible()
+    expect(page.locator("#system-smtp-title")).to_contain_text("SMTP")
+    expect(page.locator("#system-smtp-status")).to_contain_text("Disabled")
+    expect(page.locator("#system-smtp-message")).to_contain_text("disabled")
+    expect(page.locator("#system-smtp-host")).to_contain_text("—")
+    expect(page.locator("#system-smtp-from")).to_contain_text("Boa")
+    expect(page.locator("#system-smtp-security")).to_contain_text("None")
+    expect(page.locator("#system-smtp-send-button")).to_be_disabled()
+
+    page.locator("#close-system-dialog-button").click()
+    expect(page.locator("#system-dialog")).not_to_be_visible()
