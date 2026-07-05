@@ -97,6 +97,9 @@ def _is_valid_email(value: str | None) -> bool:
     if not value:
         return False
     return bool(_EMAIL_RE.match(value.strip()))
+def is_valid_email(value: str | None) -> bool:
+    """Public alias for email address validation."""
+    return _is_valid_email(value)
 
 
 def _validation_message(config: SmtpConfig) -> str | None:

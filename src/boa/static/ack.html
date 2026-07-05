@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Acknowledge · Boa</title>
+    <link rel="stylesheet" href="/static/app.css?v=starlight-36">
+    <style>
+      .ack-page {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+      .ack-card {
+        width: 100%;
+        max-width: 520px;
+        background: #fffdf7;
+        border: 1px solid rgba(103, 92, 83, 0.16);
+        border-radius: 6px;
+        padding: 32px;
+      }
+      .ack-card h1 {
+        font-size: 22px;
+        font-weight: 400;
+        margin: 0 0 8px 0;
+        color: #4a3b2a;
+      }
+      .ack-card .ack-kicker {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #9c8b7a;
+        margin: 0 0 12px 0;
+      }
+      .ack-card .ack-meta {
+        color: #6d5f52;
+        margin: 0 0 24px 0;
+        line-height: 1.55;
+      }
+      .ack-card .ack-form {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      .ack-card label {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-size: 13px;
+        color: #6d5f52;
+      }
+      .ack-card input,
+      .ack-card textarea {
+        font-family: inherit;
+        font-size: 15px;
+        padding: 10px 12px;
+        border: 1px solid rgba(103, 92, 83, 0.22);
+        border-radius: 4px;
+        background: #fffdf7;
+        color: #4a3b2a;
+      }
+      .ack-card input:focus,
+      .ack-card textarea:focus {
+        outline: none;
+        border-color: #6f9f7a;
+      }
+      .ack-card button {
+        font-family: "Inter", "SF Pro Text", system-ui, sans-serif;
+        font-size: 14px;
+        padding: 12px 20px;
+        background: #6f9f7a;
+        color: #fffdf7;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        align-self: flex-start;
+      }
+      .ack-card button:hover,
+      .ack-card button:focus {
+        background: #5d8a67;
+      }
+      .ack-card button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      .ack-card .ack-message {
+        margin: 12px 0 0 0;
+        font-size: 13px;
+        color: #9c8b7a;
+      }
+      .ack-card .ack-message.error {
+        color: #c75b4a;
+      }
+      .ack-card .ack-message.success {
+        color: #6f9f7a;
+      }
+      .ack-brand {
+        text-align: center;
+        margin-bottom: 24px;
+      }
+      .ack-brand img {
+        width: 48px;
+        height: 48px;
+        opacity: 0.85;
+      }
+      .ack-brand p {
+        margin: 8px 0 0 0;
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #9c8b7a;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="ack-page">
+      <div class="ack-card">
+        <div class="ack-brand">
+          <img src="/static/boa-logo.png" alt="">
+          <p>Boa</p>
+        </div>
+        <p class="ack-kicker" id="ack-kicker">Acknowledge a milestone</p>
+        <h1 id="ack-title">Loading...</h1>
+        <p class="ack-meta" id="ack-meta"></p>
+        <form class="ack-form" id="ack-form">
+          <label>
+            Your name
+            <input id="ack-name" type="text" placeholder="gui" required>
+          </label>
+          <label>
+            Note <span>(optional)</span>
+            <textarea id="ack-note" rows="3" placeholder="A short acknowledgement note"></textarea>
+          </label>
+          <button id="ack-submit" type="submit">Acknowledge</button>
+        </form>
+        <p class="ack-message" id="ack-message" aria-live="polite"></p>
+      </div>
+    </div>
+
+    <script>
+      const API_BASE = "";
+
+      function getToken() {
+        const match = window.location.pathname.match(/^\/ack\/(.+)$/);
+        return match ? match[1] : null;
+      }
+
+      function formatDate(iso) {
+        if (!iso) return "";
+        const d = new Date(iso);
+        return d.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+      }
+
+      async function request(path, options = {}) {
+        const response = await fetch(`${API_BASE}${path}`, {
+          headers: { "Content-Type": "application/json" },
+          ...options,
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(body.detail || `Request failed (${response.status})`);
+        }
+        return body;
+      }
+
+      async function loadInfo() {
+        const token = getToken();
+        if (!token) {
+          showError("This acknowledgement link is missing.");
+          return;
+        }
+        try {
+          const info = await request(`/api/ack/${token}`);
+          if (!info.valid) {
+            showError(info.message || "This acknowledgement link is not valid.");
+            return;
+          }
+          document.getElementById("ack-title").textContent = info.milestone_name;
+          document.getElementById("ack-meta").textContent =
+            `${info.product} ${info.version} · expected ${formatDate(info.expected)}`;
+        } catch (error) {
+          showError(error.message);
+        }
+      }
+
+      function showError(message) {
+        const form = document.getElementById("ack-form");
+        const messageEl = document.getElementById("ack-message");
+        form.style.display = "none";
+        messageEl.textContent = message;
+        messageEl.className = "ack-message error";
+      }
+
+      function showSuccess(message) {
+        const form = document.getElementById("ack-form");
+        const messageEl = document.getElementById("ack-message");
+        form.style.display = "none";
+        messageEl.textContent = message;
+        messageEl.className = "ack-message success";
+      }
+
+      document.getElementById("ack-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const token = getToken();
+        if (!token) return;
+        const submit = document.getElementById("ack-submit");
+        submit.disabled = true;
+        const name = document.getElementById("ack-name").value.trim();
+        const note = document.getElementById("ack-note").value.trim();
+        try {
+          const result = await request(`/api/ack/${token}`, {
+            method: "POST",
+            body: JSON.stringify({
+              ack_name: name,
+              note: note ? { content: note } : undefined,
+            }),
+          });
+          showSuccess(result.message || "Milestone acknowledged.");
+        } catch (error) {
+          document.getElementById("ack-message").textContent = error.message;
+          document.getElementById("ack-message").className = "ack-message error";
+          submit.disabled = false;
+        }
+      });
+
+      loadInfo();
+    </script>
+  </body>
+</html>

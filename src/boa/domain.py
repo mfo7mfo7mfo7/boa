@@ -5,12 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
+from boa.reminder_config import reminder_t_minus_days
 
-REMINDER_T_MINUS_DAYS: tuple[tuple[int, str], ...] = (
-    (7, "t-7"),
-    (3, "t-3"),
-    (1, "t-1"),
-)
+
 DAILY_REMINDER_TYPE = "daily"
 BUG_SNAPSHOT_INGEST_CAPABILITY = "bug_snapshot_ingest"
 
@@ -23,6 +20,7 @@ class Milestone:
     expected: date
     owner: str
     note: str | None = None
+    email: str | None = None
 
     def shift(self, delta: timedelta) -> "Milestone":
         return Milestone(
@@ -30,6 +28,7 @@ class Milestone:
             expected=self.expected + delta,
             owner=self.owner,
             note=self.note,
+            email=self.email,
         )
 
 
@@ -76,6 +75,7 @@ class MilestoneRecord:
     expected: date
     owner: str
     note: str | None = None
+    email: str | None = None
 
 
 @dataclass(slots=True, frozen=True)
@@ -112,6 +112,7 @@ class MilestoneTimelineItem:
     name: str
     expected: date
     owner: str
+    email: str | None
     note: str | None
     acked_at: datetime | None
     ack_name: str | None
@@ -151,6 +152,7 @@ class ReminderState:
     acked_at: datetime | None
     pending_types: tuple[str, ...]
     notifications: tuple[NotificationRecord, ...]
+    emails: tuple[EmailLogRecord, ...]
 
 
 @dataclass(slots=True, frozen=True)
@@ -228,11 +230,13 @@ def reminder_type_due_on_day(
     reminder_type: str,
     *,
     as_of: date,
+    t_minus_days: tuple[tuple[int, str], ...] | None = None,
 ) -> bool:
     if reminder_type == DAILY_REMINDER_TYPE:
         return as_of >= expected
 
-    for days_before, candidate_type in REMINDER_T_MINUS_DAYS:
+    effective_t_minus_days = t_minus_days or reminder_t_minus_days()
+    for days_before, candidate_type in effective_t_minus_days:
         if candidate_type == reminder_type:
             return as_of == expected - timedelta(days=days_before)
 
@@ -245,10 +249,12 @@ def pending_reminder_types(
     acked_at: datetime | None,
     notifications: tuple[NotificationRecord, ...],
     as_of: date,
+    t_minus_days: tuple[tuple[int, str], ...] | None = None,
 ) -> tuple[str, ...]:
     if acked_at is not None:
         return ()
 
+    effective_t_minus_days = t_minus_days or reminder_t_minus_days()
     pending: list[str] = []
     sent_types = {notification.type for notification in notifications}
     sent_daily_dates = {
@@ -257,14 +263,45 @@ def pending_reminder_types(
         if notification.type == DAILY_REMINDER_TYPE
     }
 
-    for _days_before, reminder_type in REMINDER_T_MINUS_DAYS:
-        if reminder_type_due_on_day(expected, reminder_type, as_of=as_of) and reminder_type not in sent_types:
+    for _days_before, reminder_type in effective_t_minus_days:
+        if reminder_type_due_on_day(expected, reminder_type, as_of=as_of, t_minus_days=effective_t_minus_days) and reminder_type not in sent_types:
             pending.append(reminder_type)
 
     if (
-        reminder_type_due_on_day(expected, DAILY_REMINDER_TYPE, as_of=as_of)
+        reminder_type_due_on_day(expected, DAILY_REMINDER_TYPE, as_of=as_of, t_minus_days=effective_t_minus_days)
         and as_of not in sent_daily_dates
     ):
         pending.append(DAILY_REMINDER_TYPE)
 
     return tuple(pending)
+
+
+@dataclass(slots=True, frozen=True)
+class AckTokenRecord:
+    """A secret acknowledgement token for the Email Ack Workflow."""
+
+    id: int
+    release_id: int
+    milestone_id: int
+    token_hash: str
+    created_at: datetime
+    expires_at: datetime
+    used_at: datetime | None
+    ack_id: int | None
+
+
+@dataclass(slots=True, frozen=True)
+class EmailLogRecord:
+    """A durable log entry for an outbound email."""
+
+    id: int
+    release_id: int
+    milestone_id: int
+    notification_id: int | None
+    template_name: str
+    recipient: str
+    token_id: int | None
+    subject: str
+    sent_at: datetime
+    status: str
+    error: str | None

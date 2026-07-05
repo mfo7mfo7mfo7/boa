@@ -132,7 +132,11 @@
               </label>
               <label class="journey-popover-field">
                 <span>Keeper</span>
-                <input id="journey-milestone-owner" type="text" placeholder="alice@example.com">
+                <input id="journey-milestone-owner" type="text" placeholder="alice">
+              </label>
+              <label class="journey-popover-field">
+                <span>Email</span>
+                <input id="journey-milestone-email" type="email" placeholder="alice@example.com">
               </label>
               <label class="journey-popover-field">
                 <span>Note</span>
@@ -251,6 +255,10 @@
                   <input id="edit-new-owner" type="text" placeholder="alice">
                 </label>
                 <label>
+                  Email <span class="field-optional">(optional)</span>
+                  <input id="edit-new-email" type="email" placeholder="alice@example.com">
+                </label>
+                <label>
                   Note <span class="field-optional">(optional)</span>
                   <textarea id="edit-new-note" rows="4" placeholder="A quiet note about why this milestone matters"></textarea>
                 </label>
@@ -276,6 +284,10 @@
               <div class="dialog-row compact-row">
                 <p class="summary-line">Refresh the reminder engine before checking pending pressure.</p>
                 <button id="reminder-run-button" class="ghost-button" type="button">Run reminders now</button>
+              </div>
+              <div class="dialog-row compact-row">
+                <p class="summary-line">Send real reminder emails for every pending milestone.</p>
+                <button id="reminder-send-button" class="ghost-button" type="button">Send reminder emails</button>
               </div>
               <div id="reminder-summary" class="subtle-block">Choose a release to inspect reminder state.</div>
               <div id="reminder-list" class="signal-list"></div>

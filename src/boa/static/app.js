@@ -103,6 +103,7 @@ const elements = {
   journeyMilestoneName: document.querySelector("#journey-milestone-name"),
   journeyMilestoneOwner: document.querySelector("#journey-milestone-owner"),
   journeyMilestoneNote: document.querySelector("#journey-milestone-note"),
+  journeyMilestoneEmail: document.querySelector("#journey-milestone-email"),
   journeyMilestoneMenu: document.querySelector("#journey-milestone-menu"),
   journeyMilestoneMenuPanel: document.querySelector("#journey-milestone-menu-panel"),
   journeyMilestoneDelete: document.querySelector("#journey-milestone-delete"),
@@ -185,9 +186,11 @@ const elements = {
   editNewDate: document.querySelector("#edit-new-date"),
   editNewOwner: document.querySelector("#edit-new-owner"),
   editNewNote: document.querySelector("#edit-new-note"),
+  editNewEmail: document.querySelector("#edit-new-email"),
   editMessage: document.querySelector("#edit-message"),
   reminderRelease: document.querySelector("#reminder-release"),
   reminderRunButton: document.querySelector("#reminder-run-button"),
+  reminderSendButton: document.querySelector("#reminder-send-button"),
   reminderStatusPill: document.querySelector("#reminder-status-pill"),
   reminderSummary: document.querySelector("#reminder-summary"),
   reminderList: document.querySelector("#reminder-list"),
@@ -1127,6 +1130,10 @@ function renderMilestoneEditors() {
           Owner
           <input type="text" data-field="owner" value="${escapeHtml(milestone.owner)}">
         </label>
+        <label>
+          Email
+          <input type="email" data-field="email" value="${escapeHtml(milestone.email || "")}" placeholder="alice@example.com">
+        </label>
         <label class="milestone-editor-note">
           Note
           <textarea data-field="note" rows="4" placeholder="A quiet note about why this milestone matters">${escapeHtml(getBoaNoteContent(milestone.note))}</textarea>
@@ -1136,12 +1143,14 @@ function renderMilestoneEditors() {
         <span class="milestone-state">${milestone.acked_at ? `Acknowledged ${milestone.ack_name || "someone"} ${formatDateTime(milestone.acked_at)}` : "Pending acknowledgment"}</span>
         <div>
           <button class="ghost-button" type="button" data-action="save">Save</button>
+          <button class="ghost-button" type="button" data-action="ack-email" ${milestone.acked_at ? "disabled" : ""}>Email ack link</button>
           <button class="text-button" type="button" data-action="delete">Delete</button>
         </div>
       </div>
     `;
 
     card.querySelector('[data-action="save"]').addEventListener("click", () => saveMilestone(milestone.id, card));
+    card.querySelector('[data-action="ack-email"]').addEventListener("click", () => sendMilestoneAckEmail(milestone.id, milestone.name));
     card.querySelector('[data-action="delete"]').addEventListener("click", () => deleteMilestone(milestone.id, milestone.name));
     elements.editMilestoneList.appendChild(card);
   });
@@ -2506,12 +2515,13 @@ function setStatus(text) {
   elements.statusPill.textContent = text;
 }
 
-function createJourneyMilestone(name, expected, owner = "", type = "custom", note = "") {
+function createJourneyMilestone(name, expected, owner = "", email = "", type = "custom", note = "") {
   return {
     id: `journey-${Math.random().toString(36).slice(2, 10)}`,
     name,
     expected,
     owner,
+    email,
     note,
     type,
   };
@@ -2531,8 +2541,8 @@ function createInitialJourneyDraft() {
     version: "",
     secret: "",
     milestones: [
-      createJourneyMilestone("Kickoff", kickoff, "pm", "kickoff"),
-      createJourneyMilestone("GA Release", ga, "manager", "ga"),
+      createJourneyMilestone("Kickoff", kickoff, "pm", "", "kickoff"),
+      createJourneyMilestone("GA Release", ga, "manager", "", "ga"),
     ],
     activeMilestoneId: null,
     selectedMilestoneIds: [],
@@ -2561,6 +2571,7 @@ function createJourneyDraftFromRelease(release) {
       milestone.name,
       new Date(milestone.expected),
       milestone.owner || "",
+      milestone.email || "",
       milestone.name === "Kickoff" ? "kickoff" : milestone.name === "GA Release" ? "ga" : "custom",
       getBoaNoteContent(milestone.note),
     ));
@@ -2578,6 +2589,7 @@ function createJourneyDraftFromBlueprint(blueprint) {
       milestone.name,
       new Date(`${milestone.expected}T12:00:00`),
       milestone.owner || "",
+      milestone.email || "",
       milestone.name === "Kickoff"
         ? "kickoff"
         : milestone.name === "GA Release" || index === milestones.length - 1 ? "ga" : "custom",
@@ -2676,6 +2688,7 @@ function renderJourneyPopover(anchorRatio = null) {
   const isEditMode = state.journeyDraft?.mode === "edit";
   elements.journeyMilestoneName.value = active.name;
   elements.journeyMilestoneOwner.value = active.owner;
+  elements.journeyMilestoneEmail.value = active.email || "";
   elements.journeyMilestoneNote.value = active.note || "";
   elements.journeyMilestoneDate.textContent = formatCalendarDate(active.expected);
   elements.journeyMilestoneName.disabled = isEditMode;
@@ -3021,7 +3034,7 @@ function addJourneyMilestone() {
     nextDate.setTime(dateishTime(gaMilestone.expected));
     nextDate.setDate(nextDate.getDate() - 10);
   }
-  const milestone = createJourneyMilestone("New Milestone", nextDate, "", "custom");
+  const milestone = createJourneyMilestone("New Milestone", nextDate, "", "", "custom");
   state.journeyDraft.milestones.push(milestone);
   state.journeyDraft.activeMilestoneId = milestone.id;
   renderJourneyDraft();
@@ -3590,6 +3603,34 @@ async function runReminderEngine() {
   }
 }
 
+async function sendReminderEmails() {
+  const releaseId = state.reminderReleaseId || state.releases[0]?.id;
+  if (!releaseId) {
+    elements.reminderMessage.textContent = "Bring in a release first.";
+    return;
+  }
+
+  setStatus("Sending reminder emails");
+  elements.reminderSendButton.disabled = true;
+  try {
+    const result = await request("/api/notifications/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ as_of: formatLocalDate(new Date()) }),
+    });
+    await loadReminderState(releaseId);
+    renderReminderPanel();
+    elements.reminderMessage.textContent = result.message || "Reminder emails sent.";
+    setStatus("Reminder emails done");
+  } catch (error) {
+    console.error(error);
+    elements.reminderMessage.textContent = error.message;
+    setStatus("Reminder emails failed");
+  } finally {
+    elements.reminderSendButton.disabled = false;
+  }
+}
+
 async function loadPluginCatalog() {
   if (state.pluginCatalogSupport === "ready" || state.pluginCatalogSupport === "missing") {
     return;
@@ -3688,9 +3729,17 @@ function normalizeReminderItem(entry, milestoneFallback, index) {
     badge = `${currentCount} current`;
   }
 
+  const emails = Array.isArray(entry?.emails) ? entry.emails : [];
+  const lastEmail = emails[0];
+
   const parts = [];
   if (pendingTypes.length) {
     parts.push(`due ${pendingTypes.join(", ")}`);
+  }
+  if (lastEmail) {
+    parts.push(`${lastEmail.status === "sent" ? "email sent" : "email failed"} ${formatDateTime(lastEmail.sent_at)}`);
+  } else if (pendingCount > 0 && !lastSentAt) {
+    parts.push("no reminder email sent yet");
   }
   if (lastSentAt) {
     parts.push(`last sent ${formatDateTime(lastSentAt)}`);
@@ -4247,6 +4296,7 @@ async function submitJourneyCreate(event) {
           name: kickoff.name,
           expected: formatCalendarDate(kickoff.expected),
           owner: kickoff.owner || "pm",
+          email: kickoff.email?.trim() || null,
           note: kickoff.note?.trim() ? { content: kickoff.note.trim() } : null,
         }),
       });
@@ -4260,6 +4310,7 @@ async function submitJourneyCreate(event) {
           name: gaRelease.name,
           expected: formatCalendarDate(gaRelease.expected),
           owner: gaRelease.owner || "manager",
+          email: gaRelease.email?.trim() || null,
           note: gaRelease.note?.trim() ? { content: gaRelease.note.trim() } : null,
         }),
       });
@@ -4273,6 +4324,7 @@ async function submitJourneyCreate(event) {
           name: milestone.name.trim(),
           expected: formatCalendarDate(milestone.expected),
           owner: milestone.owner.trim(),
+          email: milestone.email?.trim() || null,
           note: milestone.note?.trim() ? { content: milestone.note.trim() } : null,
         }),
       });
@@ -4322,6 +4374,7 @@ async function submitJourneyEdit() {
           name: target.name,
           expected: formatCalendarDate(draftMilestone.expected),
           owner: draftMilestone.owner?.trim() || target.owner || "",
+          email: draftMilestone.email?.trim() || target.email || null,
           note: draftMilestone.note?.trim() ? { content: draftMilestone.note.trim() } : null,
         }),
       });
@@ -4637,6 +4690,7 @@ async function saveMilestone(milestoneId, container) {
 
   setStatus("Saving");
   try {
+    const email = container.querySelector('[data-field="email"]').value.trim() || null;
     await request(`/api/milestones/${milestoneId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -4644,6 +4698,7 @@ async function saveMilestone(milestoneId, container) {
         name,
         expected,
         owner,
+        email,
         note: note ? { content: note } : null,
       }),
     });
@@ -4655,6 +4710,24 @@ async function saveMilestone(milestoneId, container) {
     console.error(error);
     elements.editMessage.textContent = error.message;
     setStatus("Save failed");
+  }
+}
+
+async function sendMilestoneAckEmail(milestoneId, milestoneName) {
+  setStatus("Sending acknowledgement email");
+  try {
+    const result = await request(`/api/milestones/${milestoneId}/ack-email`, { method: "POST" });
+    if (result.sent) {
+      elements.editMessage.textContent = `Acknowledgement email sent to ${result.recipient || "milestone owner"}.`;
+      setStatus("Acknowledgement email sent");
+    } else {
+      elements.editMessage.textContent = result.message || "Could not send acknowledgement email.";
+      setStatus("Acknowledgement email failed");
+    }
+  } catch (error) {
+    console.error(error);
+    elements.editMessage.textContent = error.message;
+    setStatus("Acknowledgement email failed");
   }
 }
 
@@ -4787,6 +4860,7 @@ async function submitEdit(event) {
   const name = elements.editNewName.value.trim();
   const expected = elements.editNewDate.value;
   const owner = elements.editNewOwner.value.trim();
+  const email = elements.editNewEmail.value.trim() || null;
   const note = elements.editNewNote.value.trim();
 
   if (!release) {
@@ -4808,6 +4882,7 @@ async function submitEdit(event) {
         name,
         expected,
         owner,
+        email,
         note: note ? { content: note } : null,
       }),
     });
@@ -5191,6 +5266,7 @@ elements.reminderRelease.addEventListener("change", () => {
   loadReminderState(state.reminderReleaseId).then(() => renderReminderPanel());
 });
 elements.reminderRunButton.addEventListener("click", runReminderEngine);
+elements.reminderSendButton.addEventListener("click", sendReminderEmails);
 elements.pluginForm.addEventListener("submit", submitPluginImport);
 elements.pluginRelease.addEventListener("change", () => {
   state.pluginReleaseId = Number(elements.pluginRelease.value);

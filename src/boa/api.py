@@ -6,7 +6,7 @@ import asyncio
 import contextlib
 import os
 from contextlib import asynccontextmanager
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile, status
@@ -33,12 +33,20 @@ from boa.domain import (
 from boa.storage import BoaStorage, slugify_galaxy
 from boa.yaml_io import BlueprintValidationError, dump_release_blueprint, load_release_blueprint
 
+from boa.ack_token import generate_ack_token, hash_ack_token
 from boa.email import (
     SmtpConfigurationError,
     SmtpSendError,
     get_smtp_status,
+    is_valid_email,
     load_smtp_config,
     send_test_email,
+)
+from boa.reminder_service import (
+    ReminderSendResult,
+    send_ack_request_email,
+    send_acknowledgement_confirmation,
+    send_due_reminder_emails,
 )
 
 
@@ -113,6 +121,7 @@ class MilestoneCreateRequest(BaseModel):
     name: str
     expected: date
     owner: str
+    email: str | None = None
     note: "NoteContentRequest | None" = None
 
     @field_validator("name")
@@ -124,6 +133,18 @@ class MilestoneCreateRequest(BaseModel):
     @classmethod
     def clean_owner(cls, value: str) -> str:
         return _clean_text(value, field="owner", max_length=MAX_OWNER_LENGTH)
+
+    @field_validator("email")
+    @classmethod
+    def clean_email(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            return None
+        if not is_valid_email(cleaned):
+            raise ValueError("email must be a valid email address.")
+        return cleaned
 
 
 class MilestoneUpdateRequest(BaseModel):
@@ -132,6 +153,7 @@ class MilestoneUpdateRequest(BaseModel):
     name: str
     expected: date
     owner: str
+    email: str | None = None
     note: "NoteContentRequest | None" = None
 
     @field_validator("name")
@@ -143,6 +165,18 @@ class MilestoneUpdateRequest(BaseModel):
     @classmethod
     def clean_owner(cls, value: str) -> str:
         return _clean_text(value, field="owner", max_length=MAX_OWNER_LENGTH)
+
+    @field_validator("email")
+    @classmethod
+    def clean_email(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            return None
+        if not is_valid_email(cleaned):
+            raise ValueError("email must be a valid email address.")
+        return cleaned
 
 
 class NoteContentRequest(BaseModel):
@@ -278,6 +312,7 @@ class MilestoneResponse(BaseModel):
     name: str
     expected: date
     owner: str
+    email: str | None = None
     note: NoteContentResponse | None = None
 
 
@@ -303,6 +338,51 @@ class AckResponse(BaseModel):
     note: NoteContentResponse | None = None
 
 
+class AckTokenInfoResponse(BaseModel):
+    valid: bool
+    release_id: int | None = None
+    milestone_id: int | None = None
+    product: str | None = None
+    version: str | None = None
+    milestone_name: str | None = None
+    expected: date | None = None
+    message: str = ""
+
+
+class AckByTokenRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ack_name: str
+    note: NoteContentRequest | None = None
+
+    @field_validator("ack_name")
+    @classmethod
+    def clean_ack_name(cls, value: str) -> str:
+        return _clean_text(value, field="ack_name", max_length=MAX_OWNER_LENGTH)
+
+
+class AckByTokenResponse(BaseModel):
+    acked: bool
+    acked_at: str
+    ack_name: str
+    milestone_id: int
+    message: str
+
+
+class AckEmailResponse(BaseModel):
+    sent: bool
+    recipient: str | None = None
+    message: str
+    error: str | None = None
+
+
+class SendRemindersResponse(BaseModel):
+    sent: int
+    failed: int
+    results: list[dict]
+    message: str
+
+
 class BugSnapshotResponse(BaseModel):
     id: int
     observed_at: str
@@ -326,6 +406,20 @@ class NotificationResponse(BaseModel):
     sent_at: str
 
 
+class EmailLogResponse(BaseModel):
+    id: int
+    release_id: int
+    milestone_id: int
+    notification_id: int | None
+    template_name: str
+    recipient: str
+    token_id: int | None
+    subject: str
+    sent_at: str
+    status: str
+    error: str | None
+
+
 class ReminderStateResponse(BaseModel):
     release_id: int
     milestone_id: int
@@ -335,6 +429,7 @@ class ReminderStateResponse(BaseModel):
     acked_at: str | None
     pending_types: list[str]
     notifications: list[NotificationResponse]
+    emails: list[EmailLogResponse]
 
 
 class PluginDescriptorResponse(BaseModel):
@@ -354,6 +449,7 @@ class TimelineMilestoneResponse(BaseModel):
     name: str
     expected: date
     owner: str
+    email: str | None
     note: NoteContentResponse | None
     acked_at: str | None
     ack_name: str | None
@@ -424,6 +520,12 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
     async def reminder_scheduler(app: FastAPI) -> None:
         while True:
             app.state.storage.generate_due_notifications(as_of=date.today())
+            try:
+                smtp_config = load_smtp_config()
+                if smtp_config.ready:
+                    send_due_reminder_emails(app.state.storage, smtp_config, as_of=date.today())
+            except Exception:
+                pass
             await asyncio.sleep(60 * 60)
 
     @asynccontextmanager
@@ -448,6 +550,10 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
     @app.get("/", response_class=FileResponse)
     def index() -> Path:
         return Path(__file__).parent / "static" / "index.html"
+
+    @app.get("/ack/{token}", response_class=FileResponse)
+    def ack_page(token: str) -> Path:
+        return Path(__file__).parent / "static" / "ack.html"
 
     @app.get("/{galaxy_slug}", response_class=FileResponse)
     def galaxy_page(galaxy_slug: str) -> Path:
@@ -646,6 +752,7 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
                         name=request.name,
                         expected=request.expected,
                         owner=request.owner,
+                        email=request.email,
                         note=_note_content_or_none(request.note),
                     ),
                 )
@@ -666,6 +773,7 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
                         name=request.name,
                         expected=request.expected,
                         owner=request.owner,
+                        email=request.email,
                         note=_note_content_or_none(request.note),
                     ),
                 )
@@ -697,6 +805,119 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return _reminder_state_response(state)
+
+    @app.get("/api/ack/{token}", response_model=AckTokenInfoResponse)
+    def get_ack_token_info(
+        token: str,
+        storage: BoaStorage = Depends(get_storage),
+    ) -> AckTokenInfoResponse:
+        token_hash = hash_ack_token(token)
+        token_record = storage.get_ack_token_by_hash(token_hash)
+        if token_record is None:
+            return AckTokenInfoResponse(valid=False, message="This acknowledgement link is not recognized.")
+        if token_record.used_at is not None:
+            return AckTokenInfoResponse(valid=False, message="This acknowledgement link has already been used.")
+        if datetime.now(timezone.utc).replace(microsecond=0) > token_record.expires_at:
+            return AckTokenInfoResponse(valid=False, message="This acknowledgement link has expired.")
+
+        try:
+            milestone = storage.get_milestone(token_record.milestone_id)
+            release = storage.get_release(token_record.release_id)
+        except KeyError:
+            return AckTokenInfoResponse(valid=False, message="This milestone is no longer available.")
+
+        return AckTokenInfoResponse(
+            valid=True,
+            release_id=release.id,
+            milestone_id=milestone.id,
+            product=release.blueprint.product,
+            version=release.blueprint.version,
+            milestone_name=milestone.name,
+            expected=milestone.expected,
+        )
+
+    @app.post("/api/ack/{token}", response_model=AckByTokenResponse)
+    def acknowledge_by_token(
+        token: str,
+        request: AckByTokenRequest,
+        storage: BoaStorage = Depends(get_storage),
+    ) -> AckByTokenResponse:
+        token_hash = hash_ack_token(token)
+        token_record = storage.get_ack_token_by_hash(token_hash)
+        if token_record is None:
+            raise HTTPException(status_code=404, detail="Acknowledgement link is not recognized.")
+        if token_record.used_at is not None:
+            raise HTTPException(status_code=400, detail="Acknowledgement link has already been used.")
+        if datetime.now(timezone.utc).replace(microsecond=0) > token_record.expires_at:
+            raise HTTPException(status_code=400, detail="Acknowledgement link has expired.")
+
+        milestone = storage.get_milestone(token_record.milestone_id)
+        release = storage.get_release(token_record.release_id)
+
+        ack_note = _note_content_or_none(request.note) or ""
+        ack = storage.ack_milestone(
+            milestone.id,
+            request.ack_name,
+            ack_note,
+        )
+
+        used_at = ack.acked_at
+        storage.mark_ack_token_used(
+            token_record.id,
+            ack_id=ack.id,
+            used_at=used_at,
+        )
+
+        try:
+            smtp_config = load_smtp_config()
+            if smtp_config.ready:
+                send_acknowledgement_confirmation(
+                    storage,
+                    smtp_config,
+                    release_id=release.id,
+                    milestone_id=milestone.id,
+                    ack_name=ack.ack_name,
+                    ack_note=ack_note,
+                )
+        except Exception:
+            pass
+
+        return AckByTokenResponse(
+            acked=True,
+            acked_at=ack.acked_at.isoformat(),
+            ack_name=ack.ack_name,
+            milestone_id=milestone.id,
+            message=f"{milestone.name} has been acknowledged. The journey continues.",
+        )
+
+    @app.post("/api/milestones/{milestone_id}/ack-email", response_model=AckEmailResponse)
+    def send_milestone_ack_email(
+        milestone_id: int,
+        storage: BoaStorage = Depends(get_storage),
+    ) -> AckEmailResponse:
+        try:
+            smtp_config = load_smtp_config()
+        except SmtpConfigurationError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        if not smtp_config.ready:
+            status = get_smtp_status(smtp_config)
+            raise HTTPException(status_code=400, detail=status["message"])
+
+        try:
+            storage.get_milestone(milestone_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+        result = send_ack_request_email(storage, smtp_config, milestone_id=milestone_id)
+        if result.sent:
+            return AckEmailResponse(sent=True, recipient=result.recipient, message="Acknowledgement email sent.")
+        return AckEmailResponse(
+            sent=False,
+            recipient=result.recipient,
+            message=result.error or "Failed to send acknowledgement email.",
+            error=result.error,
+        )
 
     @app.post("/api/milestones/{milestone_id}/ack", response_model=AckResponse)
     def ack_milestone(
@@ -875,6 +1096,41 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
         notifications = storage.generate_due_notifications(as_of=request.as_of)
         return [_notification_response(item) for item in notifications]
 
+    @app.post("/api/notifications/send", response_model=SendRemindersResponse)
+    def send_reminder_emails(
+        request: ReminderRunRequest,
+        storage: BoaStorage = Depends(get_storage),
+    ) -> SendRemindersResponse:
+        try:
+            smtp_config = load_smtp_config()
+        except SmtpConfigurationError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        if not smtp_config.ready:
+            status = get_smtp_status(smtp_config)
+            raise HTTPException(status_code=400, detail=status["message"])
+
+        results = send_due_reminder_emails(
+            storage,
+            smtp_config,
+            as_of=request.as_of,
+        )
+
+        sent = sum(1 for r in results if r.sent)
+        failed = len(results) - sent
+        result_payload = [
+            {
+                "milestone_id": r.milestone_id,
+                "notification_type": r.notification_type,
+                "recipient": r.recipient,
+                "sent": r.sent,
+                "error": r.error,
+            }
+            for r in results
+        ]
+        message = f"Sent {sent} reminder email(s)." if failed == 0 else f"Sent {sent}, failed {failed}."
+        return SendRemindersResponse(sent=sent, failed=failed, results=result_payload, message=message)
+
     @app.get("/api/releases/{release_id}/export", response_class=PlainTextResponse)
     def export_release(
         release_id: int,
@@ -1013,6 +1269,7 @@ def _milestone_response(milestone: Milestone | MilestoneRecord) -> MilestoneResp
         name=milestone.name,
         expected=milestone.expected,
         owner=milestone.owner,
+        email=getattr(milestone, "email", None),
         note=_note_response(getattr(milestone, "note", None)),
     )
 
@@ -1041,6 +1298,22 @@ def _notification_response(notification: NotificationRecord) -> NotificationResp
     )
 
 
+def _email_log_response(email) -> EmailLogResponse:
+    return EmailLogResponse(
+        id=email.id,
+        release_id=email.release_id,
+        milestone_id=email.milestone_id,
+        notification_id=email.notification_id,
+        template_name=email.template_name,
+        recipient=email.recipient,
+        token_id=email.token_id,
+        subject=email.subject,
+        sent_at=email.sent_at.isoformat(),
+        status=email.status,
+        error=email.error,
+    )
+
+
 def _reminder_state_response(state: ReminderState) -> ReminderStateResponse:
     return ReminderStateResponse(
         release_id=state.release_id,
@@ -1051,6 +1324,7 @@ def _reminder_state_response(state: ReminderState) -> ReminderStateResponse:
         acked_at=state.acked_at.isoformat() if state.acked_at else None,
         pending_types=list(state.pending_types),
         notifications=[_notification_response(item) for item in state.notifications],
+        emails=[_email_log_response(item) for item in state.emails],
     )
 
 
@@ -1076,6 +1350,7 @@ def _timeline_response(timeline: ReleaseTimeline) -> ReleaseTimelineResponse:
                 expected=milestone.expected,
                 owner=milestone.owner,
                 note=_note_response(milestone.note),
+                email=milestone.email,
                 acked_at=milestone.acked_at.isoformat() if milestone.acked_at else None,
                 ack_name=milestone.ack_name,
                 ack_note=_note_response(milestone.ack_note),

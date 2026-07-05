@@ -100,6 +100,7 @@ def _milestone_from_mapping(payload: Any) -> Milestone:
         expected=_parse_date(payload["expected"], field="expected"),
         owner=_require_non_empty_string(payload["owner"], field="owner"),
         note=_parse_optional_note(payload.get("note")),
+        email=_parse_optional_string(payload.get("email"), field="email"),
     )
 
 
@@ -144,4 +145,13 @@ def _parse_optional_note(value: Any) -> str | None:
     if not isinstance(content, str):
         raise BlueprintValidationError("note.content must be a string.")
     cleaned = content.strip()
+    return cleaned or None
+
+
+def _parse_optional_string(value: Any, *, field: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise BlueprintValidationError(f"{field} must be a string.")
+    cleaned = value.strip()
     return cleaned or None

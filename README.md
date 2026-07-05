@@ -61,6 +61,7 @@ Its purpose is simple: help teams understand the shape of a release.
 - [Boa 1.5](docs/release-notes-1.5.md)
 - [Boa 1.6](docs/release-notes-1.6.md)
 - [Boa 1.7](docs/release-notes-1.7.md)
+- [Boa 1.8](docs/release-notes-1.8.md)
 
 ## Example Release Definition
 
@@ -291,6 +292,28 @@ BOA_SMTP_FROM=boa@example.com
 Production email delivery requires a valid SMTP provider. Boa does not ship a public email service. Mailpit and similar local catchers are useful for development but are not a production email delivery solution.
 
 Use the System panel in the top-right corner of the Boa UI to check SMTP status and send a test email.
+
+### Email Ack Workflow (Boa 1.8)
+
+Once SMTP is configured, Boa can email milestone owners a secret acknowledgement link:
+
+```text
+Milestone → Reminder → Email → Secret link → Acknowledgement → Timeline update → Reminder stops
+```
+
+Send an on-demand acknowledgement request from the Notifications panel, or trigger all due reminder emails with the **Send reminder emails** button. Each email contains a secure `/ack/{token}` link. The recipient enters their name and an optional note; Boa records the acknowledgement immediately and stops future reminders for that milestone.
+
+Required environment variables:
+
+- `BOA_SMTP_ENABLED=true`
+- `BOA_SMTP_HOST`
+- `BOA_SMTP_FROM`
+- `BOA_BASE_URL` — used to build acknowledgement links
+
+Optional tuning:
+
+- `BOA_ACK_TOKEN_TTL_HOURS` — default 168 (7 days)
+- `BOA_REMINDER_DAYS_BEFORE` — default `7,3,1`
 
 ### Common Docker Examples
 
