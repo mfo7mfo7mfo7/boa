@@ -26,6 +26,14 @@ def test_galaxy_route_serves_boa_ui(tmp_path) -> None:
         assert "reveal the shape of a journey" in response.text
 
 
+def test_galaxy_route_serves_boa_ui(tmp_path) -> None:
+    app = create_app(BoaStorage(tmp_path / "boa.db"))
+    with TestClient(app) as client:
+        response = client.get("/fortisase")
+        assert response.status_code == 200
+        assert "reveal the shape of a release" in response.text
+
+
 def test_release_crud_and_export(tmp_path) -> None:
     app = create_app(BoaStorage(tmp_path / "boa.db"))
     with TestClient(app) as client:
