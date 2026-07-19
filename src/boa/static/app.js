@@ -3338,6 +3338,7 @@ async function openObservationDialog(releaseId) {
   );
   state.observationDetailPreview = false;
   elements.observationMessage.textContent = "";
+  await loadObservationWorkspace(releaseId, { silent: true });
   renderObservationWorkspace();
   if (!elements.observationDialog.open) {
     elements.observationDialog.showModal();
@@ -3349,7 +3350,6 @@ async function openObservationDialog(releaseId) {
     elements.observationWhisper.focus();
     elements.observationWhisper.select();
   });
-  await loadObservationWorkspace(releaseId, { silent: true });
 }
 
 function closeImportDialog() {

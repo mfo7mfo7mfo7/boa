@@ -136,6 +136,17 @@ def ack_milestone_via_api(page: Page, milestone_id: int, *, secret: str = "secre
     )
 
 
+def set_range_value(page: Page, selector: str, value: int) -> None:
+    page.locator(selector).evaluate(
+        """(element, value) => {
+            element.value = String(value);
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            element.dispatchEvent(new Event('change', { bubbles: true }));
+        }""",
+        value,
+    )
+
+
 def acknowledge_from_dialog(page: Page, *, secret: str, note: str | None = None) -> None:
     page.locator("#ack-secret").fill(secret)
     if note is not None:
@@ -183,6 +194,116 @@ def test_landing_timeline_begin_menu_create_duplicate_and_now_controls(page: Pag
     expect(top_toggle).to_have_attribute("aria-expanded", "true")
     bottom_toggle.click()
     expect(bottom_toggle).to_have_attribute("aria-expanded", "true")
+
+
+def test_galaxy_routes_scope_the_board_and_unknown_galaxies_show_story_empty_state(
+    page: Page,
+    boa_url: str,
+) -> None:
+    create_release_via_api(page, product="Rose Current", version="4.1", secret="rose-key")
+    create_release_via_api(page, product="Rose Current", version="3.8", secret="rose-key")
+    create_release_via_api(page, product="Lantern Vale", version="1.6", secret="lantern-key")
+
+    page.reload()
+    expect(release_row(page, "Rose Current")).to_have_count(2)
+    expect(release_row(page, "Lantern Vale")).to_have_count(1)
+    expect(release_row(page, "Rose Current").first.locator(".release-product-link")).to_have_attribute(
+        "href",
+        "/rose-current",
+    )
+
+    page.goto(f"{boa_url}/rose-current")
+    expect(page.locator("#board-scope")).to_contain_text("Galaxy view: Rose Current")
+    expect(release_row(page, "Rose Current")).to_have_count(2)
+    expect(release_row(page, "Lantern Vale")).to_have_count(0)
+
+    page.goto(f"{boa_url}/unknown-galaxy")
+    expect(page.locator("#empty-state")).to_be_visible()
+    expect(page.locator("#empty-title")).to_contain_text("Unknown Galaxy has not been observed yet.")
+    expect(page.locator("#empty-return-link")).to_be_visible()
+    page.locator("#empty-return-link").click()
+    expect(page).to_have_url(f"{boa_url}/")
+
+
+def test_observation_notebook_records_starlight_storms_markdown_and_trail(page: Page) -> None:
+    release = create_release_via_api(page, product="Lantern Vale", version="1.6", secret="lantern-key")
+    release_id = release["id"]
+    page.reload()
+    row = release_row(page, "Lantern Vale")
+    expect(row.locator(".release-observe-button")).to_contain_text("Today’s Reading")
+
+    row.locator(".release-observe-button").click()
+    expect(page.locator("#observation-dialog")).to_be_visible()
+    observation_dialog = page.locator("#observation-dialog")
+    expect(observation_dialog.locator(".dialog-kicker")).to_contain_text("Observation Notebook")
+    expect(page.locator("#observation-release-name")).to_contain_text("Lantern Vale")
+    expect(page.locator("#observation-release-version")).to_contain_text("1.6")
+    expect(observation_dialog).not_to_contain_text("Whisper")
+    expect(page.locator("#observation-whisper")).to_be_focused()
+    expect(page.locator("#observation-storms")).to_have_value("")
+    expect(page.locator(".observation-expand")).not_to_have_attribute("open", "")
+
+    page.locator("#observation-whisper").fill("Confidence is gathering near the horizon.")
+    page.locator("#observation-detail").fill(
+        "## Completed\n\n- Integration path feels dependable\n\n## Risk\n\n- One storm still needs watching"
+    )
+    page.locator("#observation-detail-preview-toggle").click()
+    expect(page.locator("#observation-detail-preview")).to_be_visible()
+    expect(page.locator("#observation-detail-preview")).to_contain_text("Integration path feels dependable")
+    page.locator("#observation-detail-preview-toggle").click()
+    set_range_value(page, "#observation-starlight", 73)
+    expect(page.locator("#observation-starlight-readout")).to_contain_text("73")
+    page.locator("#observation-storms").fill("15")
+    page.locator(".observation-expand summary").click()
+    page.locator("#observation-done").fill("16")
+    page.locator("#observation-total").fill("20")
+    page.locator("#observation-blocked").fill("1")
+    page.locator("#observation-save-button").click()
+    expect(page.locator("#observation-dialog")).not_to_be_visible()
+
+    timeline = page.evaluate("fetch('/api/timeline').then((response) => response.json())")
+    item = next(release_item for release_item in timeline if release_item["id"] == release_id)
+    assert item["starlight"]["starlight"] == 73
+    assert item["starlight"]["whisper"] == "Confidence is gathering near the horizon."
+    assert [event["starlight"] for event in item["starlight_trail"]] == [73]
+    snapshots = page.evaluate(f"fetch('/api/releases/{release_id}/bug-snapshots').then((response) => response.json())")
+    assert snapshots[-1]["open_bug_count"] == 15
+
+    row = release_row(page, "Lantern Vale")
+    expect(row.locator(".release-observe-button")).to_contain_text("Continue Observation")
+    expect(row.locator(".starlight-event")).to_have_count(1)
+    expect(row.locator(".wave-source")).to_have_count(1)
+
+    row.locator(".release-observe-button").click()
+    expect(page.locator("#observation-dialog")).to_be_visible()
+    expect(page.locator("#observation-starlight")).to_have_value("73")
+    expect(page.locator("#observation-storms")).to_have_value("15")
+    page.locator("#observation-whisper").fill("Confidence is still gathering quietly.")
+    page.locator("#observation-save-button").click()
+    expect(page.locator("#observation-dialog")).not_to_be_visible()
+
+    updated = page.evaluate("fetch('/api/timeline').then((response) => response.json())")
+    updated_item = next(release_item for release_item in updated if release_item["id"] == release_id)
+    assert updated_item["starlight"]["whisper"] == "Confidence is still gathering quietly."
+    assert [event["starlight"] for event in updated_item["starlight_trail"]] == [73]
+
+
+def test_engine_room_date_language_updates_visible_timeline_dates(page: Page) -> None:
+    release = create_release_via_api(page, product="Clock Rose", version="2.0", secret="clock-key")
+    update_milestone_via_api(page, release["milestones"][0], expected=date(2026, 6, 29))
+    page.reload()
+
+    row = release_row(page, "Clock Rose")
+    expect(row.locator(".milestone-expected").first).to_contain_text("Jun 29")
+
+    page.locator("#engine-button").click()
+    expect(page.locator("#engine-dialog")).to_be_visible()
+    page.locator("#engine-date-format-button").click()
+    page.locator("#engine-date-format-menu .release-menu-item[data-format='iso']").click()
+    expect(page.locator("#engine-date-format-label")).to_contain_text("2026-06-29")
+    page.locator("#close-engine-dialog-button").click()
+
+    expect(row.locator(".milestone-expected").first).to_contain_text("2026-06-29")
 
 
 def test_yaml_import_preview_opens_begin_dialog_and_creates_journey(page: Page, tmp_path: Path) -> None:
