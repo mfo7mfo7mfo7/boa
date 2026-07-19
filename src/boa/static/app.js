@@ -4801,15 +4801,36 @@ function dateishTime(value) {
   return parseDateish(value).getTime();
 }
 
+function calendarKeyParts(year, month, day) {
+  return [
+    String(year).padStart(4, "0"),
+    String(month).padStart(2, "0"),
+    String(day).padStart(2, "0"),
+  ].join("-");
+}
+
 function dateishDayKey(value) {
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
   return formatCalendarDate(value);
+}
+
+function dateishDayKeyInLastTimezone(value) {
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
+  const date = parseDateish(value);
+  // "Anywhere on Earth" keeps a milestone valid until the day has passed in UTC-12.
+  const aoeDate = new Date(date.getTime() - 12 * 60 * 60 * 1000);
+  return calendarKeyParts(aoeDate.getUTCFullYear(), aoeDate.getUTCMonth() + 1, aoeDate.getUTCDate());
 }
 
 function isAckAfterExpectedDay(ackValue, expectedValue) {
   if (!ackValue || !expectedValue) {
     return false;
   }
-  return dateishDayKey(ackValue) > dateishDayKey(expectedValue);
+  return dateishDayKeyInLastTimezone(ackValue) > dateishDayKey(expectedValue);
 }
 
 function formatCalendarDate(value) {
