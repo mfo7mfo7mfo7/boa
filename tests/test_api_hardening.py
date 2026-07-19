@@ -296,43 +296,6 @@ def test_starlight_rejects_invalid_ranges_and_unexpected_fields(tmp_path) -> Non
     assert extra.status_code == 422
 
 
-def test_starlight_rejects_invalid_ranges_and_unexpected_fields(tmp_path) -> None:
-    with make_client(tmp_path) as client:
-        release = create_release(client)
-        bad_range = client.post(
-            f"/api/releases/{release['id']}/starlight",
-            json={"starlight": 120, "whisper": "too bright", "detail": {"type": "markdown", "content": "too bright"}, "metrics": {"done": 1, "total": 2, "blocked": 0}},
-        )
-        bad_totals = client.post(
-            f"/api/releases/{release['id']}/starlight",
-            json={"starlight": 30, "whisper": "bad math", "detail": {"type": "markdown", "content": "bad math"}, "metrics": {"done": 3, "total": 2, "blocked": 0}},
-        )
-        bad_type = client.post(
-            f"/api/releases/{release['id']}/starlight",
-            json={"starlight": 30, "whisper": "wrong type", "detail": {"type": "html", "content": "<b>no</b>"}},
-        )
-        too_long = client.post(
-            f"/api/releases/{release['id']}/starlight",
-            json={"starlight": 30, "whisper": "too long", "detail": {"type": "markdown", "content": "x" * (20 * 1024 + 1)}},
-        )
-        extra = client.post(
-            f"/api/releases/{release['id']}/starlight",
-            json={
-                "starlight": 30,
-                "whisper": "extra field",
-                "detail": {"type": "markdown", "content": "extra field"},
-                "metrics": {"done": 1, "total": 2, "blocked": 0},
-                "history": True,
-            },
-        )
-
-    assert bad_range.status_code == 422
-    assert bad_totals.status_code == 422
-    assert bad_type.status_code == 422
-    assert too_long.status_code == 422
-    assert extra.status_code == 422
-
-
 def test_ack_rejects_unexpected_fields(tmp_path) -> None:
     with make_client(tmp_path) as client:
         release = create_release(client)
