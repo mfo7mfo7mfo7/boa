@@ -1156,9 +1156,8 @@ function truncateText(text, maxLength) {
 
 function getAckTrailState(milestone) {
   const expectedTime = dateishTime(milestone.expected);
-  const ackTime = milestone.acked_at ? dateishTime(milestone.acked_at) : null;
   const todayTime = dateishTime(new Date());
-  const isLateAck = typeof ackTime === "number" && ackTime > expectedTime;
+  const isLateAck = isAckAfterExpectedDay(milestone.acked_at, milestone.expected);
   const isOverduePending = !milestone.acked_at && todayTime > expectedTime;
 
   if (milestone.acked_at) {
@@ -1214,9 +1213,7 @@ function buildAckTrailEntries(milestone) {
 }
 
 function getAckEventTrailState(milestone, entry) {
-  const expectedTime = dateishTime(milestone.expected);
-  const entryTime = entry?.acked_at ? dateishTime(entry.acked_at) : null;
-  const isLateAck = typeof entryTime === "number" && entryTime > expectedTime;
+  const isLateAck = isAckAfterExpectedDay(entry?.acked_at, milestone.expected);
   return {
     stateClass: isLateAck ? "is-overdue" : "is-acknowledged",
   };
@@ -1421,9 +1418,7 @@ function drawRelease(svg, release, timeline, palette, options = {}) {
   release.milestones.forEach((milestone) => {
     const x = xForDate(milestone.expected);
     const notePoint = { x, y: baselineY - 24 };
-    const expectedTime = dateishTime(milestone.expected);
-    const ackTime = milestone.acked_at ? dateishTime(milestone.acked_at) : null;
-    const isLateAck = typeof ackTime === "number" && ackTime > expectedTime;
+    const isLateAck = isAckAfterExpectedDay(milestone.acked_at, milestone.expected);
     const isActionablePending = !milestone.acked_at && milestone.id === actionablePendingId;
     const shouldRenderAckMarker = milestone.acked_at || isActionablePending;
     const hasMilestoneContext = hasBoaNote(milestone.note) || hasBoaNote(milestone.ack_note);
@@ -4804,6 +4799,17 @@ function parseDateish(value) {
 
 function dateishTime(value) {
   return parseDateish(value).getTime();
+}
+
+function dateishDayKey(value) {
+  return formatCalendarDate(value);
+}
+
+function isAckAfterExpectedDay(ackValue, expectedValue) {
+  if (!ackValue || !expectedValue) {
+    return false;
+  }
+  return dateishDayKey(ackValue) > dateishDayKey(expectedValue);
 }
 
 function formatCalendarDate(value) {

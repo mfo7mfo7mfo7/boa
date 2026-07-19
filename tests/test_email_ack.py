@@ -66,6 +66,8 @@ def test_ack_token_info_returns_valid_token_details(tmp_path: Path) -> None:
         assert payload["milestone_id"] == milestone_id
         assert payload["product"] == "FortiSASE"
         assert payload["milestone_name"] == "Kickoff"
+        assert payload["keeper"] == "pm"
+        assert payload["keeper_email"] is None
 
 
 def test_ack_by_token_creates_acknowledgement_and_consumes_token(tmp_path: Path) -> None:
@@ -89,12 +91,12 @@ def test_ack_by_token_creates_acknowledgement_and_consumes_token(tmp_path: Path)
     with TestClient(app) as client:
         response = client.post(
             f"/api/ack/{plain.token}",
-            json={"ack_name": "qa", "note": {"content": "All green"}},
+            json={"note": {"content": "All green"}},
         )
         assert response.status_code == 200
         payload = response.json()
         assert payload["acked"] is True
-        assert payload["ack_name"] == "qa"
+        assert payload["ack_name"] == "pm"
         assert payload["milestone_id"] == milestone_id
 
         info = client.get(f"/api/ack/{plain.token}").json()
@@ -103,7 +105,7 @@ def test_ack_by_token_creates_acknowledgement_and_consumes_token(tmp_path: Path)
         timeline = client.get("/api/timeline").json()
         milestone = timeline[0]["milestones"][0]
         assert milestone["acked_at"] is not None
-        assert milestone["ack_name"] == "qa"
+        assert milestone["ack_name"] == "pm"
         assert milestone["ack_note"] == {"content": "All green"}
 
 
@@ -128,7 +130,7 @@ def test_ack_by_token_rejects_expired_token(tmp_path: Path) -> None:
     with TestClient(app) as client:
         response = client.post(
             f"/api/ack/{plain.token}",
-            json={"ack_name": "qa"},
+            json={},
         )
         assert response.status_code == 400
         assert "expired" in response.json()["detail"].lower()
@@ -274,9 +276,10 @@ def test_ack_by_token_sends_confirmation_email_when_smtp_ready(
     with TestClient(app) as client:
         response = client.post(
             f"/api/ack/{plain.token}",
-            json={"ack_name": "qa", "note": {"content": "All green"}},
+            json={"note": {"content": "All green"}},
         )
         assert response.status_code == 200
+        assert response.json()["ack_name"] == "qa@example.com"
         assert len(sent_emails) == 1
         assert "acknowledged" in sent_emails[0]["subject"].lower()
 
@@ -355,10 +358,10 @@ def test_ack_token_replay_after_use_is_rejected(tmp_path: Path) -> None:
     )
 
     with TestClient(app) as client:
-        first = client.post(f"/api/ack/{plain.token}", json={"ack_name": "qa"})
+        first = client.post(f"/api/ack/{plain.token}", json={})
         assert first.status_code == 200
 
-        second = client.post(f"/api/ack/{plain.token}", json={"ack_name": "qa"})
+        second = client.post(f"/api/ack/{plain.token}", json={})
         assert second.status_code == 400
         assert "already been used" in second.json()["detail"].lower()
 
@@ -397,13 +400,15 @@ def test_secret_token_ack_flow_end_to_end(tmp_path: Path) -> None:
             info = client.get(f"/api/ack/{token}")
             assert info.json()["valid"] is True
             assert info.json()["milestone_name"] == "Perihelion"
+            assert info.json()["keeper_email"] == "navigator@example.com"
 
-            ack = client.post(f"/api/ack/{token}", json={"ack_name": "Navigator", "note": None})
+            ack = client.post(f"/api/ack/{token}", json={"note": None})
             assert ack.status_code == 200
             assert ack.json()["acked"] is True
+            assert ack.json()["ack_name"] == "navigator@example.com"
 
             # Token replay is rejected
-            replay = client.post(f"/api/ack/{token}", json={"ack_name": "Navigator", "note": None})
+            replay = client.post(f"/api/ack/{token}", json={"note": None})
             assert replay.status_code == 400
 
             # Timeline shows ack

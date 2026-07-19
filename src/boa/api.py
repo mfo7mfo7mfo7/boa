@@ -347,18 +347,22 @@ class AckTokenInfoResponse(BaseModel):
     version: str | None = None
     milestone_name: str | None = None
     expected: date | None = None
+    keeper: str | None = None
+    keeper_email: str | None = None
     message: str = ""
 
 
 class AckByTokenRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    ack_name: str
+    ack_name: str | None = None
     note: NoteContentRequest | None = None
 
     @field_validator("ack_name")
     @classmethod
-    def clean_ack_name(cls, value: str) -> str:
+    def clean_ack_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         return _clean_text(value, field="ack_name", max_length=MAX_OWNER_LENGTH)
 
 
@@ -888,6 +892,8 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
             version=release.blueprint.version,
             milestone_name=milestone.name,
             expected=milestone.expected,
+            keeper=milestone.owner,
+            keeper_email=milestone.email,
         )
 
     @app.post("/api/ack/{token}", response_model=AckByTokenResponse)
@@ -909,11 +915,12 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
         release = storage.get_release(token_record.release_id)
 
         ack_note = _note_content_or_none(request.note) or ""
+        ack_name = milestone.email or milestone.owner
         ack = _perform_acknowledgement(
             storage,
             release_id=release.id,
             milestone_id=milestone.id,
-            ack_name=request.ack_name,
+            ack_name=ack_name,
             note=ack_note,
         )
 
