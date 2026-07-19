@@ -68,7 +68,6 @@ Added usage documentation for:
 Docker docs were refreshed and Compose entrypoints were aligned:
 
 - `compose.yaml`
-- `docker-compose.yml`
 
 ## API Summary
 

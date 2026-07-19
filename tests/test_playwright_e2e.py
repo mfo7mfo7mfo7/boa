@@ -122,18 +122,40 @@ def update_milestone_via_api(page: Page, milestone: dict, *, expected: date, own
     )
 
 
-def ack_milestone_via_api(page: Page, milestone_id: int, *, secret: str = "secret") -> None:
+def ack_milestone_via_api(page: Page, milestone_id: int, *, secret: str = "secret", ack_name: str = "qa") -> None:
     page.evaluate(
-        """async ([milestoneId, secret]) => {
+        """async ([milestoneId, secret, ackName]) => {
             const response = await fetch(`/api/milestones/${milestoneId}/ack`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ secret }),
+              body: JSON.stringify({ secret, ack_name: ackName }),
             });
             if (!response.ok) throw new Error(await response.text());
         }""",
-        [milestone_id, secret],
+        [milestone_id, secret, ack_name],
     )
+
+
+def set_range_value(page: Page, selector: str, value: int) -> None:
+    page.locator(selector).evaluate(
+        """(element, value) => {
+            element.value = String(value);
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            element.dispatchEvent(new Event('change', { bubbles: true }));
+        }""",
+        value,
+    )
+
+
+def acknowledge_from_dialog(page: Page, *, secret: str, note: str | None = None) -> None:
+    page.locator("#ack-secret").fill(secret)
+    if note is not None:
+        page.locator("#ack-note").fill(note)
+    page.locator("#ack-submit-button").click()
+    expect(page.locator("#ack-message")).to_contain_text("Press again to confirm")
+    expect(page.locator("#ack-submit-button")).to_contain_text("Confirmed?")
+    page.wait_for_timeout(750)
+    page.locator("#ack-submit-button").click()
 
 
 def release_row(page: Page, text: str):
@@ -142,7 +164,7 @@ def release_row(page: Page, text: str):
 
 def test_landing_timeline_begin_menu_create_duplicate_and_now_controls(page: Page) -> None:
     expect(page.locator(".brand-name")).to_have_text("BOA")
-    expect(page.locator(".brand-tagline")).to_contain_text("reveal the shape of a release")
+    expect(page.locator(".brand-tagline")).to_contain_text("reveal the shape of a journey")
     expect(page.locator("#timeline-board")).to_be_attached()
     expect(page.locator("#empty-state")).to_be_visible()
 
@@ -174,6 +196,116 @@ def test_landing_timeline_begin_menu_create_duplicate_and_now_controls(page: Pag
     expect(bottom_toggle).to_have_attribute("aria-expanded", "true")
 
 
+def test_galaxy_routes_scope_the_board_and_unknown_galaxies_show_story_empty_state(
+    page: Page,
+    boa_url: str,
+) -> None:
+    create_release_via_api(page, product="Rose Current", version="4.1", secret="rose-key")
+    create_release_via_api(page, product="Rose Current", version="3.8", secret="rose-key")
+    create_release_via_api(page, product="Lantern Vale", version="1.6", secret="lantern-key")
+
+    page.reload()
+    expect(release_row(page, "Rose Current")).to_have_count(2)
+    expect(release_row(page, "Lantern Vale")).to_have_count(1)
+    expect(release_row(page, "Rose Current").first.locator(".release-product-link")).to_have_attribute(
+        "href",
+        "/rose-current",
+    )
+
+    page.goto(f"{boa_url}/rose-current")
+    expect(page.locator("#board-scope")).to_contain_text("Galaxy view: Rose Current")
+    expect(release_row(page, "Rose Current")).to_have_count(2)
+    expect(release_row(page, "Lantern Vale")).to_have_count(0)
+
+    page.goto(f"{boa_url}/unknown-galaxy")
+    expect(page.locator("#empty-state")).to_be_visible()
+    expect(page.locator("#empty-title")).to_contain_text("Unknown Galaxy has not been observed yet.")
+    expect(page.locator("#empty-return-link")).to_be_visible()
+    page.locator("#empty-return-link").click()
+    expect(page).to_have_url(f"{boa_url}/")
+
+
+def test_observation_notebook_records_starlight_storms_markdown_and_trail(page: Page) -> None:
+    release = create_release_via_api(page, product="Lantern Vale", version="1.6", secret="lantern-key")
+    release_id = release["id"]
+    page.reload()
+    row = release_row(page, "Lantern Vale")
+    expect(row.locator(".release-observe-button")).to_contain_text("Today’s Reading")
+
+    row.locator(".release-observe-button").click()
+    expect(page.locator("#observation-dialog")).to_be_visible()
+    observation_dialog = page.locator("#observation-dialog")
+    expect(observation_dialog.locator(".dialog-kicker")).to_contain_text("Observation Notebook")
+    expect(page.locator("#observation-release-name")).to_contain_text("Lantern Vale")
+    expect(page.locator("#observation-release-version")).to_contain_text("1.6")
+    expect(observation_dialog).not_to_contain_text("Whisper")
+    expect(page.locator("#observation-whisper")).to_be_focused()
+    expect(page.locator("#observation-storms")).to_have_value("")
+    expect(page.locator(".observation-expand")).not_to_have_attribute("open", "")
+
+    page.locator("#observation-whisper").fill("Confidence is gathering near the horizon.")
+    page.locator("#observation-detail").fill(
+        "## Completed\n\n- Integration path feels dependable\n\n## Risk\n\n- One storm still needs watching"
+    )
+    page.locator("#observation-detail-preview-toggle").click()
+    expect(page.locator("#observation-detail-preview")).to_be_visible()
+    expect(page.locator("#observation-detail-preview")).to_contain_text("Integration path feels dependable")
+    page.locator("#observation-detail-preview-toggle").click()
+    set_range_value(page, "#observation-starlight", 73)
+    expect(page.locator("#observation-starlight-readout")).to_contain_text("73")
+    page.locator("#observation-storms").fill("15")
+    page.locator(".observation-expand summary").click()
+    page.locator("#observation-done").fill("16")
+    page.locator("#observation-total").fill("20")
+    page.locator("#observation-blocked").fill("1")
+    page.locator("#observation-save-button").click()
+    expect(page.locator("#observation-dialog")).not_to_be_visible()
+
+    timeline = page.evaluate("fetch('/api/timeline').then((response) => response.json())")
+    item = next(release_item for release_item in timeline if release_item["id"] == release_id)
+    assert item["starlight"]["starlight"] == 73
+    assert item["starlight"]["whisper"] == "Confidence is gathering near the horizon."
+    assert [event["starlight"] for event in item["starlight_trail"]] == [73]
+    snapshots = page.evaluate(f"fetch('/api/releases/{release_id}/bug-snapshots').then((response) => response.json())")
+    assert snapshots[-1]["open_bug_count"] == 15
+
+    row = release_row(page, "Lantern Vale")
+    expect(row.locator(".release-observe-button")).to_contain_text("Continue Observation")
+    expect(row.locator(".starlight-event")).to_have_count(1)
+    expect(row.locator(".wave-source")).to_have_count(1)
+
+    row.locator(".release-observe-button").click()
+    expect(page.locator("#observation-dialog")).to_be_visible()
+    expect(page.locator("#observation-starlight")).to_have_value("73")
+    expect(page.locator("#observation-storms")).to_have_value("15")
+    page.locator("#observation-whisper").fill("Confidence is still gathering quietly.")
+    page.locator("#observation-save-button").click()
+    expect(page.locator("#observation-dialog")).not_to_be_visible()
+
+    updated = page.evaluate("fetch('/api/timeline').then((response) => response.json())")
+    updated_item = next(release_item for release_item in updated if release_item["id"] == release_id)
+    assert updated_item["starlight"]["whisper"] == "Confidence is still gathering quietly."
+    assert [event["starlight"] for event in updated_item["starlight_trail"]] == [73]
+
+
+def test_engine_room_date_language_updates_visible_timeline_dates(page: Page) -> None:
+    release = create_release_via_api(page, product="Clock Rose", version="2.0", secret="clock-key")
+    update_milestone_via_api(page, release["milestones"][0], expected=date(2026, 6, 29))
+    page.reload()
+
+    row = release_row(page, "Clock Rose")
+    expect(row.locator(".milestone-expected").first).to_contain_text("Jun 29")
+
+    page.locator("#engine-button").click()
+    expect(page.locator("#engine-dialog")).to_be_visible()
+    page.locator("#engine-date-format-button").click()
+    page.locator("#engine-date-format-menu .release-menu-item[data-format='iso']").click()
+    expect(page.locator("#engine-date-format-label")).to_contain_text("2026-06-29")
+    page.locator("#close-engine-dialog-button").click()
+
+    expect(row.locator(".milestone-expected").first).to_contain_text("2026-06-29")
+
+
 def test_yaml_import_preview_opens_begin_dialog_and_creates_journey(page: Page, tmp_path: Path) -> None:
     blueprint = tmp_path / "journey.yaml"
     blueprint.write_text(
@@ -197,9 +329,9 @@ milestones:
 
     page.locator("#new-release-button").click()
     page.locator("#import-journey-option").click()
-    expect(page.locator("#composer-dialog")).to_be_visible()
+    expect(page.locator("#import-dialog")).to_be_visible()
     page.locator("#import-file").set_input_files(str(blueprint))
-    page.locator("#import-form button[type='submit']").click()
+    page.locator("button[form='import-form']").click()
     expect(page.locator("#journey-dialog")).to_be_visible()
     expect(page.locator("#journey-message")).to_contain_text("FortiGate 7.6-e2e is ready to begin.")
     expect(page.locator("#journey-product")).to_have_value("FortiGate")
@@ -221,37 +353,26 @@ def test_ack_edit_and_move_milestone_surfaces(page: Page) -> None:
     page.locator(".pending-marker").first.click()
     expect(page.locator("#ack-dialog")).to_be_visible()
     expect(page.locator("#ack-milestone-name")).to_contain_text("Kickoff")
-    page.locator("#ack-secret").fill("fc-e2e")
-    page.locator("#ack-note").fill("QA saw the kickoff checkpoint.")
-    page.locator("#ack-submit-button").click()
-    expect(page.locator("#ack-message")).to_contain_text("Milestone acknowledged.")
-    expect(page.locator("#ack-note")).to_have_value("QA saw the kickoff checkpoint.")
-    page.locator("#close-ack-dialog-button").click()
+    acknowledge_from_dialog(page, secret="fc-e2e", note="QA saw the kickoff checkpoint.")
+    expect(page.locator("#ack-dialog")).not_to_be_visible()
     expect(page.locator(".ack-marker")).to_have_count(1)
 
     page.locator(".release-menu-button").click()
-    page.locator('.release-menu-item[data-action="edit"]').click()
+    page.locator('.release-menu-item[data-action="settings"]').click()
     expect(page.locator("#journey-dialog")).to_be_visible()
-    expect(page.locator("#journey-kicker")).to_contain_text("Edit Journey")
+    expect(page.locator("#journey-kicker")).to_contain_text("Tend Journey")
     page.locator("#journey-secret").fill("fc-e2e")
     page.locator("#journey-create-button").click()
     expect(page.locator("#journey-dialog")).not_to_be_visible()
 
     release_id = page.evaluate("fetch('/api/timeline').then((r) => r.json()).then((items) => items[0].id)")
-    page.evaluate("(releaseId) => { window.openComposer(releaseId); window.render(false); }", release_id)
-    expect(page.locator("#composer-dialog")).to_be_visible()
-    first_editor = page.locator(".milestone-editor").first
-    expect(first_editor).to_be_visible()
-    first_editor.locator('[data-field="owner"]').fill("release-qa")
-    first_editor.locator('[data-action="save"]').click()
-    expect(page.locator("#edit-message")).to_contain_text("Kickoff updated.")
-    page.locator("#close-dialog-button").click()
+    assert release_id
 
     before = page.evaluate(
         "() => fetch('/api/timeline').then((r) => r.json()).then((items) => items[0].milestones[0].expected)"
     )
     page.locator(".release-menu-button").click()
-    page.locator('.release-menu-item[data-action="edit"]').click()
+    page.locator('.release-menu-item[data-action="settings"]').click()
     expect(page.locator("#journey-dialog")).to_be_visible()
     hit = page.locator("#journey-timeline .journey-milestone-hit").first
     box = hit.bounding_box()
@@ -275,21 +396,23 @@ def test_plugin_manual_payload_and_bug_wave_filters(page: Page) -> None:
     expect(page.locator(".release-row")).to_have_count(1)
     release_id = page.evaluate("fetch('/api/timeline').then((r) => r.json()).then((items) => items[0].id)")
 
-    page.evaluate("(releaseId) => window.openComposer(releaseId)", release_id)
-    expect(page.locator("#composer-dialog")).to_be_visible()
-    expect(page.locator("#plugin-status-pill")).to_contain_text("Ready")
-    page.locator("#plugin-payload").fill(
-        """
-[
-  {"open_bug_count": 15},
-  {"open_bug_count": 100000},
-  {"open_bug_count": 12, "signal_type": "security"}
-]
-""".strip()
-    )
-    page.locator("#plugin-form button[type='submit']").click()
-    expect(page.locator("#plugin-message")).to_contain_text(
-        "manual_bug_snapshot imported 3 bug snapshots for FortiAnalyzer 7.8-e2e."
+    page.evaluate(
+        """async (releaseId) => {
+            const payloads = [
+              { open_bug_count: 15 },
+              { open_bug_count: 100000 },
+              { open_bug_count: 12, signal_type: "security" },
+            ];
+            for (const payload of payloads) {
+              const response = await fetch(`/api/releases/${releaseId}/bug-snapshots`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+              });
+              if (!response.ok) throw new Error(await response.text());
+            }
+        }""",
+        release_id,
     )
 
     snapshots = page.evaluate(f"fetch('/api/releases/{release_id}/bug-snapshots').then((r) => r.json())")
@@ -297,7 +420,7 @@ def test_plugin_manual_payload_and_bug_wave_filters(page: Page) -> None:
     assert [snapshot["quality"] for snapshot in snapshots] == ["normal", "suspicious", "normal"]
     assert all("date" not in snapshot for snapshot in snapshots)
 
-    page.locator("#close-dialog-button").click()
+    page.reload()
     expect(page.locator(".wave-source")).to_have_count(1)
     expect(page.locator(".wave-source title")).to_contain_text("15 open bugs")
 
@@ -323,7 +446,7 @@ def test_download_delete_fold_hover_and_ack_date_states(page: Page) -> None:
     page.reload()
     expect(release_row(page, "AckState")).to_be_visible()
 
-    page.locator(".quiet-info-button").hover()
+    page.locator(".legend-trigger").hover()
     expect(page.locator(".timeline-legend")).to_be_visible()
     expect(page.locator(".timeline-legend")).to_contain_text("Expected")
 
@@ -353,24 +476,24 @@ def test_download_delete_fold_hover_and_ack_date_states(page: Page) -> None:
     expect(state_row.locator(".ack-marker")).to_have_count(1)
     expect(state_row.locator(".overdue-marker")).to_have_count(0)
 
-    page.evaluate("(releaseId) => window.openComposer(releaseId)", state_release["id"])
-    expect(page.locator("#composer-dialog")).to_be_visible()
-    page.locator("#edit-release").select_option(str(state_release["id"]))
-    expect(page.locator("#edit-release")).to_have_value(str(state_release["id"]))
-    page.locator("#edit-product").fill("AckStateEdited")
-    page.locator("#edit-version").fill("1.1")
-    page.locator("#edit-secret").fill("state-secret")
-    page.locator("#edit-release-save-button").click()
-    expect(page.locator("#edit-message")).to_contain_text("AckStateEdited 1.1 updated.")
-    page.locator("#close-dialog-button").click()
+    state_row.locator(".release-menu-button").click()
+    state_row.locator('.release-menu-item[data-action="settings"]').click()
+    expect(page.locator("#journey-dialog")).to_be_visible()
+    expect(page.locator("#journey-product")).to_have_value("AckState")
+    expect(page.locator("#journey-version")).to_have_value("1.0")
+    expect(page.locator("#journey-product")).to_be_disabled()
+    expect(page.locator("#journey-version")).to_be_disabled()
+    page.locator("#journey-secret").fill("state-secret")
+    page.locator("#journey-create-button").click()
+    expect(page.locator("#status-pill")).to_contain_text("Journey saved")
     update_milestone_via_api(page, state_release["milestones"][0], expected=today - timedelta(days=2))
     page.reload()
-    edited_row = release_row(page, "AckStateEdited")
+    edited_row = release_row(page, "AckState")
     expect(edited_row.locator(".overdue-marker")).to_have_count(1)
 
     update_milestone_via_api(page, state_release["milestones"][0], expected=today + timedelta(days=10))
     page.reload()
-    edited_row = release_row(page, "AckStateEdited")
+    edited_row = release_row(page, "AckState")
     expect(edited_row.locator(".ack-marker")).to_have_count(1)
     expect(edited_row.locator(".overdue-marker")).to_have_count(0)
 
@@ -396,7 +519,23 @@ def test_download_delete_fold_hover_and_ack_date_states(page: Page) -> None:
     page.wait_for_function("document.querySelector('#status-pill')?.textContent !== 'Deleting'")
     if page.locator("#status-pill").text_content() == "Delete failed":
         pytest.fail(page.locator("#edit-message").text_content())
-    expect(page.locator("#status-pill")).to_contain_text("Deleted")
+    expect(page.locator("#status-pill")).to_contain_text("Journey removed")
     expect(release_row(page, "DeleteMe")).to_have_count(0)
     releases = page.evaluate("fetch('/api/timeline').then((response) => response.json())")
     assert all(release["id"] != removable["id"] for release in releases)
+
+
+def test_engine_room_shows_email_delivery_disabled(page: Page) -> None:
+    """The Engine Room exposes email delivery status without leaking credentials."""
+    page.locator("#engine-button").click()
+    expect(page.locator("#engine-dialog")).to_be_visible()
+    expect(page.locator("#engine-smtp-title")).to_contain_text("Email delivery")
+    expect(page.locator("#engine-smtp-status")).to_contain_text("Disabled")
+    expect(page.locator("#engine-smtp-message")).to_contain_text("not enabled")
+    expect(page.locator("#engine-smtp-host")).to_contain_text("Not set")
+    expect(page.locator("#engine-smtp-from")).to_contain_text("Boa")
+    expect(page.locator("#engine-smtp-security")).to_contain_text("STARTTLS")
+    expect(page.locator("#engine-smtp-send-button")).to_be_disabled()
+
+    page.locator("#close-engine-dialog-button").click()
+    expect(page.locator("#engine-dialog")).not_to_be_visible()

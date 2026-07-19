@@ -11,10 +11,12 @@ from typing import Iterator
 
 from boa.domain import (
     AckRecord,
+    AckTokenRecord,
     BUG_SNAPSHOT_INGEST_CAPABILITY,
     BugSnapshot,
     BugSnapshotSubmission,
     DAILY_REMINDER_TYPE,
+    EmailLogRecord,
     Milestone,
     MilestoneRecord,
     MilestoneTimelineItem,
@@ -75,6 +77,8 @@ class BoaStorage:
                     name TEXT NOT NULL,
                     expected TEXT NOT NULL,
                     owner TEXT NOT NULL,
+                    email TEXT NOT NULL DEFAULT '',
+                    note TEXT NOT NULL DEFAULT '',
                     FOREIGN KEY (release_id) REFERENCES releases(id) ON DELETE CASCADE
                 );
 
@@ -83,6 +87,7 @@ class BoaStorage:
                     release_id INTEGER NOT NULL,
                     milestone_id INTEGER NOT NULL,
                     owner TEXT NOT NULL,
+                    ack_name TEXT NOT NULL DEFAULT '',
                     acked_at TEXT NOT NULL,
                     note TEXT NOT NULL DEFAULT '',
                     FOREIGN KEY (release_id) REFERENCES releases(id) ON DELETE CASCADE,
@@ -109,6 +114,38 @@ class BoaStorage:
                     type TEXT NOT NULL,
                     FOREIGN KEY (release_id) REFERENCES releases(id) ON DELETE CASCADE,
                     FOREIGN KEY (milestone_id) REFERENCES milestones(id) ON DELETE CASCADE
+                );
+
+                CREATE TABLE IF NOT EXISTS ack_token (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    release_id INTEGER NOT NULL,
+                    milestone_id INTEGER NOT NULL UNIQUE,
+                    token_hash TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    used_at TEXT,
+                    ack_id INTEGER,
+                    FOREIGN KEY (release_id) REFERENCES releases(id) ON DELETE CASCADE,
+                    FOREIGN KEY (milestone_id) REFERENCES milestones(id) ON DELETE CASCADE,
+                    FOREIGN KEY (ack_id) REFERENCES milestone_ack(id) ON DELETE SET NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS email_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    release_id INTEGER NOT NULL,
+                    milestone_id INTEGER NOT NULL,
+                    notification_id INTEGER,
+                    template_name TEXT NOT NULL,
+                    recipient TEXT NOT NULL,
+                    token_id INTEGER,
+                    subject TEXT NOT NULL,
+                    sent_at TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'sent',
+                    error TEXT,
+                    FOREIGN KEY (release_id) REFERENCES releases(id) ON DELETE CASCADE,
+                    FOREIGN KEY (milestone_id) REFERENCES milestones(id) ON DELETE CASCADE,
+                    FOREIGN KEY (notification_id) REFERENCES notification_log(id) ON DELETE SET NULL,
+                    FOREIGN KEY (token_id) REFERENCES ack_token(id) ON DELETE SET NULL
                 );
 
                 CREATE TABLE IF NOT EXISTS starlight_status (
@@ -150,6 +187,29 @@ class BoaStorage:
             if "note" not in ack_columns:
                 connection.execute(
                     "ALTER TABLE milestone_ack ADD COLUMN note TEXT NOT NULL DEFAULT ''"
+                )
+            if "ack_name" not in ack_columns:
+                connection.execute(
+                    "ALTER TABLE milestone_ack ADD COLUMN ack_name TEXT NOT NULL DEFAULT ''"
+                )
+            connection.execute(
+                """
+                UPDATE milestone_ack
+                SET ack_name = owner
+                WHERE ack_name = ''
+                """
+            )
+            milestone_columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(milestones)").fetchall()
+            }
+            if "note" not in milestone_columns:
+                connection.execute(
+                    "ALTER TABLE milestones ADD COLUMN note TEXT NOT NULL DEFAULT ''"
+                )
+            if "email" not in milestone_columns:
+                connection.execute(
+                    "ALTER TABLE milestones ADD COLUMN email TEXT NOT NULL DEFAULT ''"
                 )
             bug_snapshot_columns = {
                 str(row["name"])
@@ -258,8 +318,8 @@ class BoaStorage:
 
             connection.executemany(
                 """
-                INSERT INTO milestones (release_id, name, expected, owner)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO milestones (release_id, name, expected, owner, email, note)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
@@ -267,6 +327,8 @@ class BoaStorage:
                         milestone.name,
                         milestone.expected.isoformat(),
                         milestone.owner,
+                        milestone.email or "",
+                        milestone.note or "",
                     )
                     for milestone in blueprint.milestones
                 ],
@@ -306,7 +368,7 @@ class BoaStorage:
 
             milestone_rows = connection.execute(
                 """
-                SELECT id, release_id, name, expected, owner
+                SELECT id, release_id, name, expected, owner, email, note
                 FROM milestones
                 WHERE release_id = ?
                 ORDER BY expected ASC, id ASC
@@ -323,6 +385,7 @@ class BoaStorage:
                     name=str(row["name"]),
                     expected=date.fromisoformat(str(row["expected"])),
                     owner=str(row["owner"]),
+                    note=str(row["note"]) if row["note"] else None,
                 )
                 for row in milestone_rows
             ),
@@ -334,7 +397,7 @@ class BoaStorage:
         with self.connect() as connection:
             rows = connection.execute(
                 """
-                SELECT id, release_id, name, expected, owner
+                SELECT id, release_id, name, expected, owner, email, note
                 FROM milestones
                 WHERE release_id = ?
                 ORDER BY expected ASC, id ASC
@@ -349,6 +412,7 @@ class BoaStorage:
                 name=str(row["name"]),
                 expected=date.fromisoformat(str(row["expected"])),
                 owner=str(row["owner"]),
+                note=str(row["note"]) if row["note"] else None,
             )
             for row in rows
         ]
@@ -417,10 +481,17 @@ class BoaStorage:
         with self.connect() as connection:
             cursor = connection.execute(
                 """
-                INSERT INTO milestones (release_id, name, expected, owner)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO milestones (release_id, name, expected, owner, email, note)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (release_id, milestone.name, milestone.expected.isoformat(), milestone.owner),
+                (
+                    release_id,
+                    milestone.name,
+                    milestone.expected.isoformat(),
+                    milestone.owner,
+                    (milestone.email or ""),
+                    (milestone.note or ""),
+                ),
             )
             milestone_id = int(cursor.lastrowid)
         return self.get_milestone(milestone_id)
@@ -430,10 +501,17 @@ class BoaStorage:
             cursor = connection.execute(
                 """
                 UPDATE milestones
-                SET name = ?, expected = ?, owner = ?
+                SET name = ?, expected = ?, owner = ?, email = ?, note = ?
                 WHERE id = ?
                 """,
-                (milestone.name, milestone.expected.isoformat(), milestone.owner, milestone_id),
+                (
+                    milestone.name,
+                    milestone.expected.isoformat(),
+                    milestone.owner,
+                    (milestone.email or ""),
+                    (milestone.note or ""),
+                    milestone_id,
+                ),
             )
             if cursor.rowcount == 0:
                 raise KeyError(f"Milestone {milestone_id} was not found.")
@@ -449,7 +527,7 @@ class BoaStorage:
         with self.connect() as connection:
             row = connection.execute(
                 """
-                SELECT id, release_id, name, expected, owner
+                SELECT id, release_id, name, expected, owner, email, note
                 FROM milestones
                 WHERE id = ?
                 """,
@@ -464,49 +542,24 @@ class BoaStorage:
             name=str(row["name"]),
             expected=date.fromisoformat(str(row["expected"])),
             owner=str(row["owner"]),
+            note=str(row["note"]) if row["note"] else None,
+            email=str(row["email"]) if row["email"] else None,
         )
 
-    def ack_milestone(self, milestone_id: int, note: str) -> AckRecord:
+    def ack_milestone(self, milestone_id: int, ack_name: str, note: str) -> AckRecord:
         milestone = self.get_milestone(milestone_id)
         with self.connect() as connection:
-            existing = connection.execute(
-                """
-                SELECT id, release_id, milestone_id, owner, acked_at, note
-                FROM milestone_ack
-                WHERE milestone_id = ?
-                ORDER BY acked_at DESC, id DESC
-                LIMIT 1
-                """,
-                (milestone_id,),
-            ).fetchone()
-            if existing is not None:
-                connection.execute(
-                    """
-                    UPDATE milestone_ack
-                    SET note = ?
-                    WHERE id = ?
-                    """,
-                    (note, int(existing["id"])),
-                )
-                return AckRecord(
-                    id=int(existing["id"]),
-                    release_id=int(existing["release_id"]),
-                    milestone_id=int(existing["milestone_id"]),
-                    owner=str(existing["owner"]),
-                    acked_at=datetime.fromisoformat(str(existing["acked_at"])),
-                    note=note,
-                )
-
             acked_at = datetime.now(timezone.utc).replace(microsecond=0)
             cursor = connection.execute(
                 """
-                INSERT INTO milestone_ack (release_id, milestone_id, owner, acked_at, note)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO milestone_ack (release_id, milestone_id, owner, ack_name, acked_at, note)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
                     milestone.release_id,
                     milestone.id,
                     milestone.owner,
+                    ack_name,
                     acked_at.isoformat(),
                     note,
                 ),
@@ -516,7 +569,7 @@ class BoaStorage:
             id=ack_id,
             release_id=milestone.release_id,
             milestone_id=milestone.id,
-            owner=milestone.owner,
+            ack_name=ack_name,
             acked_at=acked_at,
             note=note,
         )
@@ -868,6 +921,184 @@ class BoaStorage:
             sent_at=sent_at,
         )
 
+    def create_or_replace_ack_token(
+        self,
+        *,
+        release_id: int,
+        milestone_id: int,
+        token_hash: str,
+        expires_at: datetime,
+    ) -> AckTokenRecord:
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        with self.connect() as connection:
+            cursor = connection.execute(
+                "INSERT INTO ack_token (release_id, milestone_id, token_hash, created_at, expires_at, used_at, ack_id) "
+                "VALUES (?, ?, ?, ?, ?, NULL, NULL) "
+                "ON CONFLICT(milestone_id) DO UPDATE SET "
+                "token_hash = excluded.token_hash, "
+                "created_at = excluded.created_at, "
+                "expires_at = excluded.expires_at, "
+                "used_at = NULL, "
+                "ack_id = NULL",
+                (release_id, milestone_id, token_hash, now.isoformat(), expires_at.isoformat()),
+            )
+            token_id = int(cursor.lastrowid)
+        return self.get_ack_token(token_id)
+
+    def get_ack_token(self, token_id: int) -> AckTokenRecord:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT id, release_id, milestone_id, token_hash, created_at, expires_at, used_at, ack_id "
+                "FROM ack_token WHERE id = ?",
+                (token_id,),
+            ).fetchone()
+        if row is None:
+            raise KeyError(f"Ack token {token_id} was not found.")
+        return AckTokenRecord(
+            id=int(row["id"]),
+            release_id=int(row["release_id"]),
+            milestone_id=int(row["milestone_id"]),
+            token_hash=str(row["token_hash"]),
+            created_at=datetime.fromisoformat(str(row["created_at"])),
+            expires_at=datetime.fromisoformat(str(row["expires_at"])),
+            used_at=datetime.fromisoformat(str(row["used_at"])) if row["used_at"] else None,
+            ack_id=int(row["ack_id"]) if row["ack_id"] else None,
+        )
+
+    def get_ack_token_by_hash(self, token_hash: str) -> AckTokenRecord | None:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT id, release_id, milestone_id, token_hash, created_at, expires_at, used_at, ack_id "
+                "FROM ack_token WHERE token_hash = ?",
+                (token_hash,),
+            ).fetchone()
+        if row is None:
+            return None
+        return AckTokenRecord(
+            id=int(row["id"]),
+            release_id=int(row["release_id"]),
+            milestone_id=int(row["milestone_id"]),
+            token_hash=str(row["token_hash"]),
+            created_at=datetime.fromisoformat(str(row["created_at"])),
+            expires_at=datetime.fromisoformat(str(row["expires_at"])),
+            used_at=datetime.fromisoformat(str(row["used_at"])) if row["used_at"] else None,
+            ack_id=int(row["ack_id"]) if row["ack_id"] else None,
+        )
+
+    def mark_ack_token_used(
+        self,
+        token_id: int,
+        *,
+        ack_id: int,
+        used_at: datetime,
+    ) -> AckTokenRecord:
+        with self.connect() as connection:
+            connection.execute(
+                "UPDATE ack_token SET used_at = ?, ack_id = ? WHERE id = ?",
+                (used_at.isoformat(), ack_id, token_id),
+            )
+        return self.get_ack_token(token_id)
+
+    def log_email(
+        self,
+        *,
+        release_id: int,
+        milestone_id: int,
+        notification_id: int | None,
+        template_name: str,
+        recipient: str,
+        token_id: int | None,
+        subject: str,
+        sent_at: datetime,
+        status: str,
+        error: str | None = None,
+    ) -> EmailLogRecord:
+        with self.connect() as connection:
+            cursor = connection.execute(
+                "INSERT INTO email_log (release_id, milestone_id, notification_id, template_name, "
+                "recipient, token_id, subject, sent_at, status, error) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    release_id,
+                    milestone_id,
+                    notification_id,
+                    template_name,
+                    recipient,
+                    token_id,
+                    subject,
+                    sent_at.isoformat(),
+                    status,
+                    error,
+                ),
+            )
+            email_id = int(cursor.lastrowid)
+        return self.get_email_log(email_id)
+
+    def get_email_log(self, email_id: int) -> EmailLogRecord:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT id, release_id, milestone_id, notification_id, template_name, "
+                "recipient, token_id, subject, sent_at, status, error "
+                "FROM email_log WHERE id = ?",
+                (email_id,),
+            ).fetchone()
+        if row is None:
+            raise KeyError(f"Email log {email_id} was not found.")
+        return EmailLogRecord(
+            id=int(row["id"]),
+            release_id=int(row["release_id"]),
+            milestone_id=int(row["milestone_id"]),
+            notification_id=int(row["notification_id"]) if row["notification_id"] else None,
+            template_name=str(row["template_name"]),
+            recipient=str(row["recipient"]),
+            token_id=int(row["token_id"]) if row["token_id"] else None,
+            subject=str(row["subject"]),
+            sent_at=datetime.fromisoformat(str(row["sent_at"])),
+            status=str(row["status"]),
+            error=str(row["error"]) if row["error"] else None,
+        )
+
+    def list_email_logs(
+        self,
+        *,
+        release_id: int | None = None,
+        milestone_id: int | None = None,
+    ) -> list[EmailLogRecord]:
+        where: list[str] = []
+        params: list[int] = []
+        if release_id is not None:
+            where.append("release_id = ?")
+            params.append(release_id)
+        if milestone_id is not None:
+            where.append("milestone_id = ?")
+            params.append(milestone_id)
+
+        query = "SELECT id, release_id, milestone_id, notification_id, template_name, "
+        query += "recipient, token_id, subject, sent_at, status, error FROM email_log"
+        if where:
+            query += f" WHERE {' AND '.join(where)}"
+        query += " ORDER BY sent_at DESC, id DESC"
+
+        with self.connect() as connection:
+            rows = connection.execute(query, params).fetchall()
+
+        return [
+            EmailLogRecord(
+                id=int(row["id"]),
+                release_id=int(row["release_id"]),
+                milestone_id=int(row["milestone_id"]),
+                notification_id=int(row["notification_id"]) if row["notification_id"] else None,
+                template_name=str(row["template_name"]),
+                recipient=str(row["recipient"]),
+                token_id=int(row["token_id"]) if row["token_id"] else None,
+                subject=str(row["subject"]),
+                sent_at=datetime.fromisoformat(str(row["sent_at"])),
+                status=str(row["status"]),
+                error=str(row["error"]) if row["error"] else None,
+            )
+            for row in rows
+        ]
+
     def list_notifications(
         self,
         *,
@@ -910,6 +1141,7 @@ class BoaStorage:
         timeline = self.get_release_timeline(milestone.release_id)
         timeline_item = next(item for item in timeline.milestones if item.id == milestone_id)
         notifications = tuple(self.list_notifications(milestone_id=milestone_id))
+        emails = tuple(self.list_email_logs(milestone_id=milestone_id))
         return ReminderState(
             release_id=timeline_item.release_id,
             milestone_id=timeline_item.id,
@@ -924,6 +1156,7 @@ class BoaStorage:
                 as_of=as_of,
             ),
             notifications=notifications,
+            emails=emails,
         )
 
     def list_release_reminder_states(self, release_id: int, *, as_of: date) -> list[ReminderState]:
@@ -932,9 +1165,14 @@ class BoaStorage:
         for notification in self.list_notifications(release_id=release_id):
             notifications_by_milestone.setdefault(notification.milestone_id, []).append(notification)
 
+        emails_by_milestone: dict[int, list[EmailLogRecord]] = {}
+        for email in self.list_email_logs(release_id=release_id):
+            emails_by_milestone.setdefault(email.milestone_id, []).append(email)
+
         states: list[ReminderState] = []
         for item in timeline.milestones:
             notifications = tuple(notifications_by_milestone.get(item.id, []))
+            emails = tuple(emails_by_milestone.get(item.id, []))
             states.append(
                 ReminderState(
                     release_id=item.release_id,
@@ -950,6 +1188,7 @@ class BoaStorage:
                         as_of=as_of,
                     ),
                     notifications=notifications,
+                    emails=emails,
                 )
             )
         return states
@@ -995,6 +1234,16 @@ class BoaStorage:
                     milestones.name,
                     milestones.expected,
                     milestones.owner,
+                    milestones.email,
+                    milestones.note,
+                    (
+                        SELECT milestone_ack.ack_name
+                        FROM milestone_ack
+                        WHERE milestone_ack.milestone_id = milestones.id
+                        ORDER BY milestone_ack.acked_at DESC, milestone_ack.id DESC
+                        LIMIT 1
+                    ) AS ack_name
+                    ,
                     (
                         SELECT milestone_ack.acked_at
                         FROM milestone_ack
@@ -1016,6 +1265,29 @@ class BoaStorage:
                 """,
                 (release_id,),
             ).fetchall()
+            ack_rows = connection.execute(
+                """
+                SELECT id, release_id, milestone_id, ack_name, owner, acked_at, note
+                FROM milestone_ack
+                WHERE release_id = ?
+                ORDER BY acked_at DESC, id DESC
+                """,
+                (release_id,),
+            ).fetchall()
+
+        ack_history_by_milestone: dict[int, list[AckRecord]] = {}
+        for row in ack_rows:
+            milestone_id = int(row["milestone_id"])
+            ack_history_by_milestone.setdefault(milestone_id, []).append(
+                AckRecord(
+                    id=int(row["id"]),
+                    release_id=int(row["release_id"]),
+                    milestone_id=milestone_id,
+                    ack_name=str(row["ack_name"]) if row["ack_name"] else str(row["owner"]),
+                    acked_at=datetime.fromisoformat(str(row["acked_at"])),
+                    note=str(row["note"]) if row["note"] is not None else "",
+                )
+            )
 
         return ReleaseTimeline(
             release=release,
@@ -1026,12 +1298,16 @@ class BoaStorage:
                     name=str(row["name"]),
                     expected=date.fromisoformat(str(row["expected"])),
                     owner=str(row["owner"]),
+                    email=str(row["email"]) if row["email"] else None,
+                    note=str(row["note"]) if row["note"] else None,
                     acked_at=(
                         datetime.fromisoformat(str(row["acked_at"]))
                         if row["acked_at"] is not None
                         else None
                     ),
+                    ack_name=str(row["ack_name"]) if row["ack_name"] else None,
                     ack_note=str(row["ack_note"]) if row["ack_note"] is not None else None,
+                    ack_trail=tuple(ack_history_by_milestone.get(int(row["id"]), [])),
                 )
                 for row in milestone_rows
             ),

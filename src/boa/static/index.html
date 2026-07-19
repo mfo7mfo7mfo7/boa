@@ -3,10 +3,22 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Boa</title>
-    <link rel="stylesheet" href="/static/app.css?v=starlight-28">
+    <title>BOA - Reveal the shape of a journey</title>
+    <meta name="description" content="BOA reveals the shape of a journey through starlight, bug wave, and milestone horizon." />
+    <meta name="theme-color" content="#fbf6ea" />
+    <meta property="og:title" content="BOA - Reveal the shape of a journey" />
+    <meta property="og:description" content="A quiet release horizon where starlight, storms, and milestones can be read at a glance." />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="/static/empty-galaxy-prince.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="BOA - Reveal the shape of a journey" />
+    <meta name="twitter:description" content="Read journey readiness through starlight, bug wave, and milestone horizon." />
+    <meta name="twitter:image" content="/static/empty-galaxy-prince.png" />
+    <link rel="icon" type="image/png" href="/static/boa-logo.png">
+    <link rel="stylesheet" href="/static/app.css?v=starlight-172">
   </head>
   <body>
+    <a class="skip-link" href="#timeline-board">Skip to the journey board</a>
     <div class="now-label hidden" aria-hidden="true">NOW</div>
     <div class="now-line hidden" aria-hidden="true"></div>
     <button class="now-toggle now-toggle-top hidden" type="button" aria-label="Expand upper Now line panel" aria-expanded="false" data-now-toggle="top">
@@ -18,12 +30,12 @@
     <div class="app-shell">
       <header class="masthead">
         <div class="brand">
-          <div class="brand-mark" aria-hidden="true">
+          <a class="brand-mark brand-home-link" href="/" aria-label="Return to the universe">
             <img src="/static/boa-logo.png" alt="" />
-          </div>
+          </a>
           <div class="brand-copy">
             <p class="brand-name">BOA</p>
-            <h1 class="brand-tagline">reveal the shape of a release</h1>
+            <h1 class="brand-tagline">reveal the shape of a journey</h1>
             <p id="board-scope" class="board-scope hidden"></p>
           </div>
         </div>
@@ -48,14 +60,68 @@
             </div>
           </div>
           <div class="legend-hover-shell">
-            <button class="quiet-info-button icon-button" type="button" aria-label="Boa header information" title="Boa keeps the near future in view while the horizon shifts.">
-              <span aria-hidden="true">i</span>
+            <button class="legend-trigger" type="button" aria-label="Timeline legend" title="Timeline legend">
+              <span>Legends</span>
             </button>
-            <section class="timeline-legend" aria-label="Timeline legend">
-              <div class="legend-item"><span class="legend-icon legend-expected">▼</span><span>Expected</span></div>
-              <div class="legend-item"><span class="legend-icon legend-acked">▲</span><span>Acked</span></div>
-              <div class="legend-item"><span class="legend-icon legend-pending">▲</span><span>Pending</span></div>
-              <div class="legend-item"><span class="legend-icon legend-overdue">▲</span><span>Overdue</span></div>
+            <section class="timeline-legend" aria-label="Board legend">
+              <div class="legend-group">
+                <p class="legend-group-title">Milestones</p>
+                <div class="legend-item"><span class="legend-icon legend-expected">▼</span><span>Expected</span></div>
+                <div class="legend-item"><span class="legend-icon legend-acked">▲</span><span>Acked</span></div>
+                <div class="legend-item"><span class="legend-icon legend-pending">▲</span><span>Pending</span></div>
+                <div class="legend-item"><span class="legend-icon legend-overdue">▲</span><span>Overdue</span></div>
+              </div>
+              <div class="legend-group">
+                <p class="legend-group-title">Bug Wave</p>
+                <div class="legend-item legend-item-block">
+                  <span class="legend-swatch legend-bugwave-mark" aria-hidden="true">
+                    <svg viewBox="0 0 34 18" class="legend-swatch-svg legend-bugwave-svg legend-bugwave-svg-calm">
+                      <path d="M2 13.4 C7 12.6, 11 10.4, 16 10.2 C21 10, 24.5 10.8, 32 8.3" class="legend-bugwave-stroke"></path>
+                      <circle cx="31" cy="8" r="2.1" class="legend-bugwave-dot"></circle>
+                    </svg>
+                  </span>
+                  <span>Lower ridge, quieter storms</span>
+                </div>
+                <div class="legend-item legend-item-block">
+                  <span class="legend-swatch legend-bugwave-mark" aria-hidden="true">
+                    <svg viewBox="0 0 34 18" class="legend-swatch-svg legend-bugwave-svg legend-bugwave-svg-active">
+                      <path d="M2 14.2 C7.4 13.6, 11.2 6.7, 16.2 7.2 C21.5 7.8, 24.4 12.5, 32 5.8" class="legend-bugwave-stroke"></path>
+                      <circle cx="31" cy="5" r="2.1" class="legend-bugwave-dot"></circle>
+                    </svg>
+                  </span>
+                  <span>Higher ridge, heavier weather</span>
+                </div>
+              </div>
+              <div class="legend-group">
+                <p class="legend-group-title">Starlight</p>
+                <div class="legend-item legend-item-block">
+                  <span class="legend-swatch legend-starlight-mark" aria-hidden="true">
+                    <svg viewBox="0 0 34 18" class="legend-swatch-svg legend-starlight-svg legend-starlight-svg-faint">
+                      <path d="M2 11.3 C8.2 11.1, 12.8 10.8, 16.9 10.2 C22.2 9.4, 26.2 8.9, 32 8.1" class="legend-starlight-line"></path>
+                      <path d="M17 3.9 L18.8 7.2 L22.5 7.8 L19.8 10.2 L20.6 13.9 L17 12.1 L13.4 13.9 L14.2 10.2 L11.5 7.8 L15.2 7.2 Z" class="legend-starlight-star"></path>
+                    </svg>
+                  </span>
+                  <span>0-24 Gathering</span>
+                </div>
+                <div class="legend-item legend-item-block">
+                  <span class="legend-swatch legend-starlight-mark" aria-hidden="true">
+                    <svg viewBox="0 0 34 18" class="legend-swatch-svg legend-starlight-svg legend-starlight-svg-mid">
+                      <path d="M2 12.1 C8.1 11.7, 12.7 10.9, 16.9 9.7 C22.1 8.3, 26.4 7.5, 32 6.8" class="legend-starlight-line"></path>
+                      <path d="M17 3.2 L19.2 6.9 L23.2 7.5 L20.2 10.2 L21.1 14.2 L17 12.2 L12.9 14.2 L13.8 10.2 L10.8 7.5 L14.8 6.9 Z" class="legend-starlight-star"></path>
+                    </svg>
+                  </span>
+                  <span>25-74 Building light</span>
+                </div>
+                <div class="legend-item legend-item-block">
+                  <span class="legend-swatch legend-starlight-mark" aria-hidden="true">
+                    <svg viewBox="0 0 34 18" class="legend-swatch-svg legend-starlight-svg legend-starlight-svg-bright">
+                      <path d="M2 12.6 C8.1 12, 13.1 10.8, 17.1 8.9 C22.4 6.5, 26.6 5.4, 32 4.8" class="legend-starlight-line"></path>
+                      <path d="M17 2.7 L19.4 6.8 L23.8 7.4 L20.6 10.4 L21.5 14.8 L17 12.6 L12.5 14.8 L13.4 10.4 L10.2 7.4 L14.6 6.8 Z" class="legend-starlight-star"></path>
+                    </svg>
+                  </span>
+                  <span>75-100 Ready sky</span>
+                </div>
+              </div>
             </section>
           </div>
         </div>
@@ -63,13 +129,13 @@
 
       <main class="release-stage">
         <section id="empty-state" class="empty-state hidden">
-          <p id="empty-eyebrow" class="empty-eyebrow">No release yet</p>
-          <h2 id="empty-title">Start the first snake.</h2>
-          <p id="empty-body">The timeline appears as soon as a release arrives.</p>
+          <p id="empty-eyebrow" class="empty-eyebrow">No journey yet</p>
+          <h2 id="empty-title">The sky is waiting for its first journey.</h2>
+          <p id="empty-body">A quiet horizon appears as soon as the first journey begins.</p>
           <div class="empty-actions">
             <button id="empty-new-release-button" class="primary-button empty-action-primary" type="button">Begin a Journey</button>
-            <button id="seed-button" class="ghost-button empty-action-secondary" type="button">Load Demo Release</button>
-            <a id="empty-return-link" class="ghost-button empty-action-secondary empty-action-return hidden" href="/">Return to the Universe</a>
+            <button id="seed-button" class="ghost-button empty-action-secondary paper-quiet-trigger" type="button">Open the Demo Sky</button>
+            <a id="empty-return-link" class="ghost-button empty-action-secondary empty-action-return paper-quiet-trigger hidden" href="/">Return to the Universe</a>
           </div>
         </section>
 
@@ -82,284 +148,322 @@
       </main>
     </div>
 
-    <dialog id="journey-dialog" class="journey-dialog">
-      <div class="journey-surface">
-        <div class="dialog-head journey-head">
-          <div>
+    <dialog id="journey-dialog" class="journey-dialog paper-dialog">
+      <div class="journey-surface paper-surface paper-surface-large dialog-surface dialog-surface-large">
+        <div class="dialog-head paper-dialog-head dialog-head-context">
+          <div class="dialog-head-copy">
             <p id="journey-kicker" class="dialog-kicker">Begin a Journey</p>
-            <h2 id="journey-title">Blueprint Editor</h2>
+            <div class="dialog-title-row">
+              <h2 id="journey-title">Shape the journey</h2>
+              <p id="journey-intro" class="dialog-intro">Place the first points of this release on the horizon.</p>
+            </div>
+            <form id="journey-form" class="dialog-identity-row journey-identity-row" autocomplete="off">
+              <label class="journey-identity-field" aria-label="Product">
+                <input id="journey-product" type="text" placeholder="Product">
+              </label>
+              <label class="journey-identity-field journey-identity-field-version" aria-label="Version">
+                <input id="journey-version" type="text" placeholder="Version">
+              </label>
+            </form>
           </div>
-          <button id="close-journey-dialog-button" class="icon-button" type="button" aria-label="Close">×</button>
+          <button id="close-journey-dialog-button" class="icon-button paper-icon-button paper-close-button dialog-close-button" type="button" aria-label="Close"></button>
         </div>
 
-        <div class="journey-layout">
-          <form id="journey-form" class="journey-basics">
-            <label>
-              <span>Product</span>
-              <input id="journey-product" type="text" placeholder="FortiSASE">
-            </label>
-            <label>
-              <span>Version</span>
-              <input id="journey-version" type="text" placeholder="26.4">
-            </label>
-            <label>
-              <span>Secret</span>
-              <input id="journey-secret" type="text" placeholder="boa-264">
-            </label>
-            <button id="journey-create-button" class="primary-button" type="submit">Done</button>
-            <p id="journey-message" class="form-note" aria-live="polite"></p>
-          </form>
-
-          <section class="journey-builder" aria-label="Journey timeline builder">
-            <form id="journey-milestone-popover" class="journey-milestone-popover hidden">
+        <div class="journey-layout dialog-body dialog-body-canvas">
+          <section class="journey-builder dialog-section" aria-label="Journey timeline builder">
+            <form id="journey-milestone-popover" class="journey-milestone-popover paper-card dialog-floating-card dialog-floating-card-anchored dialog-form dialog-form-compact hidden">
               <div class="journey-popover-head">
-                <span class="journey-popover-kicker">Milestone</span>
+                <div class="journey-popover-heading">
+                  <span class="journey-popover-kicker dialog-title-2">Milestone</span>
+                  <p id="journey-milestone-title" class="journey-popover-title dialog-title-1">Dev Ready</p>
+                </div>
                 <div class="journey-delete-shell">
-                  <button id="journey-milestone-menu" class="journey-milestone-menu" type="button" aria-label="Milestone actions">⋯</button>
-                  <div id="journey-milestone-menu-panel" class="journey-milestone-menu-panel hidden">
-                    <button id="journey-milestone-delete" class="journey-milestone-delete" type="button">Delete Milestone</button>
+                  <button id="journey-milestone-menu" class="journey-milestone-menu paper-icon-button paper-icon-button-compact" type="button" aria-label="Milestone actions">⋯</button>
+                  <div id="journey-milestone-menu-panel" class="journey-milestone-menu-panel paper-menu hidden">
+                    <button id="journey-milestone-delete" class="journey-milestone-delete" type="button">Remove milestone</button>
                   </div>
                 </div>
               </div>
-              <label>
-                <input id="journey-milestone-name" type="text" placeholder="Regression Ready">
+              <p id="journey-milestone-date" class="journey-popover-date dialog-title-3">April 23, 2026</p>
+              <label class="journey-popover-field paper-field">
+                <span class="dialog-title-2">Milestone name</span>
+                <input id="journey-milestone-name" class="dialog-input" type="text" placeholder="Regression Ready">
               </label>
-              <label>
-                Owner
-                <input id="journey-milestone-owner" type="text" placeholder="alice@example.com">
+              <div class="journey-popover-meta-grid">
+                <label class="journey-popover-field paper-field">
+                  <span class="dialog-title-2">Keeper</span>
+                  <input id="journey-milestone-owner" class="dialog-input" type="text" placeholder="alice">
+                </label>
+                <label class="journey-popover-field paper-field">
+                  <span class="dialog-title-2">Email</span>
+                  <input id="journey-milestone-email" class="dialog-input" type="email" placeholder="alice@example.com">
+                </label>
+              </div>
+              <label class="journey-popover-field paper-field">
+                <span class="dialog-title-2">Quiet note</span>
+                <textarea id="journey-milestone-note" class="dialog-textarea" rows="4" placeholder="Why this point in the journey matters"></textarea>
               </label>
             </form>
             <div class="journey-canvas-shell">
               <svg id="journey-timeline" class="journey-timeline" viewBox="0 0 1120 260" preserveAspectRatio="none"></svg>
-              <button id="journey-add-milestone" class="journey-add-milestone" type="button" aria-label="Add milestone">+</button>
+              <button id="journey-add-milestone" class="journey-add-milestone paper-icon-button paper-icon-button-compact" type="button" aria-label="Add milestone">+</button>
             </div>
           </section>
         </div>
-      </div>
-    </dialog>
-
-    <dialog id="composer-dialog" class="composer-dialog">
-      <div class="dialog-surface">
-        <div class="dialog-head">
-          <div>
-            <p class="dialog-kicker">Studio</p>
-            <h2>Release rituals</h2>
+        <div class="paper-dialog-footer dialog-footer dialog-footer-grid dialog-footer-keyed">
+          <button id="journey-create-button" class="primary-button paper-button paper-button-primary" type="submit" form="journey-form">Done</button>
+          <div class="journey-protection-shell" title="Used to protect edits, acknowledgements, and removal.">
+            <input id="journey-secret" class="journey-protection-input dialog-key-input" type="text" form="journey-form" placeholder="Journey key" aria-label="Journey key. Used to protect edits, acknowledgements, and removal.">
           </div>
-          <button id="close-dialog-button" class="icon-button" type="button" aria-label="Close">×</button>
-        </div>
-
-        <div class="dialog-grid">
-          <section class="dialog-panel">
-            <h3>New release</h3>
-            <form id="create-form" class="stack-form">
-              <label>
-                Product
-                <input id="create-product" type="text" placeholder="FortiSASE">
-              </label>
-              <label>
-                Version
-                <input id="create-version" type="text" placeholder="26.2">
-              </label>
-              <label>
-                Secret
-                <input id="create-secret" type="text" placeholder="boa-262">
-              </label>
-              <button class="primary-button" type="submit">Create Release</button>
-              <p id="create-message" class="form-note" aria-live="polite"></p>
-            </form>
-          </section>
-
-          <section class="dialog-panel import-journey-panel">
-            <h3>Bring a Journey from YAML</h3>
-            <form id="import-form" class="stack-form">
-              <label class="file-field">
-                Journey scroll
-                <input id="import-file" type="file" accept=".yaml,.yml,text/yaml,text/x-yaml">
-              </label>
-              <fieldset class="choice-field">
-                <legend>Kickoff</legend>
-                <label class="choice-pill">
-                  <input id="import-keep-original" name="import-mode" type="radio" value="keep" checked>
-                  <span>Keep its first day</span>
-                </label>
-                <label class="choice-pill">
-                  <input id="import-shift-timeline" name="import-mode" type="radio" value="shift">
-                  <span>Choose a new first day</span>
-                </label>
-              </fieldset>
-              <label id="import-kickoff-label" class="hidden">
-                First day
-                <input id="import-kickoff-date" type="date">
-              </label>
-              <button class="primary-button" type="submit">Prepare Journey</button>
-              <p id="import-message" class="form-note" aria-live="polite"></p>
-            </form>
-          </section>
-
-          <section class="dialog-panel">
-            <div class="dialog-row">
-              <div>
-                <h3>Edit release</h3>
-                <p class="summary-line">Adjust milestones without leaving the renderer.</p>
-              </div>
-            </div>
-            <form id="edit-form" class="stack-form">
-              <label>
-                Release
-                <select id="edit-release"></select>
-              </label>
-              <div class="mini-grid">
-                <label>
-                  Product
-                  <input id="edit-product" type="text" placeholder="FortiSASE">
-                </label>
-                <label>
-                  Version
-                  <input id="edit-version" type="text" placeholder="26.3">
-                </label>
-              </div>
-              <label>
-                Secret
-                <input id="edit-secret" type="text" placeholder="boa-263">
-              </label>
-              <button id="edit-release-save-button" class="ghost-button" type="button">Save release basics</button>
-              <div class="editor-divider"></div>
-              <div id="edit-milestone-list" class="milestone-editor-list"></div>
-              <div class="editor-divider"></div>
-              <div class="stack-form">
-                <h4 class="mini-heading">Add milestone</h4>
-                <label>
-                  Name
-                  <input id="edit-new-name" type="text" placeholder="Regression Ready">
-                </label>
-                <label>
-                  Expected
-                  <input id="edit-new-date" type="date">
-                </label>
-                <label>
-                  Owner
-                  <input id="edit-new-owner" type="text" placeholder="alice">
-                </label>
-                <button id="edit-add-button" class="ghost-button" type="submit">Add milestone</button>
-              </div>
-              <p id="edit-message" class="form-note" aria-live="polite"></p>
-            </form>
-          </section>
-
-          <section class="dialog-panel">
-            <div class="dialog-row">
-              <div>
-                <h3>Notifications</h3>
-                <p class="summary-line">See current and pending reminder pressure for one release at a time.</p>
-              </div>
-              <span id="reminder-status-pill" class="status-pill">Checking</span>
-            </div>
-            <div class="stack-form">
-              <label>
-                Release
-                <select id="reminder-release"></select>
-              </label>
-              <div class="dialog-row compact-row">
-                <p class="summary-line">Refresh the reminder engine before checking pending pressure.</p>
-                <button id="reminder-run-button" class="ghost-button" type="button">Run reminders now</button>
-              </div>
-              <div id="reminder-summary" class="subtle-block">Choose a release to inspect reminder state.</div>
-              <div id="reminder-list" class="signal-list"></div>
-              <p id="reminder-message" class="form-note" aria-live="polite"></p>
-            </div>
-          </section>
-
-          <section class="dialog-panel">
-            <div class="dialog-row">
-              <div>
-                <h3>Bug snapshot plugin</h3>
-                <p class="summary-line">A minimal runner for plugin-backed bug snapshot ingestion.</p>
-              </div>
-              <span id="plugin-status-pill" class="status-pill">Checking</span>
-            </div>
-            <form id="plugin-form" class="stack-form">
-              <label>
-                Release
-                <select id="plugin-release"></select>
-              </label>
-              <label>
-                Runner
-                <select id="plugin-runner"></select>
-              </label>
-              <div id="plugin-details" class="subtle-block">Looking for a bug snapshot plugin contract.</div>
-              <label class="file-field">
-                Import file
-                <input id="plugin-file" type="file" accept=".json,.csv,.yaml,.yml,text/csv,application/json,text/plain,text/yaml,text/x-yaml">
-              </label>
-              <label>
-                Manual payload
-                <textarea id="plugin-payload" rows="4" placeholder='{"open_bug_count":37}'></textarea>
-              </label>
-              <button class="primary-button" type="submit">Run snapshot import</button>
-              <p id="plugin-message" class="form-note" aria-live="polite"></p>
-            </form>
-          </section>
-
-          <section class="dialog-panel dialog-panel-wide">
-            <div class="dialog-row">
-              <div>
-                <h3>Board state</h3>
-                <p id="board-summary" class="summary-line">0 releases</p>
-              </div>
-              <span id="status-pill" class="status-pill">Loading</span>
-            </div>
-            <div class="dialog-row">
-              <div>
-                <h3>Demo</h3>
-                <p class="summary-line">Populate a sample snake for the renderer.</p>
-              </div>
-              <button id="dialog-seed-button" class="ghost-button" type="button">Load Demo Release</button>
-            </div>
-          </section>
+          <p id="journey-message" class="form-note paper-note" aria-live="polite"></p>
         </div>
       </div>
     </dialog>
 
-    <dialog id="ack-dialog" class="ack-dialog">
-      <div class="ack-surface">
-        <div class="dialog-head">
-          <div>
+    <dialog id="import-dialog" class="import-dialog paper-dialog">
+      <div class="import-surface paper-surface dialog-surface">
+        <div class="dialog-head paper-dialog-head dialog-head-double">
+          <div class="dialog-head-copy">
+            <p class="dialog-kicker">Bring a Journey</p>
+            <div class="dialog-title-row">
+              <h2>Prepare a scroll for the sky</h2>
+              <p class="dialog-intro">Bring in a YAML scroll and reopen it as a journey.</p>
+            </div>
+          </div>
+          <button id="close-import-dialog-button" class="icon-button paper-icon-button paper-close-button dialog-close-button" type="button" aria-label="Close"></button>
+        </div>
+
+        <form id="import-form" class="import-form-stack dialog-form dialog-form-stack">
+          <label class="paper-field paper-section paper-section-soft dialog-panel dialog-panel-soft import-scroll-field file-field dialog-section">
+            <span class="import-section-title dialog-title-2">Journey scroll</span>
+            <small class="import-section-note dialog-title-3">Choose a quiet YAML page and let BOA reopen it as a journey.</small>
+            <span class="import-file-shell">
+              <input id="import-file" type="file" accept=".yaml,.yml,text/yaml,text/x-yaml">
+              <span class="import-file-face" aria-hidden="true">
+                <span class="import-file-button">Choose scroll</span>
+                <span id="import-file-summary" class="import-file-summary">No scroll chosen yet</span>
+              </span>
+            </span>
+          </label>
+          <fieldset class="choice-field paper-choice-field paper-section paper-section-soft dialog-panel dialog-panel-soft import-kickoff-field dialog-section">
+            <legend class="dialog-title-2">Kickoff</legend>
+            <p class="import-section-note dialog-title-3">Keep the original first sunrise, or gently choose a new one.</p>
+            <label class="choice-pill">
+              <input id="import-keep-original" name="import-mode" type="radio" value="keep" checked>
+              <span>
+                <strong>Keep its first day</strong>
+                <small>Reopen the journey where its first light began.</small>
+              </span>
+            </label>
+            <label class="choice-pill">
+              <input id="import-shift-timeline" name="import-mode" type="radio" value="shift">
+              <span>
+                <strong>Choose a new first day</strong>
+                <small>Shift the sky to a new morning before it resumes.</small>
+              </span>
+            </label>
+          </fieldset>
+          <label id="import-kickoff-label" class="paper-field paper-section paper-section-soft dialog-panel dialog-panel-soft import-date-field dialog-section hidden">
+            <span class="import-section-title dialog-title-2">First day</span>
+            <small class="import-section-note dialog-title-3">A fresh morning for this imported journey.</small>
+            <span class="import-date-shell">
+              <input id="import-kickoff-date" class="dialog-input dialog-input-date" type="date">
+            </span>
+          </label>
+        </form>
+        <div class="paper-dialog-footer dialog-footer dialog-footer-inline import-footer">
+          <button class="primary-button paper-button paper-button-primary" type="submit" form="import-form">Prepare Journey</button>
+          <p id="import-message" class="form-note paper-note" aria-live="polite"></p>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="ack-dialog" class="ack-dialog paper-dialog">
+      <div class="ack-surface paper-surface dialog-surface">
+        <div class="dialog-head paper-dialog-head dialog-head-context">
+          <div class="dialog-head-copy">
             <p class="dialog-kicker">Acknowledge</p>
-            <h2>Quietly mark this milestone.</h2>
+            <div class="dialog-title-row">
+              <h2 id="ack-milestone-name">Quietly mark this milestone.</h2>
+              <p id="ack-milestone-date" class="dialog-intro">On the horizon</p>
+            </div>
+            <div class="dialog-identity-row ack-identity-row">
+              <p id="ack-release-name" class="ack-release-name dialog-title-1"></p>
+              <p id="ack-release-version" class="ack-release-version dialog-title-3"></p>
+            </div>
           </div>
-          <button id="close-ack-dialog-button" class="icon-button" type="button" aria-label="Close">×</button>
+          <div class="dialog-head-meta" aria-label="Acknowledgement date">
+            <p id="ack-date" class="dialog-updated-at"></p>
+          </div>
+          <button id="close-ack-dialog-button" class="icon-button paper-icon-button paper-close-button dialog-close-button" type="button" aria-label="Close"></button>
         </div>
 
-        <form id="ack-form" class="stack-form">
-          <div class="ack-summary">
-            <p id="ack-release-name" class="ack-release-name"></p>
-            <p id="ack-milestone-name" class="ack-milestone-name"></p>
+        <form id="ack-form" class="dialog-form dialog-form-stack" novalidate>
+          <div class="ack-form-grid dialog-body dialog-body-split dialog-section">
+            <section class="ack-panel dialog-panel" aria-label="Leave a mark">
+              <div class="ack-card-head">
+                <h3 class="dialog-title-1">Leave a mark</h3>
+                <p class="dialog-title-3">A quiet mark beside this milestone.</p>
+              </div>
+              <div class="ack-field ack-keeper-field" aria-label="Keeper">
+                <div class="ack-keeper-label-row">
+                  <span class="dialog-title-2">Keeper</span>
+                  <button id="ack-keeper-change-button" class="ack-keeper-change" type="button" title="Keeper is set on the milestone. Change it in Tend Journey.">Change in Tend Journey?</button>
+                </div>
+                <p id="ack-keeper-display" class="ack-keeper-readout">No keeper set</p>
+                <input id="ack-name" name="ack_name" type="hidden">
+              </div>
+              <label class="paper-field ack-field">
+                <span class="dialog-title-2">Quiet note <span class="field-optional paper-field-optional">(optional)</span></span>
+                <textarea id="ack-note" class="dialog-textarea observation-textarea ack-note-input" rows="4" placeholder="A short acknowledgement note"></textarea>
+              </label>
+            </section>
+            <section class="ack-trail dialog-panel dialog-panel-soft" aria-label="Acknowledgement trail">
+              <div class="ack-card-head">
+                <h3 class="dialog-title-1">Ack trail</h3>
+                <p class="dialog-title-3">Recent marks on this milestone.</p>
+              </div>
+              <div id="ack-trail" class="ack-trail-list"></div>
+              <p id="ack-hint" class="summary-line paper-note paper-note-inline dialog-body-note ack-hint">The ack trail will remember the keeper, date, and quiet note together.</p>
+            </section>
           </div>
-          <label>
-            Date
-            <input id="ack-date" type="text" readonly>
-          </label>
-          <label>
-            Secret
-            <input id="ack-secret" name="secret" type="password" placeholder="boa-262" required>
-          </label>
-          <label>
-            Note <span class="field-optional">(optional)</span>
-            <textarea id="ack-note" rows="4" placeholder="A short acknowledgement note"></textarea>
-          </label>
-          <p id="ack-hint" class="summary-line">The release secret is required to acknowledge or update the note.</p>
-          <button id="ack-submit-button" class="primary-button" type="submit">Acknowledge</button>
-          <p id="ack-message" class="form-note" aria-live="polite"></p>
+        </form>
+        <div class="paper-dialog-footer dialog-footer dialog-footer-grid dialog-footer-keyed ack-footer">
+          <button id="ack-submit-button" class="primary-button paper-button paper-button-primary" type="button">Acknowledge</button>
+          <div class="ack-key-shell" title="Used to protect acknowledgements and note updates.">
+            <input id="ack-secret" class="dialog-key-input ack-secret-input" name="secret" type="password" form="ack-form" placeholder="Journey key" aria-label="Journey key. Used to protect acknowledgements and note updates." required>
+          </div>
+          <p id="ack-message" class="form-note paper-note" aria-live="polite"></p>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="observation-dialog" class="observation-dialog paper-dialog">
+      <div class="observation-surface paper-surface dialog-surface dialog-surface-scrollable">
+        <div class="dialog-head paper-dialog-head dialog-head-context">
+          <div class="dialog-head-copy">
+            <p class="dialog-kicker">Observation Notebook</p>
+            <div class="dialog-title-row">
+              <h2>Today’s Reading</h2>
+              <p class="dialog-intro">A quiet notebook page for this journey today.</p>
+            </div>
+            <div class="dialog-identity-row">
+              <p id="observation-release-name" class="observation-release-name observation-title-1 dialog-title-1"></p>
+              <p id="observation-release-version" class="observation-meta-line observation-title-3 observation-release-version dialog-title-3"></p>
+            </div>
+          </div>
+          <div class="dialog-head-meta" aria-label="Observation status">
+            <p id="observation-last-updated" class="dialog-updated-at"></p>
+            <span id="observation-status-pill" class="status-pill paper-status-pill" hidden>Ready</span>
+          </div>
+          <button id="close-observation-dialog-button" class="icon-button paper-icon-button paper-close-button dialog-close-button" type="button" aria-label="Close"></button>
+        </div>
+
+        <form id="observation-form" class="observation-form dialog-form dialog-form-stack">
+          <div class="observation-workspace dialog-body dialog-body-split">
+            <div class="observation-main-column">
+              <label class="observation-card observation-card-whisper observation-field dialog-panel dialog-section">
+                <div class="observation-field-head">
+                  <span class="observation-title-1 dialog-title-1">Today’s Reading</span>
+                  <small class="observation-title-3 dialog-title-3">A short line for what the journey looks like now.</small>
+                </div>
+                <input id="observation-whisper" class="observation-input dialog-input" type="text" maxlength="280" placeholder="The journey is gathering confidence steadily.">
+              </label>
+
+              <section class="observation-card observation-card-details observation-field observation-detail-field dialog-panel dialog-section">
+                <div class="observation-field-head">
+                  <div>
+                    <span class="observation-title-1 dialog-title-1">Page Notes</span>
+                    <small class="observation-title-3 dialog-title-3">Use markdown if this page needs more room.</small>
+                  </div>
+                  <button id="observation-detail-preview-toggle" class="observation-detail-preview-toggle" type="button" aria-pressed="false" aria-label="Preview details markdown">
+                    <span class="observation-detail-preview-glyph" aria-hidden="true"></span>
+                    <span class="observation-detail-preview-label">Preview</span>
+                  </button>
+                </div>
+                <textarea id="observation-detail" class="observation-textarea dialog-textarea" rows="10" placeholder="Today’s reading&#10;&#10;You may write about:&#10;&#10;• A hill we crossed&#10;• A storm we discovered&#10;• A star that feels closer"></textarea>
+                <div id="observation-detail-preview" class="observation-detail-preview boa-note-body hidden" aria-live="polite"></div>
+              </section>
+            </div>
+
+            <aside class="observation-side-column">
+              <section class="observation-card observation-card-starlight dialog-panel dialog-section">
+                <div class="observation-section-head">
+                  <h3 class="observation-title-1 dialog-title-1">Starlight</h3>
+                  <p id="observation-starlight-readout" class="observation-starlight-readout observation-special-text">0% · Gathering</p>
+                </div>
+                <input id="observation-starlight" class="observation-starlight-slider observation-int-selector" type="range" min="0" max="100" step="1" value="0">
+
+                <div id="observation-state-summary" class="observation-title-3 observation-starlight-note dialog-title-3">No starlight has been observed for this journey yet.</div>
+
+                <div class="observation-starlight-section observation-starlight-trail">
+                  <p class="observation-title-2 dialog-title-2">Trail</p>
+                  <div id="observation-trail-summary" class="observation-trail-line observation-title-3 observation-starlight-note dialog-title-3">Meaningful starlight changes will appear here.</div>
+                </div>
+
+                <details class="observation-expand">
+                  <summary class="observation-title-2 dialog-title-2">Behind the Reading</summary>
+                  <p class="observation-title-3 dialog-title-3">Optional margin numbers, only if this page needs them.</p>
+                  <div class="observation-metrics-grid">
+                    <label class="observation-field">
+                      <span class="observation-title-3 dialog-title-3">Done</span>
+                      <input id="observation-done" class="observation-input observation-input-metric dialog-input-compact" type="number" min="0">
+                    </label>
+                    <label class="observation-field">
+                      <span class="observation-title-3 dialog-title-3">Total</span>
+                      <input id="observation-total" class="observation-input observation-input-metric dialog-input-compact" type="number" min="0">
+                    </label>
+                    <label class="observation-field">
+                      <span class="observation-title-3 dialog-title-3">Blocked</span>
+                      <input id="observation-blocked" class="observation-input observation-input-metric dialog-input-compact" type="number" min="0">
+                    </label>
+                  </div>
+                </details>
+              </section>
+
+              <section class="observation-card observation-card-storms dialog-panel dialog-section">
+                <div class="observation-storms-layout">
+                  <div class="observation-storms-copy">
+                    <div class="observation-section-head observation-section-head-compact">
+                      <h3 class="observation-title-1 dialog-title-1">Storms</h3>
+                    </div>
+                    <p class="observation-title-2 observation-storms-kicker dialog-title-2">Known troubles still in view</p>
+                    <div id="observation-storm-summary" class="observation-title-3 observation-storm-note dialog-title-3">Leave this blank if the weather is still unknown.</div>
+                  </div>
+
+                  <label class="observation-field observation-storms-field">
+                    <span class="observation-title-3 observation-storms-input-label dialog-title-3">Count</span>
+                    <input id="observation-storms" class="observation-input observation-input-count dialog-input-count" type="number" min="0" inputmode="numeric">
+                  </label>
+                </div>
+              </section>
+
+            </aside>
+          </div>
+
+          <div class="paper-dialog-footer dialog-footer dialog-footer-inline">
+            <button id="observation-save-button" class="primary-button paper-button paper-button-primary" type="submit">Continue the Journey</button>
+            <p id="observation-message" class="form-note paper-note" aria-live="polite"></p>
+          </div>
         </form>
       </div>
     </dialog>
 
     <div class="page-note-shell">
-      <button id="new-release-button" class="page-note-action" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="journey-action-menu" title="Begin a Journey">✦ Begin a Journey</button>
-      <div id="journey-action-menu" class="journey-action-menu hidden" role="menu">
+      <button id="new-release-button" class="page-note-action paper-quiet-trigger" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="journey-action-menu" title="Begin a Journey">✦ Begin a Journey</button>
+      <div id="journey-action-menu" class="journey-action-menu paper-menu hidden" role="menu">
         <button id="new-journey-option" class="journey-action-item" type="button" role="menuitem">Begin a New Journey</button>
         <button id="import-journey-option" class="journey-action-item" type="button" role="menuitem">Bring a Journey from YAML</button>
       </div>
+    </div>
+
+    <div class="hidden" aria-hidden="true">
+      <p id="board-summary"></p>
+      <span id="status-pill">Listening</span>
+    </div>
+
+    <div class="engine-note-shell">
+      <button id="engine-button" class="engine-note-action paper-quiet-trigger" type="button" aria-label="Open Engine Room" title="Engine Room">✦ Engine Room</button>
     </div>
 
     <template id="release-template">
@@ -367,14 +471,14 @@
         <div class="release-identity">
           <div class="release-heading">
             <div class="release-heading-copy">
-              <p class="release-product"></p>
+              <a class="release-product release-product-link"></a>
               <div class="release-version-row">
                 <h2 class="release-version"></h2>
                 <div class="release-menu-shell">
-                  <button class="release-menu-button" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Release actions">⌄</button>
-                  <div class="release-menu hidden" role="menu">
-                    <button class="release-menu-item" type="button" data-action="edit" role="menuitem">Edit</button>
-                    <button class="release-menu-item" type="button" data-action="export" role="menuitem">Download</button>
+                  <button class="release-menu-button" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Journey actions">⌄</button>
+                  <div class="release-menu paper-menu hidden" role="menu">
+                    <button class="release-menu-item" type="button" data-action="settings" role="menuitem">Tend Journey</button>
+                    <button class="release-menu-item" type="button" data-action="export" role="menuitem">Download Journey</button>
                     <button class="release-menu-item release-menu-item-danger" type="button" data-action="delete" role="menuitem">Delete</button>
                   </div>
                 </div>
@@ -383,16 +487,28 @@
           </div>
           <section class="starlight-summary hidden" aria-label="Starlight readiness">
             <p class="starlight-whisper"></p>
+            <button class="release-observe-button paper-quiet-trigger" type="button">Continue Observation</button>
           </section>
         </div>
         <div class="release-track">
           <svg class="release-canvas" viewBox="0 0 1120 280" preserveAspectRatio="xMidYMid meet"></svg>
-          <aside class="starlight-detail-card hidden" aria-live="polite">
+          <aside class="milestone-note-card paper-card paper-floating-card hidden" aria-live="polite">
+            <p class="milestone-note-kicker">Milestone Note</p>
+            <p class="milestone-note-title"></p>
+            <p class="milestone-note-date"></p>
+            <div class="milestone-note-body boa-note-body"></div>
+            <div class="milestone-ack-shell hidden">
+              <p class="milestone-ack-kicker">Acknowledged</p>
+              <p class="milestone-ack-meta"></p>
+              <div class="milestone-ack-body boa-note-body"></div>
+            </div>
+          </aside>
+          <aside class="starlight-detail-card paper-card paper-floating-card hidden" aria-live="polite">
             <p class="starlight-detail-kicker">Night Log</p>
             <p class="starlight-detail-value"></p>
             <p class="starlight-detail-date"></p>
             <p class="starlight-detail-whisper"></p>
-            <div class="starlight-detail-body"></div>
+            <div class="starlight-detail-body boa-note-body"></div>
             <dl class="starlight-detail-stats hidden">
               <div><dt>Done</dt><dd class="starlight-detail-done"></dd></div>
               <div><dt>Total</dt><dd class="starlight-detail-total"></dd></div>
@@ -403,6 +519,84 @@
       </article>
     </template>
 
-    <script src="/static/app.js?v=starlight-28" defer></script>
+    <script src="/static/app.js?v=starlight-173" defer></script>
+
+    <dialog id="engine-dialog" class="engine-dialog paper-dialog">
+      <div class="engine-surface paper-surface dialog-surface">
+        <div class="dialog-head paper-dialog-head dialog-head-double">
+          <div class="dialog-head-copy">
+            <p class="dialog-kicker">Engine Room</p>
+            <div class="dialog-title-row">
+              <h2>Delivery settings</h2>
+              <p class="dialog-intro">A small room for clocks, letters, and quiet machinery.</p>
+            </div>
+          </div>
+          <button id="close-engine-dialog-button" class="icon-button paper-icon-button paper-close-button dialog-close-button" type="button" aria-label="Close"></button>
+        </div>
+
+        <section class="engine-section dialog-form dialog-form-stack" aria-labelledby="engine-smtp-title">
+          <div class="engine-panel dialog-panel dialog-section">
+            <p class="engine-route-label dialog-title-2">World clock</p>
+            <div class="engine-section-head">
+              <div class="engine-section-title">
+                <span class="engine-smtp-lamp is-ready" aria-hidden="true"></span>
+                <h3 class="dialog-title-1">Date language</h3>
+              </div>
+            </div>
+            <p class="summary-line paper-note paper-note-inline engine-status-note">Choose how dates are written across the journey board.</p>
+            <div class="engine-date-format-field">
+              <span class="dialog-title-2">Date format</span>
+              <button id="engine-date-format-button" class="engine-date-format-button" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="engine-date-format-menu">
+                <span id="engine-date-format-label">Jun 29, 2026</span>
+              </button>
+              <div id="engine-date-format-menu" class="engine-date-menu paper-menu hidden" role="menu">
+                <button class="release-menu-item" type="button" data-format="storybook" role="menuitem">Jun 29, 2026</button>
+                <button class="release-menu-item" type="button" data-format="iso" role="menuitem">2026-06-29</button>
+                <button class="release-menu-item" type="button" data-format="day-first" role="menuitem">29 Jun 2026</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="engine-panel dialog-panel dialog-section">
+            <p class="engine-route-label dialog-title-2">Mail route</p>
+            <div class="engine-section-head">
+              <div class="engine-section-title">
+                <span id="engine-smtp-lamp" class="engine-smtp-lamp" aria-hidden="true"></span>
+                <h3 id="engine-smtp-title" class="dialog-title-1">Email delivery</h3>
+              </div>
+              <span id="engine-smtp-status" class="status-pill paper-status-pill">Disabled</span>
+            </div>
+            <p id="engine-smtp-message" class="summary-line paper-note paper-note-inline engine-status-note">Email delivery is not enabled.</p>
+
+            <dl class="engine-detail-list dialog-summary dialog-panel-soft">
+              <div>
+                <dt class="dialog-title-2">Host</dt>
+                <dd id="engine-smtp-host" class="dialog-title-3 dialog-detail-value">Not set</dd>
+              </div>
+              <div>
+                <dt class="dialog-title-2">From</dt>
+                <dd id="engine-smtp-from" class="dialog-title-3 dialog-detail-value">Not set</dd>
+              </div>
+              <div>
+                <dt class="dialog-title-2">Security</dt>
+                <dd id="engine-smtp-security" class="dialog-title-3 dialog-detail-value">None</dd>
+              </div>
+            </dl>
+
+            <form id="engine-smtp-test-form" class="engine-test-form dialog-form dialog-form-stack">
+              <label class="engine-field paper-field">
+                <span class="dialog-title-2">Test recipient</span>
+                <input id="engine-smtp-test-to" class="dialog-input" type="email" placeholder="admin@example.com">
+                <small class="dialog-title-3 engine-field-note">Only available when the route is ready.</small>
+              </label>
+            </form>
+          </div>
+        </section>
+        <div class="paper-dialog-footer dialog-footer dialog-footer-inline">
+          <button id="engine-smtp-send-button" class="primary-button paper-button paper-button-primary" type="submit" form="engine-smtp-test-form">Send test email</button>
+          <p id="engine-smtp-test-message" class="form-note paper-note" aria-live="polite"></p>
+        </div>
+      </div>
+    </dialog>
   </body>
 </html>

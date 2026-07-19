@@ -85,3 +85,66 @@ def test_new_kickoff_date_requires_shift_timeline() -> None:
             SAMPLE_BLUEPRINT,
             new_kickoff_date=date(2026, 2, 1),
         )
+
+
+def test_dump_and_load_release_blueprint_preserves_email_field() -> None:
+    blueprint_text = """
+product: FortiSASE
+version: 26.2
+secret: boa-262
+
+milestones:
+  - name: Kickoff
+    expected: 2026-01-01
+    owner: pm
+    email: pm@example.com
+
+  - name: GA Release
+    expected: 2026-03-30
+    owner: manager
+"""
+    blueprint = load_release_blueprint(blueprint_text)
+    kickoff = blueprint.milestones[0]
+    assert kickoff.email == "pm@example.com"
+
+    exported = dump_release_blueprint(blueprint)
+    reloaded = load_release_blueprint(exported)
+    assert reloaded.milestones[0].email == "pm@example.com"
+    assert reloaded.milestones[1].email is None
+
+
+def test_import_preview_and_create_from_yaml(tmp_path: Path) -> None:
+    from fastapi.testclient import TestClient
+    from boa.api import create_app
+    from boa.storage import BoaStorage
+
+    app = create_app(BoaStorage(tmp_path / "boa.db"))
+    with TestClient(app) as client:
+        yaml_text = b"""
+product: Voyager
+version: 3.0
+secret: voyager-30
+milestones:
+  - name: Launch Window
+    expected: 2026-08-01
+    owner: helm
+"""
+        preview = client.post(
+            "/api/releases/import/preview",
+            files={"file": ("voyager.yaml", yaml_text, "text/x-yaml")},
+        )
+        assert preview.status_code == 200
+        assert preview.json()["product"] == "Voyager"
+
+        imported = client.post(
+            "/api/releases/import",
+            files={"file": ("voyager.yaml", yaml_text, "text/x-yaml")},
+        )
+        assert imported.status_code == 201
+        assert imported.json()["product"] == "Voyager"
+        assert any(m["name"] == "Launch Window" for m in imported.json()["milestones"])
+
+        release_id = imported.json()["id"]
+        export = client.get(f"/api/releases/{release_id}/export")
+        assert export.status_code == 200
+        assert "product: Voyager" in export.text

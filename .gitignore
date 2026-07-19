@@ -4,4 +4,6 @@
 __pycache__/
 *.py[cod]
 *.db
-docs/
+docs/*.png
+compose.local.yaml
+graphify-out/

@@ -30,12 +30,26 @@ const STARLIGHT_VISUAL_CONFIG = {
   bugWaveFallbackPeakRisk: 1,
   bugWaveSmoothingWindow: 3,
 };
-const BUG_WAVE_MANUAL_FIXTURES = {
-  normalConvergence: [10, 30, 80, 50, 20],
-  newPeakToday: [10, 30, 80, 90],
-  lowRiskRelease: [0, 1, 2, 1, 0],
-  noBugs: [0, 0, 0],
-  flatHighRisk: [50, 50, 50, 50],
+const JOURNEY_INTERACTION_CONFIG = {
+  dragStartThresholdPx: 12,
+  dragPixelsPerDay: 24,
+  dragFallbackRangeDays: 3650,
+  selectionStartThresholdPx: 8,
+};
+const DATE_FORMAT_STORAGE_KEY = "boa.dateFormat";
+const DATE_FORMAT_OPTIONS = {
+  storybook: {
+    label: "Jun 29, 2026",
+    shortLabel: "Jun 29",
+  },
+  iso: {
+    label: "2026-06-29",
+    shortLabel: "2026-06-29",
+  },
+  "day-first": {
+    label: "29 Jun 2026",
+    shortLabel: "29 Jun",
+  },
 };
 
 const state = {
@@ -45,17 +59,17 @@ const state = {
   journeyFoldDays: 15,
   horizonMonths: 3,
   perspective: "due-soon",
+  dateFormat: getDateFormatPreference(),
   journeyDraft: null,
   activeMenuReleaseId: null,
   expandedReleaseIds: new Set(),
   ackContext: null,
-  editReleaseId: null,
-  reminderReleaseId: null,
-  pluginReleaseId: null,
-  reminderByRelease: {},
-  reminderSupport: "unknown",
-  pluginCatalog: [],
-  pluginCatalogSupport: "unknown",
+  ackSubmitPendingConfirmation: false,
+  ackSubmitConfirmationArmedAt: 0,
+  ackSubmitConfirmUnlockTimer: null,
+  observationContext: null,
+  observationDetailPreview: false,
+  observationByRelease: {},
   drag: null,
   nowToggleExpanded: {
     top: false,
@@ -82,6 +96,7 @@ const elements = {
   closeJourneyDialogButton: document.querySelector("#close-journey-dialog-button"),
   journeyKicker: document.querySelector("#journey-kicker"),
   journeyTitle: document.querySelector("#journey-title"),
+  journeyIntro: document.querySelector("#journey-intro"),
   journeyForm: document.querySelector("#journey-form"),
   journeyProduct: document.querySelector("#journey-product"),
   journeyVersion: document.querySelector("#journey-version"),
@@ -91,15 +106,18 @@ const elements = {
   journeyTimeline: document.querySelector("#journey-timeline"),
   journeyAddMilestone: document.querySelector("#journey-add-milestone"),
   journeyMilestonePopover: document.querySelector("#journey-milestone-popover"),
+  journeyMilestoneTitle: document.querySelector("#journey-milestone-title"),
+  journeyMilestoneDate: document.querySelector("#journey-milestone-date"),
   journeyMilestoneName: document.querySelector("#journey-milestone-name"),
   journeyMilestoneOwner: document.querySelector("#journey-milestone-owner"),
+  journeyMilestoneNote: document.querySelector("#journey-milestone-note"),
+  journeyMilestoneEmail: document.querySelector("#journey-milestone-email"),
   journeyMilestoneMenu: document.querySelector("#journey-milestone-menu"),
   journeyMilestoneMenuPanel: document.querySelector("#journey-milestone-menu-panel"),
   journeyMilestoneDelete: document.querySelector("#journey-milestone-delete"),
   horizonSelector: document.querySelector("#horizon-selector"),
   perspectiveSelector: document.querySelector("#perspective-selector"),
   seedButton: document.querySelector("#seed-button"),
-  dialogSeedButton: document.querySelector("#dialog-seed-button"),
   newReleaseButton: document.querySelector("#new-release-button"),
   boardScope: document.querySelector("#board-scope"),
   journeyActionMenu: document.querySelector("#journey-action-menu"),
@@ -107,13 +125,12 @@ const elements = {
   importJourneyOption: document.querySelector("#import-journey-option"),
   emptyNewReleaseButton: document.querySelector("#empty-new-release-button"),
   statusPill: document.querySelector("#status-pill"),
-  createForm: document.querySelector("#create-form"),
-  createProduct: document.querySelector("#create-product"),
-  createVersion: document.querySelector("#create-version"),
-  createSecret: document.querySelector("#create-secret"),
-  createMessage: document.querySelector("#create-message"),
+  importDialog: document.querySelector("#import-dialog"),
+  closeImportDialogButton: document.querySelector("#close-import-dialog-button"),
+  createMessage: document.querySelector("#import-message"),
   importForm: document.querySelector("#import-form"),
   importFile: document.querySelector("#import-file"),
+  importFileSummary: document.querySelector("#import-file-summary"),
   importKeepOriginal: document.querySelector("#import-keep-original"),
   importShiftTimeline: document.querySelector("#import-shift-timeline"),
   importKickoffLabel: document.querySelector("#import-kickoff-label"),
@@ -123,41 +140,60 @@ const elements = {
   closeAckDialogButton: document.querySelector("#close-ack-dialog-button"),
   ackForm: document.querySelector("#ack-form"),
   ackReleaseName: document.querySelector("#ack-release-name"),
+  ackReleaseVersion: document.querySelector("#ack-release-version"),
   ackMilestoneName: document.querySelector("#ack-milestone-name"),
+  ackMilestoneDate: document.querySelector("#ack-milestone-date"),
   ackDate: document.querySelector("#ack-date"),
+  ackTrail: document.querySelector("#ack-trail"),
   ackSecret: document.querySelector("#ack-secret"),
+  ackName: document.querySelector("#ack-name"),
+  ackKeeperDisplay: document.querySelector("#ack-keeper-display"),
+  ackKeeperChangeButton: document.querySelector("#ack-keeper-change-button"),
   ackNote: document.querySelector("#ack-note"),
   ackHint: document.querySelector("#ack-hint"),
   ackSubmitButton: document.querySelector("#ack-submit-button"),
   ackMessage: document.querySelector("#ack-message"),
-  editForm: document.querySelector("#edit-form"),
-  editRelease: document.querySelector("#edit-release"),
-  editProduct: document.querySelector("#edit-product"),
-  editVersion: document.querySelector("#edit-version"),
-  editSecret: document.querySelector("#edit-secret"),
-  editReleaseSaveButton: document.querySelector("#edit-release-save-button"),
-  editMilestoneList: document.querySelector("#edit-milestone-list"),
-  editNewName: document.querySelector("#edit-new-name"),
-  editNewDate: document.querySelector("#edit-new-date"),
-  editNewOwner: document.querySelector("#edit-new-owner"),
-  editMessage: document.querySelector("#edit-message"),
-  reminderRelease: document.querySelector("#reminder-release"),
-  reminderRunButton: document.querySelector("#reminder-run-button"),
-  reminderStatusPill: document.querySelector("#reminder-status-pill"),
-  reminderSummary: document.querySelector("#reminder-summary"),
-  reminderList: document.querySelector("#reminder-list"),
-  reminderMessage: document.querySelector("#reminder-message"),
-  pluginForm: document.querySelector("#plugin-form"),
-  pluginRelease: document.querySelector("#plugin-release"),
-  pluginRunner: document.querySelector("#plugin-runner"),
-  pluginStatusPill: document.querySelector("#plugin-status-pill"),
-  pluginDetails: document.querySelector("#plugin-details"),
-  pluginFile: document.querySelector("#plugin-file"),
-  pluginPayload: document.querySelector("#plugin-payload"),
-  pluginMessage: document.querySelector("#plugin-message"),
+  observationDialog: document.querySelector("#observation-dialog"),
+  closeObservationDialogButton: document.querySelector("#close-observation-dialog-button"),
+  observationForm: document.querySelector("#observation-form"),
+  observationReleaseName: document.querySelector("#observation-release-name"),
+  observationReleaseVersion: document.querySelector("#observation-release-version"),
+  observationLastUpdated: document.querySelector("#observation-last-updated"),
+  observationStatusPill: document.querySelector("#observation-status-pill"),
+  observationStateSummary: document.querySelector("#observation-state-summary"),
+  observationStarlight: document.querySelector("#observation-starlight"),
+  observationStarlightReadout: document.querySelector("#observation-starlight-readout"),
+  observationStorms: document.querySelector("#observation-storms"),
+  observationStormSummary: document.querySelector("#observation-storm-summary"),
+  observationWhisper: document.querySelector("#observation-whisper"),
+  observationDetail: document.querySelector("#observation-detail"),
+  observationDetailPreview: document.querySelector("#observation-detail-preview"),
+  observationDetailPreviewToggle: document.querySelector("#observation-detail-preview-toggle"),
+  observationDone: document.querySelector("#observation-done"),
+  observationTotal: document.querySelector("#observation-total"),
+  observationBlocked: document.querySelector("#observation-blocked"),
+  observationTrailSummary: document.querySelector("#observation-trail-summary"),
+  observationSaveButton: document.querySelector("#observation-save-button"),
+  observationMessage: document.querySelector("#observation-message"),
+  engineButton: document.querySelector("#engine-button"),
+  engineDialog: document.querySelector("#engine-dialog"),
+  closeEngineDialogButton: document.querySelector("#close-engine-dialog-button"),
+  engineSmtpLamp: document.querySelector("#engine-smtp-lamp"),
+  engineSmtpTitle: document.querySelector("#engine-smtp-title"),
+  engineSmtpStatus: document.querySelector("#engine-smtp-status"),
+  engineSmtpMessage: document.querySelector("#engine-smtp-message"),
+  engineSmtpHost: document.querySelector("#engine-smtp-host"),
+  engineSmtpFrom: document.querySelector("#engine-smtp-from"),
+  engineSmtpSecurity: document.querySelector("#engine-smtp-security"),
+  engineDateFormatButton: document.querySelector("#engine-date-format-button"),
+  engineDateFormatLabel: document.querySelector("#engine-date-format-label"),
+  engineDateFormatMenu: document.querySelector("#engine-date-format-menu"),
+  engineSmtpTestForm: document.querySelector("#engine-smtp-test-form"),
+  engineSmtpTestTo: document.querySelector("#engine-smtp-test-to"),
+  engineSmtpSendButton: document.querySelector("#engine-smtp-send-button"),
+  engineSmtpTestMessage: document.querySelector("#engine-smtp-test-message"),
+  editMessage: document.querySelector("#journey-message"),
   releaseTemplate: document.querySelector("#release-template"),
-  composerDialog: document.querySelector("#composer-dialog"),
-  closeDialogButton: document.querySelector("#close-dialog-button"),
 };
 
 async function request(path, options = {}) {
@@ -216,19 +252,32 @@ async function requestOptional(path, options = {}) {
 }
 
 async function loadTimeline() {
-  setStatus("Loading");
+  setStatus("Listening");
   try {
     const query = state.pageScope.mode === "galaxy"
       ? `?galaxy=${encodeURIComponent(state.pageScope.galaxySlug)}`
       : "";
     const timelinePayload = await request(`/api/timeline${query}`);
     state.releases = timelinePayload.map(normalizeTimelineRelease);
+    state.observationByRelease = Object.fromEntries(
+      state.releases.map((release) => [release.id, buildObservationWorkspaceFromRelease(release)]),
+    );
     if (state.pageScope.mode === "galaxy" && state.releases.length) {
       state.pageScope.label = state.releases[0].product;
     }
     state.timeline = buildTimelineScale(state.releases);
+    if (state.observationContext?.releaseId) {
+      const activeRelease = getReleaseById(state.observationContext.releaseId);
+      if (activeRelease) {
+        state.observationContext = buildObservationContext(
+          activeRelease,
+          state.observationByRelease[activeRelease.id] || buildObservationWorkspaceFromRelease(activeRelease),
+        );
+      } else {
+        state.observationContext = null;
+      }
+    }
     render();
-    await refreshOptionalSurfaces(state.editReleaseId || state.releases[0]?.id);
     if (state.pageScope.mode === "galaxy" && !state.releases.length) {
       setStatus("Uncharted galaxy");
     } else {
@@ -287,7 +336,14 @@ function render(allowTimelineRealign = true) {
     const orderedMilestones = getOrderedMilestones(release);
     const palette = getReleasePalette(release, index);
 
-    fragment.querySelector(".release-product").textContent = release.product;
+    const productNode = fragment.querySelector(".release-product");
+    const galaxyHref = `/${slugify(release.product)}`;
+    productNode.textContent = release.product;
+    productNode.setAttribute("href", galaxyHref);
+    productNode.setAttribute("aria-label", `Open ${release.product} galaxy`);
+    if (state.pageScope.mode === "galaxy" && state.pageScope.galaxySlug === slugify(release.product)) {
+      productNode.setAttribute("aria-current", "page");
+    }
     const versionNode = fragment.querySelector(".release-version");
     versionNode.textContent = release.version;
     versionNode.style.color = palette.stroke;
@@ -304,6 +360,11 @@ function render(allowTimelineRealign = true) {
     menu.querySelectorAll(".release-menu-item").forEach((item) => {
       item.addEventListener("click", () => handleReleaseMenuAction(release, item.dataset.action));
     });
+    const observeButton = fragment.querySelector(".release-observe-button");
+    if (observeButton) {
+      observeButton.textContent = release.starlight ? "Continue Observation" : "Today’s Reading";
+      observeButton.addEventListener("click", () => openObservationDialog(release.id));
+    }
 
     const row = fragment.querySelector(".release-row");
     row.setAttribute("aria-label", releaseTitle);
@@ -317,12 +378,13 @@ function render(allowTimelineRealign = true) {
 
     const svg = fragment.querySelector(".release-canvas");
     const detailCard = fragment.querySelector(".starlight-detail-card");
+    const milestoneCard = fragment.querySelector(".milestone-note-card");
     drawRelease(
       svg,
       { ...release, milestones: orderedMilestones },
       state.timeline,
       palette,
-      { detailCard },
+      { detailCard, milestoneCard },
     );
 
     elements.board.appendChild(fragment);
@@ -339,42 +401,42 @@ function render(allowTimelineRealign = true) {
       }
     }
   }
-  renderEditForm();
-  renderReminderReleaseOptions();
-  renderPluginReleaseOptions();
 }
 
 function renderReleaseStarlight(fragment, release) {
   const panel = fragment.querySelector(".starlight-summary");
   const starlight = release.starlight || null;
-  if (!panel || !starlight) {
-    panel?.classList.add("hidden");
+  if (!panel) {
     return;
   }
 
   panel.classList.remove("hidden");
-  fragment.querySelector(".starlight-whisper").textContent = starlight.whisper;
+  const whisperNode = fragment.querySelector(".starlight-whisper");
+  if (!starlight) {
+    whisperNode.textContent = "The sky has not been written yet.";
+    panel.title = "Open the observation workspace to record where the journey is now.";
+    return;
+  }
+
+  whisperNode.textContent = starlight.whisper;
   const metricBits = summarizeStarlightMetrics(starlight.metrics);
   panel.title = metricBits ? `${starlight.whisper} • ${metricBits}` : starlight.whisper;
 }
 
 function describeStarlightState(value) {
-  if (value >= 100) {
-    return "Departure";
+  if (value >= 90) {
+    return "Ready sky";
   }
-  if (value >= 81) {
-    return "Ready";
+  if (value >= 75) {
+    return "Confident";
   }
-  if (value >= 61) {
+  if (value >= 50) {
     return "Advancing";
   }
-  if (value >= 41) {
-    return "Preparing";
+  if (value >= 25) {
+    return "Emerging";
   }
-  if (value >= 21) {
-    return "Building";
-  }
-  return "Gathering";
+  return "Faint";
 }
 
 function getPageScope() {
@@ -383,7 +445,7 @@ function getPageScope() {
     return {
       mode: "universe",
       galaxySlug: null,
-      label: "All releases",
+      label: "All journeys",
     };
   }
   const segments = pathname.split("/").filter(Boolean);
@@ -400,7 +462,7 @@ function getPageScope() {
   return {
     mode: "universe",
     galaxySlug: null,
-    label: "All releases",
+    label: "All journeys",
   };
 }
 
@@ -436,9 +498,9 @@ function renderEmptyState(hasAnyReleases) {
   elements.releaseStage.classList.toggle("is-empty-galaxy", isGalaxy && !hasAnyReleases);
   elements.releaseStage.classList.toggle("is-empty-universe", !isGalaxy && !hasAnyReleases);
   if (!isGalaxy) {
-    elements.emptyEyebrow.textContent = "No release yet";
+    elements.emptyEyebrow.textContent = "No journey yet";
     elements.emptyTitle.textContent = "The sky is waiting for its first journey.";
-    elements.emptyBody.textContent = "When the first release arrives, Boa will begin tracing its horizon.";
+    elements.emptyBody.textContent = "When the first journey begins, Boa will trace its horizon.";
     elements.emptyNewReleaseButton.classList.remove("hidden");
     elements.seedButton.classList.remove("hidden");
     elements.emptyReturnLink.classList.add("hidden");
@@ -450,7 +512,7 @@ function renderEmptyState(hasAnyReleases) {
   elements.emptyTitle.textContent = `${galaxyLabel} has not been observed yet.`;
   elements.emptyBody.textContent = hasAnyReleases
     ? "This galaxy is quiet for now."
-    : "No releases map to this galaxy yet. Return to the full universe to keep traveling.";
+    : "No journeys map to this galaxy yet. Return to the full universe to keep traveling.";
   elements.emptyNewReleaseButton.classList.add("hidden");
   elements.seedButton.classList.add("hidden");
   elements.emptyReturnLink.classList.remove("hidden");
@@ -470,13 +532,39 @@ function syncBoardChromeVisibility(hasAnyReleases) {
 function normalizeTimelineRelease(release) {
   return {
     ...release,
-    milestones: Array.isArray(release.milestones) ? release.milestones.map((milestone) => ({ ...milestone })) : [],
+    milestones: Array.isArray(release.milestones) ? release.milestones.map(normalizeTimelineMilestone) : [],
     bug_snapshots: Array.isArray(release.bug_snapshots) ? release.bug_snapshots.map((snapshot) => ({ ...snapshot })) : [],
     starlight: normalizeStarlightStatus(release.starlight),
     starlight_trail: Array.isArray(release.starlight_trail)
       ? release.starlight_trail.map(normalizeStarlightEvent)
       : [],
   };
+}
+
+function normalizeTimelineMilestone(milestone) {
+  return {
+    ...milestone,
+    note: normalizeBoaNote(milestone?.note),
+    ack_note: normalizeBoaNote(milestone?.ack_note),
+    ack_trail: Array.isArray(milestone?.ack_trail) ? milestone.ack_trail.map(normalizeAckTrailEvent) : [],
+  };
+}
+
+function normalizeAckTrailEvent(event) {
+  return {
+    id: Number(event?.id || 0),
+    acked_at: event?.acked_at || null,
+    ack_name: String(event?.ack_name || ""),
+    note: normalizeBoaNote(event?.note),
+  };
+}
+
+function normalizeBoaNote(note) {
+  const content = typeof note === "string"
+    ? note
+    : (note && typeof note === "object" ? note.content : "");
+  const cleaned = String(content || "").trim();
+  return cleaned ? { content: cleaned } : null;
 }
 
 function normalizeStarlightStatus(starlight) {
@@ -520,6 +608,35 @@ function normalizeStarlightMetrics(metrics) {
     total: Number(metrics?.total || 0),
     blocked: Number(metrics?.blocked || 0),
   };
+}
+
+function normalizeObservationWorkspace(payload, releaseFallback = null) {
+  const fallbackReleaseId = Number(releaseFallback?.id || payload?.release_id || 0);
+  return {
+    release_id: fallbackReleaseId,
+    product: String(payload?.product || releaseFallback?.product || ""),
+    version: String(payload?.version || releaseFallback?.version || ""),
+    current: normalizeStarlightStatus(payload?.current),
+    trail: Array.isArray(payload?.trail) ? payload.trail.map(normalizeStarlightEvent) : [],
+  };
+}
+
+function buildObservationWorkspaceFromRelease(release) {
+  return normalizeObservationWorkspace({
+    release_id: release?.id,
+    product: release?.product,
+    version: release?.version,
+    current: release?.starlight || null,
+    trail: release?.starlight_trail || [],
+  }, release);
+}
+
+function getBoaNoteContent(note) {
+  return String(note?.content || "").trim();
+}
+
+function hasBoaNote(note) {
+  return Boolean(getBoaNoteContent(note));
 }
 
 function getTimelineBoardMetrics() {
@@ -718,252 +835,431 @@ function restoreScrollPosition(scrollX, scrollY) {
   });
 }
 
-function renderEditForm(selectedReleaseId) {
-  const currentReleaseId = selectedReleaseId ? String(selectedReleaseId) : (
-    state.editReleaseId ? String(state.editReleaseId) : elements.editRelease.value
-  );
-  elements.editRelease.innerHTML = "";
+function getReleaseById(releaseId) {
+  return state.releases.find((item) => item.id === releaseId) || null;
+}
 
-  state.releases.forEach((release) => {
-    const option = document.createElement("option");
-    option.value = String(release.id);
-    option.textContent = `${release.product} ${release.version}`;
-    elements.editRelease.appendChild(option);
-  });
+function getLatestBugSnapshot(release) {
+  const snapshots = normalizeObservedBugSnapshots(release?.bug_snapshots);
+  return snapshots.at(-1) || null;
+}
 
-  if (!state.releases.length) {
-    state.editReleaseId = null;
-    elements.editMilestoneList.innerHTML = `<p class="summary-line">Bring in a release to shape its milestones here.</p>`;
+function getObservationRelease() {
+  return state.observationContext ? getReleaseById(state.observationContext.releaseId) : null;
+}
+
+function buildObservationContext(release, workspace = buildObservationWorkspaceFromRelease(release)) {
+  const current = workspace.current;
+  const metrics = current?.metrics || null;
+  const latestSnapshot = getLatestBugSnapshot(release);
+  const today = formatLocalDate(new Date());
+  return {
+    releaseId: release.id,
+    current,
+    trail: workspace.trail,
+    initialStorms: latestSnapshot ? Number(latestSnapshot.open_bug_count) : null,
+    fields: {
+      starlight: current?.starlight ?? 0,
+      observedOn: today,
+      whisper: current?.whisper || "",
+      detail: current?.detail?.content || "",
+      storms: latestSnapshot ? String(latestSnapshot.open_bug_count) : "",
+      done: metrics ? String(metrics.done) : "",
+      total: metrics ? String(metrics.total) : "",
+      blocked: metrics ? String(metrics.blocked) : "",
+    },
+  };
+}
+
+function formatObservationTrail(trail) {
+  if (!trail.length) {
+    return "The trail will remember the next brightening.";
+  }
+  const moments = trail.map((event) => `✦${event.starlight}`);
+  return moments.join(" → ");
+}
+
+function syncObservationStarlightReadout(value) {
+  const starlight = Math.min(Math.max(Number(value) || 0, 0), 100);
+  elements.observationStarlightReadout.textContent = `${starlight} / 100 · ${describeStarlightState(starlight)}`;
+}
+
+function syncObservationStormSummary(value) {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) {
+    elements.observationStormSummary.textContent = "Leave this blank if the weather is still unknown.";
+    return;
+  }
+  const count = Number(trimmed);
+  if (!Number.isFinite(count) || count < 0) {
+    elements.observationStormSummary.textContent = "Use zero or a whole number above.";
+    return;
+  }
+  if (count === 0) {
+    elements.observationStormSummary.textContent = "The sky feels calm for now.";
+    return;
+  }
+  if (count === 1) {
+    elements.observationStormSummary.textContent = "A single trouble is still in view.";
+    return;
+  }
+  elements.observationStormSummary.textContent = "Several known troubles are still moving through.";
+}
+
+function renderObservationWorkspace() {
+  const context = state.observationContext;
+  const release = getObservationRelease();
+  if (!context || !release) {
+    elements.observationStatusPill.hidden = true;
+    elements.observationStatusPill.textContent = "";
+    elements.observationReleaseName.textContent = "";
+    elements.observationReleaseVersion.textContent = "";
+    elements.observationLastUpdated.textContent = "";
+    elements.observationStateSummary.textContent = "Bring in a journey to begin its page.";
+    elements.observationStormSummary.textContent = "Storms are still unknown.";
+    elements.observationTrailSummary.textContent = "The trail will remember the next brightening.";
+    elements.observationMessage.textContent = "";
+    elements.observationForm.reset();
+    elements.observationSaveButton.disabled = true;
+    syncObservationStarlightReadout(0);
+    syncObservationDetailPreview();
     return;
   }
 
-  if (currentReleaseId && state.releases.some((release) => String(release.id) === currentReleaseId)) {
-    elements.editRelease.value = currentReleaseId;
+  const current = context.current;
+  elements.observationSaveButton.disabled = false;
+  elements.observationReleaseName.textContent = release.product;
+  elements.observationReleaseVersion.textContent = release.version;
+  elements.observationStatusPill.hidden = true;
+  elements.observationStatusPill.textContent = "";
+  elements.observationStarlight.value = String(context.fields.starlight);
+  elements.observationWhisper.value = context.fields.whisper;
+  elements.observationDetail.value = context.fields.detail;
+  elements.observationStorms.value = context.fields.storms;
+  elements.observationDone.value = context.fields.done;
+  elements.observationTotal.value = context.fields.total;
+  elements.observationBlocked.value = context.fields.blocked;
+  syncObservationStormSummary(context.fields.storms);
+  syncObservationStarlightReadout(context.fields.starlight);
+  syncObservationDetailPreview();
+
+  if (current) {
+    const updatedLabel = current.updated_at ? formatDateTime(current.updated_at) : "just now";
+    elements.observationLastUpdated.textContent = `Last updated ${updatedLabel}`;
+    elements.observationStateSummary.textContent = current.whisper || "No current observation yet.";
   } else {
-    elements.editRelease.value = String(state.releases[0].id);
+    elements.observationLastUpdated.textContent = "Last updated —";
+    elements.observationStateSummary.textContent = "This page has not been written yet.";
   }
 
-  state.editReleaseId = Number(elements.editRelease.value);
-  const release = getSelectedEditRelease();
-  if (release) {
-    elements.editProduct.value = release.product;
-    elements.editVersion.value = release.version;
-    elements.editSecret.value = release.secret || "";
-  }
-  renderMilestoneEditors();
+  elements.observationTrailSummary.textContent = formatObservationTrail(context.trail);
 }
 
-function renderReminderReleaseOptions(selectedReleaseId) {
-  const currentReleaseId = selectedReleaseId ? String(selectedReleaseId) : (
-    state.reminderReleaseId ? String(state.reminderReleaseId) : elements.reminderRelease.value
-  );
-  elements.reminderRelease.innerHTML = "";
-
-  state.releases.forEach((release) => {
-    const option = document.createElement("option");
-    option.value = String(release.id);
-    option.textContent = `${release.product} ${release.version}`;
-    elements.reminderRelease.appendChild(option);
-  });
-
-  if (!state.releases.length) {
-    state.reminderReleaseId = null;
-    renderReminderPanel();
+function renderObservationDetailPreview() {
+  if (!elements.observationDetailPreview) {
     return;
   }
-
-  if (currentReleaseId && state.releases.some((release) => String(release.id) === currentReleaseId)) {
-    elements.reminderRelease.value = currentReleaseId;
-  } else {
-    elements.reminderRelease.value = String(state.releases[0].id);
-  }
-
-  state.reminderReleaseId = Number(elements.reminderRelease.value);
-  renderReminderPanel();
-}
-
-function renderPluginReleaseOptions(selectedReleaseId) {
-  const currentReleaseId = selectedReleaseId ? String(selectedReleaseId) : (
-    state.pluginReleaseId ? String(state.pluginReleaseId) : elements.pluginRelease.value
-  );
-  elements.pluginRelease.innerHTML = "";
-
-  state.releases.forEach((release) => {
-    const option = document.createElement("option");
-    option.value = String(release.id);
-    option.textContent = `${release.product} ${release.version}`;
-    elements.pluginRelease.appendChild(option);
-  });
-
-  if (!state.releases.length) {
-    state.pluginReleaseId = null;
-    renderPluginPanel();
-    return;
-  }
-
-  if (currentReleaseId && state.releases.some((release) => String(release.id) === currentReleaseId)) {
-    elements.pluginRelease.value = currentReleaseId;
-  } else {
-    elements.pluginRelease.value = String(state.releases[0].id);
-  }
-
-  state.pluginReleaseId = Number(elements.pluginRelease.value);
-  renderPluginPanel();
-}
-
-function renderMilestoneEditors() {
-  const release = getSelectedEditRelease();
-  elements.editMilestoneList.innerHTML = "";
-
-  if (!release) {
-    elements.editMilestoneList.innerHTML = `<p class="summary-line">No release selected.</p>`;
-    return;
-  }
-
-  release.milestones.forEach((milestone) => {
-    const card = document.createElement("section");
-    card.className = "milestone-editor";
-    card.innerHTML = `
-      <div class="milestone-editor-grid">
-        <label>
-          Name
-          <input type="text" data-field="name" value="${escapeHtml(milestone.name)}">
-        </label>
-        <label>
-          Expected
-          <input type="date" data-field="expected" value="${milestone.expected}">
-        </label>
-        <label>
-          Owner
-          <input type="text" data-field="owner" value="${escapeHtml(milestone.owner)}">
-        </label>
-      </div>
-      <div class="milestone-editor-actions">
-        <span class="milestone-state">${milestone.acked_at ? `Acknowledged ${formatDateTime(milestone.acked_at)}` : "Pending acknowledgment"}</span>
-        <div>
-          <button class="ghost-button" type="button" data-action="save">Save</button>
-          <button class="text-button" type="button" data-action="delete">Delete</button>
-        </div>
-      </div>
-    `;
-
-    card.querySelector('[data-action="save"]').addEventListener("click", () => saveMilestone(milestone.id, card));
-    card.querySelector('[data-action="delete"]').addEventListener("click", () => deleteMilestone(milestone.id, milestone.name));
-    elements.editMilestoneList.appendChild(card);
+  renderBoaNote(elements.observationDetailPreview, elements.observationDetail.value, {
+    emptyFallback: "Nothing has been written on this page yet.",
   });
 }
 
-function renderReminderPanel() {
-  const releaseId = state.reminderReleaseId;
-  const reminderState = releaseId ? state.reminderByRelease[releaseId] : null;
-
-  if (!state.releases.length) {
-    elements.reminderStatusPill.textContent = "Waiting";
-    elements.reminderSummary.textContent = "Bring in a release to inspect reminder state.";
-    elements.reminderList.innerHTML = "";
-    elements.reminderMessage.textContent = "";
+function syncObservationDetailPreview() {
+  if (!elements.observationDetail || !elements.observationDetailPreview || !elements.observationDetailPreviewToggle) {
     return;
   }
-
-  if (!reminderState) {
-    elements.reminderStatusPill.textContent = state.reminderSupport === "missing" ? "Unavailable" : "Checking";
-    elements.reminderSummary.textContent = state.reminderSupport === "missing"
-      ? "This backend has not exposed reminder state endpoints yet."
-      : "Looking up reminder state for the selected release.";
-    elements.reminderList.innerHTML = "";
-    return;
+  const isPreview = Boolean(state.observationDetailPreview);
+  elements.observationDetail.classList.toggle("hidden", isPreview);
+  elements.observationDetailPreview.classList.toggle("hidden", !isPreview);
+  elements.observationDetailPreviewToggle.setAttribute("aria-pressed", String(isPreview));
+  elements.observationDetailPreviewToggle.classList.toggle("is-active", isPreview);
+  elements.observationDetailPreviewToggle.querySelector(".observation-detail-preview-label").textContent = isPreview
+    ? "Write"
+    : "Preview";
+  if (isPreview) {
+    renderObservationDetailPreview();
   }
-
-  elements.reminderStatusPill.textContent = reminderState.label;
-  elements.reminderSummary.textContent = reminderState.summary;
-  elements.reminderList.innerHTML = "";
-  elements.reminderMessage.textContent = reminderState.message || "";
-
-  reminderState.items.forEach((item) => {
-    const row = document.createElement("section");
-    row.className = "signal-item";
-    row.innerHTML = `
-      <div class="signal-topline">
-        <strong class="signal-name">${escapeHtml(item.name)}</strong>
-        <span class="signal-badge ${item.badgeClass}">${escapeHtml(item.badge)}</span>
-      </div>
-      <p class="signal-meta">${escapeHtml(item.meta)}</p>
-    `;
-    elements.reminderList.appendChild(row);
-  });
 }
 
-function renderPluginPanel() {
-  renderPluginRunnerOptions();
-
-  if (!state.releases.length) {
-    elements.pluginStatusPill.textContent = "Waiting";
-    elements.pluginDetails.textContent = "Bring in a release to try a bug snapshot import plugin.";
-    elements.pluginMessage.textContent = "";
-    return;
+async function loadObservationWorkspace(releaseId, { silent = false } = {}) {
+  if (!releaseId) {
+    return null;
   }
 
-  if (state.pluginCatalogSupport === "missing") {
-    elements.pluginStatusPill.textContent = "Unavailable";
-    elements.pluginDetails.textContent = "This backend has not exposed a bug snapshot plugin contract yet.";
-    return;
+  if (!silent) {
+    elements.observationStatusPill.textContent = "Listening";
   }
 
-  if (state.pluginCatalogSupport === "error") {
-    elements.pluginStatusPill.textContent = "Error";
-    elements.pluginDetails.textContent = "Plugin discovery hit a network or API error.";
-    return;
+  const release = getReleaseById(releaseId);
+  const response = await requestOptional(`/api/releases/${releaseId}/observation`);
+  if (!response.ok) {
+    elements.observationStatusPill.textContent = "Unavailable";
+    if (!silent) {
+      elements.observationMessage.textContent = extractOptionalError(response);
+    }
+    return null;
   }
 
-  if (state.pluginCatalogSupport === "loading") {
-    elements.pluginStatusPill.textContent = "Checking";
-    elements.pluginDetails.textContent = "Looking for plugin runners that can ingest bug snapshots.";
-    return;
+  state.observationByRelease[releaseId] = normalizeObservationWorkspace(response.payload, release);
+  if (state.observationContext?.releaseId === releaseId && release) {
+    state.observationContext = buildObservationContext(release, state.observationByRelease[releaseId]);
+    renderObservationWorkspace();
   }
-
-  const plugin = getSelectedPlugin();
-  elements.pluginStatusPill.textContent = plugin ? "Ready" : "No runner";
-
-  if (!plugin) {
-    elements.pluginDetails.textContent = "No bug snapshot plugin was published by this backend.";
-    return;
-  }
-
-  elements.pluginDetails.innerHTML = `
-    <div class="plugin-detail-line">
-      <strong>${escapeHtml(plugin.name)}</strong>
-      <span class="signal-badge">${escapeHtml(plugin.contractLabel)}</span>
-    </div>
-    <p class="plugin-detail-copy">${escapeHtml(plugin.description)}
-${plugin.endpoint ? `\nEndpoint ${plugin.endpoint}` : ""}
-${"\nPayload { open_bug_count, signal_type? }"}</p>
-  `;
+  return state.observationByRelease[releaseId];
 }
 
 function syncAckFormState() {
   const milestone = getSelectedAckMilestone();
   const release = getSelectedAckRelease();
+  if (state.ackSubmitConfirmUnlockTimer) {
+    window.clearTimeout(state.ackSubmitConfirmUnlockTimer);
+    state.ackSubmitConfirmUnlockTimer = null;
+  }
+  state.ackSubmitPendingConfirmation = false;
+  state.ackSubmitConfirmationArmedAt = 0;
   if (!milestone) {
+    elements.ackName.value = "";
+    elements.ackKeeperDisplay.textContent = "No keeper set";
+    elements.ackKeeperChangeButton.classList.add("hidden");
     elements.ackNote.value = "";
-    elements.ackReleaseName.textContent = "No release selected";
-    elements.ackMilestoneName.textContent = "";
-    elements.ackDate.value = formatLocalDate(new Date());
+    elements.ackName.disabled = true;
+    elements.ackName.readOnly = true;
+    elements.ackNote.disabled = false;
+    elements.ackSecret.disabled = false;
+    elements.ackSubmitButton.disabled = false;
+    elements.ackSecret.closest(".ack-key-shell")?.classList.remove("hidden");
+    elements.ackSubmitButton.classList.remove("hidden");
+    elements.ackReleaseName.textContent = "No journey selected";
+    elements.ackReleaseVersion.textContent = "";
+    elements.ackMilestoneName.textContent = "Quietly mark this milestone.";
+    elements.ackMilestoneDate.textContent = "Choose a milestone to mark.";
+    elements.ackDate.textContent = "Last updated —";
+    renderAckTrailEntries([
+      {
+        stateClass: "is-pending",
+        line: "Waiting for a mark.",
+        subline: "Choose a milestone, then leave its keeper and quiet note here.",
+      },
+    ]);
     elements.ackSubmitButton.textContent = "Acknowledge";
-    elements.ackHint.textContent = "Choose a milestone to acknowledge or update its note.";
+    elements.ackSubmitButton.classList.remove("paper-button-confirm");
+    elements.ackHint.textContent = "The ack trail will remember the keeper, date, and quiet note together.";
     return;
   }
 
-  elements.ackReleaseName.textContent = release ? `${release.product} ${release.version}` : "";
+  elements.ackName.disabled = false;
+  elements.ackName.readOnly = true;
+  elements.ackNote.disabled = false;
+  elements.ackSecret.disabled = false;
+  elements.ackSubmitButton.disabled = false;
+  elements.ackSecret.closest(".ack-key-shell")?.classList.remove("hidden");
+  elements.ackSubmitButton.classList.remove("hidden");
+  elements.ackReleaseName.textContent = release ? release.product : "";
+  elements.ackReleaseVersion.textContent = release ? release.version : "";
   elements.ackMilestoneName.textContent = milestone.name;
-  elements.ackNote.value = milestone.ack_note || "";
-  elements.ackDate.value = milestone.acked_at ? formatCalendarDate(milestone.acked_at) : formatLocalDate(new Date());
+  elements.ackMilestoneDate.textContent = `Expected on ${formatDate(milestone.expected)}.`;
+  elements.ackName.value = milestone.owner || "";
+  elements.ackKeeperDisplay.textContent = milestone.owner || "No keeper set";
+  elements.ackKeeperChangeButton.classList.toggle("hidden", !release);
+  elements.ackNote.value = "";
+  elements.ackDate.textContent = milestone.acked_at
+    ? `Last updated ${formatDateTime(milestone.acked_at)}`
+    : "Last updated —";
+  const ackTrailState = getAckTrailState(milestone);
+  const ackTrailEntries = buildAckTrailEntries(milestone);
+  elements.ackSubmitButton.textContent = "Acknowledge";
+  elements.ackSubmitButton.classList.remove("paper-button-confirm");
   if (milestone.acked_at) {
-    elements.ackSubmitButton.textContent = "Save note";
-    elements.ackHint.textContent = `Acknowledged ${formatDateTime(milestone.acked_at)}. Secret is still required to edit the note.`;
+    renderAckTrailEntries(ackTrailEntries);
+    elements.ackHint.textContent = ackTrailEntries.some((entry) => entry.note)
+      ? "Hover a note chip to read the quiet note."
+      : "";
   } else {
-    elements.ackSubmitButton.textContent = "Acknowledge";
-    elements.ackHint.textContent = "Today will be recorded once the release secret is verified.";
+    renderAckTrailEntries([
+      {
+        stateClass: ackTrailState.stateClass,
+        line: ackTrailState.line,
+        subline: ackTrailState.subline,
+      },
+    ]);
+    elements.ackHint.textContent = ackTrailState.stateClass === "is-overdue"
+      ? "Overdue, waiting for a mark."
+      : "Ready for today's mark.";
   }
+}
+
+function syncAckSubmitButton() {
+  if (!elements.ackSubmitButton) {
+    return;
+  }
+  elements.ackSubmitButton.textContent = state.ackSubmitPendingConfirmation ? "Confirmed?" : "Acknowledge";
+  elements.ackSubmitButton.classList.toggle("paper-button-confirm", state.ackSubmitPendingConfirmation);
+}
+
+function ensureAckActionsBound() {
+  if (!elements.ackForm || !elements.ackSubmitButton) {
+    return;
+  }
+  if (elements.ackForm.dataset.ackBound === "true" && elements.ackSubmitButton.dataset.ackBound === "true") {
+    return;
+  }
+  elements.ackForm.onsubmit = (event) => {
+    event.preventDefault();
+    handleAckSubmitButtonClick();
+  };
+  elements.ackSubmitButton.onclick = () => {
+    handleAckSubmitButtonClick();
+  };
+  elements.ackForm.dataset.ackBound = "true";
+  elements.ackSubmitButton.dataset.ackBound = "true";
+}
+
+function resetAckConfirmationState() {
+  if (state.ackSubmitConfirmUnlockTimer) {
+    window.clearTimeout(state.ackSubmitConfirmUnlockTimer);
+    state.ackSubmitConfirmUnlockTimer = null;
+  }
+  if (!state.ackSubmitPendingConfirmation) {
+    state.ackSubmitConfirmationArmedAt = 0;
+    elements.ackSubmitButton.disabled = false;
+    syncAckSubmitButton();
+    return;
+  }
+  state.ackSubmitPendingConfirmation = false;
+  state.ackSubmitConfirmationArmedAt = 0;
+  elements.ackSubmitButton.disabled = false;
+  syncAckSubmitButton();
+}
+
+function setAckFieldState(field, message = "") {
+  if (!field) {
+    return;
+  }
+  const isInvalid = Boolean(message);
+  field.classList.toggle("is-invalid", isInvalid);
+  field.setAttribute("aria-invalid", String(isInvalid));
+}
+
+function truncateText(text, maxLength) {
+  if (text.length <= maxLength) {
+    return text;
+  }
+  return `${text.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+}
+
+function getAckTrailState(milestone) {
+  const expectedTime = dateishTime(milestone.expected);
+  const todayTime = dateishTime(new Date());
+  const isLateAck = isAckAfterExpectedDay(milestone.acked_at, milestone.expected);
+  const isOverduePending = !milestone.acked_at && todayTime > expectedTime;
+
+  if (milestone.acked_at) {
+    return {
+      stateClass: isLateAck ? "is-overdue" : "is-acknowledged",
+      line: formatDateTime(milestone.acked_at),
+      subline: isLateAck
+        ? "This point was acknowledged after its expected day."
+        : "This point in the journey has been marked in time.",
+    };
+  }
+
+  if (isOverduePending) {
+    return {
+      stateClass: "is-overdue",
+      line: `Overdue since ${formatDate(milestone.expected)}`,
+      subline: "Still waiting for a keeper and quiet note.",
+    };
+  }
+
+  return {
+    stateClass: "is-pending",
+    line: `Waiting until ${formatDate(milestone.expected)}`,
+    subline: "Leave a keeper and quiet note, then confirm with the journey key.",
+  };
+}
+
+function buildAckTrailEntries(milestone) {
+  const trail = Array.isArray(milestone?.ack_trail) ? milestone.ack_trail : [];
+  if (trail.length) {
+    return trail.map((entry) => {
+      const entryState = getAckEventTrailState(milestone, entry);
+      return {
+        stateClass: entryState.stateClass,
+        line: formatDateTime(entry.acked_at),
+        keeper: entry.ack_name || "Unknown keeper",
+        note: getBoaNoteContent(entry.note),
+      };
+    });
+  }
+
+  if (!milestone?.acked_at) {
+    return [];
+  }
+
+  const fallbackState = getAckTrailState(milestone);
+  return [{
+    stateClass: fallbackState.stateClass,
+    line: formatDateTime(milestone.acked_at),
+    keeper: milestone.ack_name || "Unknown keeper",
+    note: getBoaNoteContent(milestone.ack_note),
+  }];
+}
+
+function getAckEventTrailState(milestone, entry) {
+  const isLateAck = isAckAfterExpectedDay(entry?.acked_at, milestone.expected);
+  return {
+    stateClass: isLateAck ? "is-overdue" : "is-acknowledged",
+  };
+}
+
+function renderAckTrailEntries(entries) {
+  if (!elements.ackTrail) {
+    return;
+  }
+  elements.ackTrail.replaceChildren();
+  entries.forEach((entry) => {
+    const item = document.createElement("div");
+    item.className = `ack-trail-item ${entry.stateClass}`;
+
+    const marker = document.createElement("span");
+    marker.className = "ack-trail-marker";
+    marker.setAttribute("aria-hidden", "true");
+
+    const meta = document.createElement("div");
+    meta.className = "ack-trail-meta";
+
+    const lineEl = document.createElement("p");
+    lineEl.className = "ack-trail-line";
+    lineEl.append(entry.line);
+    if (entry.keeper) {
+      const divider = document.createElement("span");
+      divider.className = "ack-trail-divider";
+      divider.textContent = " · ";
+      lineEl.append(divider, entry.keeper);
+    }
+    if (entry.note) {
+      const chip = document.createElement("span");
+      chip.className = "ack-trail-note-chip";
+      chip.dataset.noteFull = entry.note;
+      chip.textContent = truncateText(entry.note, 52);
+      lineEl.append(chip);
+    } else if (entry.stateClass === "is-acknowledged" || entry.stateClass === "is-overdue") {
+      const chip = document.createElement("span");
+      chip.className = "ack-trail-note-chip is-empty";
+      chip.textContent = "No quiet note";
+      lineEl.append(chip);
+    }
+
+    meta.append(lineEl);
+    if (entry.subline) {
+      const sublineEl = document.createElement("p");
+      sublineEl.className = "ack-trail-subline";
+      sublineEl.textContent = entry.subline;
+      meta.append(sublineEl);
+    }
+    item.append(marker, meta);
+    elements.ackTrail.append(item);
+  });
 }
 
 function getSelectedAckRelease() {
@@ -984,6 +1280,7 @@ function getSelectedAckMilestone() {
 function drawRelease(svg, release, timeline, palette, options = {}) {
   svg.innerHTML = "";
   const detailCard = options.detailCard || null;
+  const milestoneCard = options.milestoneCard || null;
 
   const { width, height, baselineY, leftPad, rightPad } = RELEASE_VIEWBOX;
 
@@ -1113,11 +1410,11 @@ function drawRelease(svg, release, timeline, palette, options = {}) {
 
   release.milestones.forEach((milestone) => {
     const x = xForDate(milestone.expected);
-    const expectedTime = dateishTime(milestone.expected);
-    const ackTime = milestone.acked_at ? dateishTime(milestone.acked_at) : null;
-    const isLateAck = typeof ackTime === "number" && ackTime > expectedTime;
+    const notePoint = { x, y: baselineY - 24 };
+    const isLateAck = isAckAfterExpectedDay(milestone.acked_at, milestone.expected);
     const isActionablePending = !milestone.acked_at && milestone.id === actionablePendingId;
     const shouldRenderAckMarker = milestone.acked_at || isActionablePending;
+    const hasMilestoneContext = hasBoaNote(milestone.note) || hasBoaNote(milestone.ack_note);
     const markerColor = milestone.acked_at
       ? (isLateAck ? "#c75b4a" : "#6f9f7a")
       : "#9c9c9c";
@@ -1141,17 +1438,23 @@ function drawRelease(svg, release, timeline, palette, options = {}) {
     });
     expectedIcon.appendChild(svgTitle([
       milestone.name,
-      formatCalendarDate(milestone.expected),
+      formatDate(milestone.expected),
     ]));
+    if (hasMilestoneContext) {
+      expectedIcon.setAttribute("tabindex", "0");
+      expectedIcon.setAttribute("role", "button");
+      expectedIcon.setAttribute("aria-label", `${milestone.name} note`);
+      bindMilestoneNoteTrigger(expectedIcon, milestoneCard, svg, notePoint, milestone);
+    }
     milestoneGroup.appendChild(expectedIcon);
     milestoneGroup.appendChild(labelTextNode(milestone.name, x, baselineY - 22, "rgba(47, 55, 70, 0.88)", 12, "middle", "marker-label milestone-name milestone-expected-label"));
-    milestoneGroup.appendChild(labelTextNode(formatCalendarDate(milestone.expected), x + 12, baselineY - 9, "var(--muted)", 10, "start", "marker-date date-text milestone-date milestone-expected"));
+    milestoneGroup.appendChild(labelTextNode(formatShortDate(milestone.expected), x + 12, baselineY - 9, "var(--muted)", 10, "start", "marker-date date-text milestone-date milestone-expected"));
 
     const lowerAnchor = {
       y: baselineY + 15,
       fill: markerColor,
-      label: milestone.acked_at ? formatCalendarDate(milestone.acked_at) : "Pending",
-      tooltip: [milestone.acked_at ? formatCalendarDate(milestone.acked_at) : "Pending"],
+      label: milestone.acked_at ? formatShortDate(milestone.acked_at) : "Pending",
+      tooltip: [milestone.acked_at ? formatDate(milestone.acked_at) : "Pending"],
       className: milestone.acked_at
         ? (isLateAck ? "overdue-marker" : "ack-marker")
         : "pending-marker",
@@ -1162,12 +1465,19 @@ function drawRelease(svg, release, timeline, palette, options = {}) {
         points: `${x},${lowerAnchor.y - 12} ${x - 7},${lowerAnchor.y} ${x + 7},${lowerAnchor.y}`,
         fill: lowerAnchor.fill,
         class: lowerAnchor.className,
-        cursor: isActionablePending ? "pointer" : "default",
+        cursor: "pointer",
       });
       lowerIcon.appendChild(svgTitle(lowerAnchor.tooltip));
-      if (isActionablePending) {
-        lowerIcon.addEventListener("click", () => openAckDialog(release.id, milestone.id));
-      }
+      lowerIcon.setAttribute("tabindex", "0");
+      lowerIcon.setAttribute("role", "button");
+      lowerIcon.setAttribute("aria-label", `${milestone.name} acknowledgement`);
+      lowerIcon.addEventListener("click", () => openAckDialog(release.id, milestone.id));
+      lowerIcon.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openAckDialog(release.id, milestone.id);
+        }
+      });
       milestoneGroup.appendChild(lowerIcon);
     }
 
@@ -1255,7 +1565,7 @@ function renderStarlightTrail(svg, events, xForDate, clampX, detailCard) {
     const marker = svgNode("g", { class: "starlight-event", cursor: "help" });
     marker.setAttribute("tabindex", "0");
     marker.setAttribute("role", "button");
-    marker.setAttribute("aria-label", `Starlight ${event.starlight} on ${formatCalendarDate(event.date)}`);
+    marker.setAttribute("aria-label", `Starlight ${event.starlight} on ${formatDate(event.date)}`);
 
     const haloLayer = svgNode("g", {
       class: "starlight-halo-layer",
@@ -1421,9 +1731,9 @@ function showStarlightDetail(detailCard, svg, point, event) {
   const body = detailCard.querySelector(".starlight-detail-body");
   const stats = detailCard.querySelector(".starlight-detail-stats");
   detailCard.querySelector(".starlight-detail-value").textContent = `✦ ${event.starlight} ${describeStarlightState(event.starlight)}`;
-  detailCard.querySelector(".starlight-detail-date").textContent = formatCalendarDate(event.date);
+  detailCard.querySelector(".starlight-detail-date").textContent = formatDate(event.date);
   detailCard.querySelector(".starlight-detail-whisper").textContent = event.whisper;
-  renderStarlightMarkdown(body, event.detail?.content || "");
+  renderBoaNote(body, event.detail?.content || "", { emptyFallback: "No night log recorded." });
 
   if (event.metrics) {
     detailCard.querySelector(".starlight-detail-done").textContent = String(event.metrics.done);
@@ -1434,16 +1744,12 @@ function showStarlightDetail(detailCard, svg, point, event) {
     stats.classList.add("hidden");
   }
 
-  const box = svg.viewBox.baseVal;
-  const xPercent = (point.x / box.width) * 100;
-  const yPercent = (point.y / box.height) * 100;
-  detailCard.style.left = `${Math.min(Math.max(xPercent + 2, 8), 72)}%`;
-  detailCard.style.top = `${Math.min(Math.max(yPercent - 18, 4), 58)}%`;
   detailCard.dataset.hovering = detailCard.dataset.hovering || "false";
   detailCard.classList.remove("hidden");
   detailCard.classList.remove("is-revealed");
   window.clearTimeout(detailCard._hideTimer);
   window.clearTimeout(detailCard._fadeTimer);
+  positionStoryCard(detailCard, svg, point, { verticalGap: 22, preferred: "above" });
   window.requestAnimationFrame(() => {
     detailCard.classList.add("is-revealed");
   });
@@ -1469,13 +1775,125 @@ function hideStarlightDetail(detailCard) {
   }, 220);
 }
 
-function composeStarlightTitleLines(event) {
-  const lines = [`Starlight ${event.starlight}`, event.whisper];
-  const metricBits = summarizeStarlightMetrics(event.metrics);
-  if (metricBits) {
-    lines.push(metricBits);
+function initializeMilestoneNoteCard(card) {
+  if (!card || card.dataset.ready === "true") {
+    return;
   }
-  return lines;
+  card.dataset.ready = "true";
+  card.dataset.hovering = "false";
+  card.dataset.markerHover = "false";
+  card.addEventListener("mouseenter", () => {
+    card.dataset.hovering = "true";
+    card.classList.remove("hidden");
+    card.classList.add("is-revealed");
+  });
+  card.addEventListener("mouseleave", () => {
+    card.dataset.hovering = "false";
+    hideMilestoneNoteCard(card);
+  });
+}
+
+function positionStoryCard(card, svg, point, { verticalGap = 18, preferred = "above" } = {}) {
+  const track = svg.closest(".release-track");
+  if (!track) {
+    return;
+  }
+  const box = svg.viewBox.baseVal;
+  const trackRect = track.getBoundingClientRect();
+  const svgRect = svg.getBoundingClientRect();
+  const ratioX = point.x / Math.max(box.width, 1);
+  const ratioY = point.y / Math.max(box.height, 1);
+  const pointLeft = (svgRect.left - trackRect.left) + (ratioX * svgRect.width);
+  const pointTop = (svgRect.top - trackRect.top) + (ratioY * svgRect.height);
+  const cardWidth = card.offsetWidth || 280;
+  const cardHeight = card.offsetHeight || 180;
+  const minLeft = 14;
+  const maxLeft = Math.max(minLeft, trackRect.width - cardWidth - 14);
+  const left = Math.min(Math.max(pointLeft - (cardWidth / 2), minLeft), maxLeft);
+  const aboveTop = pointTop - cardHeight - verticalGap;
+  const belowTop = pointTop + verticalGap;
+  const maxTop = Math.max(14, trackRect.height - cardHeight - 14);
+  const top = preferred === "above"
+    ? (aboveTop >= 14 ? aboveTop : Math.min(belowTop, maxTop))
+    : Math.min(Math.max(belowTop, 14), maxTop);
+  card.style.left = `${left}px`;
+  card.style.top = `${Math.min(Math.max(top, 14), maxTop)}px`;
+}
+
+function showMilestoneNoteCard(card, svg, point, milestone) {
+  if (!card) {
+    return;
+  }
+  initializeMilestoneNoteCard(card);
+  card.querySelector(".milestone-note-title").textContent = milestone.name;
+  card.querySelector(".milestone-note-date").textContent = formatDate(milestone.expected);
+  const noteBody = card.querySelector(".milestone-note-body");
+  renderBoaNote(noteBody, getBoaNoteContent(milestone.note));
+  noteBody.classList.toggle("hidden", !hasBoaNote(milestone.note));
+
+  const ackShell = card.querySelector(".milestone-ack-shell");
+  if (hasBoaNote(milestone.ack_note)) {
+    ackShell.classList.remove("hidden");
+    card.querySelector(".milestone-ack-meta").textContent = milestone.acked_at
+      ? `Acked by ${milestone.ack_name || "unknown"} on ${formatDateTime(milestone.acked_at)}`
+      : `Acked by ${milestone.ack_name || "unknown"}`;
+    renderBoaNote(card.querySelector(".milestone-ack-body"), getBoaNoteContent(milestone.ack_note));
+  } else {
+    ackShell.classList.add("hidden");
+    card.querySelector(".milestone-ack-meta").textContent = "";
+    card.querySelector(".milestone-ack-body").replaceChildren();
+  }
+
+  card.classList.remove("hidden");
+  card.classList.remove("is-revealed");
+  window.clearTimeout(card._hideTimer);
+  window.clearTimeout(card._fadeTimer);
+  positionStoryCard(card, svg, point, { verticalGap: 18, preferred: "above" });
+  window.requestAnimationFrame(() => {
+    card.classList.add("is-revealed");
+  });
+}
+
+function hideMilestoneNoteCard(card) {
+  if (!card || card.dataset.hovering === "true" || card.dataset.markerHover === "true") {
+    return;
+  }
+  window.clearTimeout(card._hideTimer);
+  window.clearTimeout(card._fadeTimer);
+  card._fadeTimer = window.setTimeout(() => {
+    if (card.dataset.hovering === "true" || card.dataset.markerHover === "true") {
+      return;
+    }
+    card.classList.remove("is-revealed");
+    card._hideTimer = window.setTimeout(() => {
+      if (card.dataset.hovering === "true" || card.dataset.markerHover === "true") {
+        return;
+      }
+      card.classList.add("hidden");
+    }, 300);
+  }, 120);
+}
+
+function bindMilestoneNoteTrigger(target, card, svg, point, milestone) {
+  if (!target || !card) {
+    return;
+  }
+  const show = () => {
+    card.dataset.markerHover = "true";
+    showMilestoneNoteCard(card, svg, point, milestone);
+  };
+  const hide = () => {
+    card.dataset.markerHover = "false";
+    hideMilestoneNoteCard(card);
+  };
+  target.addEventListener("mouseenter", show);
+  target.addEventListener("focus", show);
+  target.addEventListener("mouseleave", hide);
+  target.addEventListener("blur", hide);
+  target.addEventListener("click", (event) => {
+    event.stopPropagation();
+    show();
+  });
 }
 
 function summarizeStarlightMetrics(metrics) {
@@ -1485,16 +1903,18 @@ function summarizeStarlightMetrics(metrics) {
   return `Done ${metrics.done} / Total ${metrics.total} / Blocked ${metrics.blocked}`;
 }
 
-function renderStarlightMarkdown(container, markdown) {
+function renderBoaNote(container, markdown, { emptyFallback = "" } = {}) {
   if (!container) {
     return;
   }
   container.replaceChildren();
   const blocks = safeMarkdownToBlocks(markdown);
   if (!blocks.length) {
-    const paragraph = document.createElement("p");
-    paragraph.textContent = markdown || "No night log recorded.";
-    container.appendChild(paragraph);
+    if (emptyFallback) {
+      const paragraph = document.createElement("p");
+      paragraph.textContent = emptyFallback;
+      container.appendChild(paragraph);
+    }
     return;
   }
   blocks.forEach((block) => {
@@ -1505,13 +1925,30 @@ function renderStarlightMarkdown(container, markdown) {
       return;
     }
     if (block.type === "list") {
-      const list = document.createElement("ul");
+      const list = document.createElement(block.ordered ? "ol" : "ul");
       block.items.forEach((item) => {
         const li = document.createElement("li");
-        appendInlineMarkdown(li, item);
+        if (item.checked !== undefined) {
+          const checkbox = document.createElement("span");
+          checkbox.className = "boa-note-checkbox";
+          checkbox.textContent = item.checked ? "☑" : "☐";
+          li.appendChild(checkbox);
+          li.appendChild(document.createTextNode(" "));
+          appendInlineMarkdown(li, item.text);
+        } else {
+          appendInlineMarkdown(li, item.text || item);
+        }
         list.appendChild(li);
       });
       container.appendChild(list);
+      return;
+    }
+    if (block.type === "code") {
+      const pre = document.createElement("pre");
+      const code = document.createElement("code");
+      code.textContent = block.text;
+      pre.appendChild(code);
+      container.appendChild(pre);
       return;
     }
     const paragraph = document.createElement("p");
@@ -1526,6 +1963,8 @@ function safeMarkdownToBlocks(markdown) {
   const blocks = [];
   let paragraph = [];
   let list = [];
+  let codeLines = [];
+  let inCodeBlock = false;
 
   const flushParagraph = () => {
     if (!paragraph.length) {
@@ -1538,12 +1977,34 @@ function safeMarkdownToBlocks(markdown) {
     if (!list.length) {
       return;
     }
-    blocks.push({ type: "list", items: list.slice() });
+    blocks.push({ type: "list", items: list.slice(), ordered: Boolean(list.ordered) });
     list = [];
+  };
+  const flushCode = () => {
+    if (!codeLines.length) {
+      return;
+    }
+    blocks.push({ type: "code", text: codeLines.join("\n") });
+    codeLines = [];
   };
 
   lines.forEach((line) => {
     const trimmed = line.trim();
+    if (trimmed.startsWith("```")) {
+      flushParagraph();
+      flushList();
+      if (inCodeBlock) {
+        flushCode();
+        inCodeBlock = false;
+      } else {
+        inCodeBlock = true;
+      }
+      return;
+    }
+    if (inCodeBlock) {
+      codeLines.push(line);
+      return;
+    }
     if (!trimmed) {
       flushParagraph();
       flushList();
@@ -1556,10 +2017,26 @@ function safeMarkdownToBlocks(markdown) {
       blocks.push({ type: "heading", level: headingMatch[1].length, text: headingMatch[2].trim() });
       return;
     }
-    const listMatch = trimmed.match(/^[-*]\s+(.*)$/);
-    if (listMatch) {
+    const checkboxMatch = trimmed.match(/^[-*]\s+\[( |x|X)\]\s+(.*)$/);
+    if (checkboxMatch) {
       flushParagraph();
-      list.push(listMatch[1].trim());
+      list.push({ checked: checkboxMatch[1].toLowerCase() === "x", text: checkboxMatch[2].trim() });
+      return;
+    }
+    const unorderedListMatch = trimmed.match(/^[-*]\s+(.*)$/);
+    if (unorderedListMatch) {
+      flushParagraph();
+      list.push({ text: unorderedListMatch[1].trim() });
+      return;
+    }
+    const orderedListMatch = trimmed.match(/^\d+\.\s+(.*)$/);
+    if (orderedListMatch) {
+      flushParagraph();
+      if (list.length && !list.ordered) {
+        flushList();
+      }
+      list.ordered = true;
+      list.push({ text: orderedListMatch[1].trim() });
       return;
     }
     flushList();
@@ -1568,6 +2045,7 @@ function safeMarkdownToBlocks(markdown) {
 
   flushParagraph();
   flushList();
+  flushCode();
   return blocks.filter((block) => {
     if (block.type === "list") {
       return block.items.length > 0;
@@ -1711,7 +2189,7 @@ function updateMilestoneDrag(clientX) {
   }
   if (label) {
     label.setAttribute("x", String(clamped));
-    label.textContent = formatCalendarDate(projectedDate);
+    label.textContent = formatShortDate(projectedDate);
   }
 }
 
@@ -1909,39 +2387,6 @@ function wavePointY(snapshot, metrics, index, baselineY = RELEASE_VIEWBOX.baseli
   return baselineY - (normalized * metrics.apexHeight);
 }
 
-function inspectBugWaveSeries(risks, baselineY = RELEASE_VIEWBOX.baselineY, config = STARLIGHT_VISUAL_CONFIG) {
-  const snapshots = risks.map((risk, index) => ({
-    open_bug_count: risk,
-    observed_at: new Date(Date.UTC(2026, 0, index + 1)).toISOString(),
-  }));
-  const metrics = buildBugWaveMetrics(snapshots, baselineY, config);
-  return {
-    config,
-    baselineY,
-    starlight75Y: starlightToY(config.bugWaveApexStarlight),
-    apexY: metrics.apexY,
-    sameSkyCoordinateSystem: metrics.apexY === starlightToY(config.bugWaveApexStarlight),
-    yAxisDirection: "smaller-y-is-higher",
-    releasePeakRisk: metrics.releasePeakRisk,
-    effectiveMaxRatio: metrics.effectiveMaxRatio,
-    maxNormalizedRisk: metrics.maxNormalizedRisk,
-    peakPointY: metrics.peakPointY,
-    points: snapshots.map((snapshot, index) => ({
-      risk: risks[index],
-      smoothedRisk: metrics.smoothedRisks[index],
-      peakRisk: metrics.peaks[index],
-      normalizedRisk: metrics.normalizedRisks[index],
-      y: wavePointY(snapshot, metrics, index, baselineY),
-    })),
-  };
-}
-
-function inspectBugWaveFixtures() {
-  return Object.fromEntries(
-    Object.entries(BUG_WAVE_MANUAL_FIXTURES).map(([name, risks]) => [name, inspectBugWaveSeries(risks)]),
-  );
-}
-
 function getReleasePalette(release, fallbackIndex = 0) {
   const palettes = [
     { stroke: "#5d8cd6", soft: "#d8e3f5", label: "#31445f", shadowRgb: "93, 140, 214", strokeRgb: "93, 140, 214", softRgb: "216, 227, 245" },
@@ -2036,12 +2481,15 @@ function setStatus(text) {
   elements.statusPill.textContent = text;
 }
 
-function createJourneyMilestone(name, expected, owner = "", type = "custom") {
+function createJourneyMilestone(name, expected, owner = "", email = "", type = "custom", note = "", sourceId = null) {
   return {
     id: `journey-${Math.random().toString(36).slice(2, 10)}`,
+    sourceId,
     name,
     expected,
     owner,
+    email,
+    note,
     type,
   };
 }
@@ -2060,8 +2508,8 @@ function createInitialJourneyDraft() {
     version: "",
     secret: "",
     milestones: [
-      createJourneyMilestone("Kickoff", kickoff, "pm", "kickoff"),
-      createJourneyMilestone("GA Release", ga, "manager", "ga"),
+      createJourneyMilestone("Kickoff", kickoff, "pm", "", "kickoff"),
+      createJourneyMilestone("GA Release", ga, "manager", "", "ga"),
     ],
     activeMilestoneId: null,
     selectedMilestoneIds: [],
@@ -2070,6 +2518,8 @@ function createInitialJourneyDraft() {
     dragStartX: null,
     dragMoved: false,
     dragGroupSnapshot: null,
+    pendingDragClientX: null,
+    dragRenderFrame: null,
     selectionAnchor: null,
     selectionRect: null,
     selectionMoved: false,
@@ -2090,7 +2540,10 @@ function createJourneyDraftFromRelease(release) {
       milestone.name,
       new Date(milestone.expected),
       milestone.owner || "",
+      milestone.email || "",
       milestone.name === "Kickoff" ? "kickoff" : milestone.name === "GA Release" ? "ga" : "custom",
+      getBoaNoteContent(milestone.note),
+      milestone.id,
     ));
   return draft;
 }
@@ -2106,9 +2559,12 @@ function createJourneyDraftFromBlueprint(blueprint) {
       milestone.name,
       new Date(`${milestone.expected}T12:00:00`),
       milestone.owner || "",
+      milestone.email || "",
       milestone.name === "Kickoff"
         ? "kickoff"
         : milestone.name === "GA Release" || index === milestones.length - 1 ? "ga" : "custom",
+      getBoaNoteContent(milestone.note),
+      milestone.id || null,
     ));
   draft.activeMilestoneId = null;
   return draft;
@@ -2117,6 +2573,24 @@ function createJourneyDraftFromBlueprint(blueprint) {
 function openJourneyDialog(release = null) {
   state.journeyDraft = release ? createJourneyDraftFromRelease(release) : createInitialJourneyDraft();
   showJourneyDialog();
+}
+
+function openJourneyDialogForMilestone(release, milestoneId, focusField = null) {
+  if (!release || !milestoneId) {
+    return;
+  }
+  const draft = createJourneyDraftFromRelease(release);
+  if (draft.milestones.some((milestone) => milestone.id === milestoneId)) {
+    draft.activeMilestoneId = milestoneId;
+    draft.selectedMilestoneIds = [milestoneId];
+  }
+  openJourneyDialogFromDraft(draft);
+  if (focusField === "keeper") {
+    window.requestAnimationFrame(() => {
+      elements.journeyMilestoneOwner.focus();
+      elements.journeyMilestoneOwner.select();
+    });
+  }
 }
 
 function openJourneyDialogFromDraft(draft) {
@@ -2146,16 +2620,19 @@ function syncJourneyForm() {
     return;
   }
   const isEditMode = state.journeyDraft.mode === "edit";
-  elements.journeyKicker.textContent = isEditMode ? "Edit Journey" : "Begin a Journey";
-  elements.journeyTitle.textContent = "Blueprint Editor";
+  elements.journeyKicker.textContent = isEditMode ? "Tend Journey" : "Begin a Journey";
+  elements.journeyTitle.textContent = isEditMode ? "Tend the journey" : "Shape the journey";
+  elements.journeyIntro.textContent = isEditMode
+    ? "Adjust the points already resting on this horizon."
+    : "Place the first points of this release on the horizon.";
   elements.journeyProduct.value = state.journeyDraft.product;
   elements.journeyVersion.value = state.journeyDraft.version;
   elements.journeySecret.value = state.journeyDraft.secret;
   elements.journeyProduct.disabled = isEditMode;
   elements.journeyVersion.disabled = isEditMode;
-  elements.journeySecret.placeholder = isEditMode ? "Enter release secret to save" : "boa-264";
-  elements.journeyCreateButton.textContent = isEditMode ? "Save" : "Done";
-  elements.journeyAddMilestone.classList.toggle("hidden", isEditMode);
+  elements.journeySecret.placeholder = isEditMode ? "Journey key to save" : "Journey key";
+  elements.journeyCreateButton.textContent = isEditMode ? "Save Journey" : "Begin Journey";
+  elements.journeyAddMilestone.classList.remove("hidden");
 }
 
 function getJourneyTimelineScale() {
@@ -2193,24 +2670,30 @@ function getJourneyActiveMilestone() {
 function renderJourneyPopover(anchorRatio = null) {
   const active = getJourneyActiveMilestone();
   const isDragging = Boolean(state.journeyDraft?.dragMilestoneId);
+  const shell = elements.journeyTimeline?.closest(".journey-canvas-shell");
+  shell?.classList.toggle("has-active-editor", Boolean(active && !isDragging));
   elements.journeyMilestonePopover.classList.toggle("hidden", !active || isDragging);
   if (!active) {
     elements.journeyMilestonePopover.style.left = "50%";
     elements.journeyMilestonePopover.style.transform = "translateX(-50%)";
+    elements.journeyMilestonePopover.style.removeProperty("--journey-popover-arrow-x");
     elements.journeyMilestoneMenuPanel.classList.add("hidden");
     return;
   }
   const isEditMode = state.journeyDraft?.mode === "edit";
+  elements.journeyMilestoneTitle.textContent = active.name;
   elements.journeyMilestoneName.value = active.name;
   elements.journeyMilestoneOwner.value = active.owner;
-  elements.journeyMilestoneName.disabled = isEditMode;
-  elements.journeyMilestoneMenu.disabled = isEditMode || active.type !== "custom";
-  if (isEditMode || active.type !== "custom") {
+  elements.journeyMilestoneEmail.value = active.email || "";
+  elements.journeyMilestoneNote.value = active.note || "";
+  elements.journeyMilestoneDate.textContent = formatDate(active.expected);
+  elements.journeyMilestoneName.disabled = false;
+  elements.journeyMilestoneMenu.disabled = active.type !== "custom";
+  if (active.type !== "custom") {
     elements.journeyMilestoneMenuPanel.classList.add("hidden");
   }
 
   if (anchorRatio !== null) {
-    const shell = elements.journeyTimeline?.closest(".journey-canvas-shell");
     const shellWidth = shell?.clientWidth || 0;
     const popoverWidth = elements.journeyMilestonePopover.offsetWidth || 220;
     if (shellWidth) {
@@ -2219,8 +2702,13 @@ function renderJourneyPopover(anchorRatio = null) {
         Math.max(rawLeft, (popoverWidth / 2) + 8),
         shellWidth - (popoverWidth / 2) - 8,
       );
+      const arrowX = Math.min(
+        Math.max(rawLeft - (clampedLeft - (popoverWidth / 2)), 34),
+        popoverWidth - 34,
+      );
       elements.journeyMilestonePopover.style.left = `${clampedLeft}px`;
       elements.journeyMilestonePopover.style.transform = "translateX(-50%)";
+      elements.journeyMilestonePopover.style.setProperty("--journey-popover-arrow-x", `${arrowX}px`);
     }
   }
 }
@@ -2266,12 +2754,23 @@ function getJourneySvgPoint(clientX, clientY) {
   };
 }
 
-function getJourneyMilestoneSelectionBounds(milestone, x, nameY, dateY, baselineY) {
-  const top = Math.min(nameY - 14, dateY - 9, baselineY - 38);
+function getJourneyMilestoneSelectionBounds(milestone, labelX, x, nameY, dateY, baselineY, anchor = "middle") {
+  const estimatedLabelWidth = Math.max(72, Math.min((milestone.name?.length || 0) * 7.4, 122));
+  const left = anchor === "end"
+    ? labelX - estimatedLabelWidth - 8
+    : anchor === "start"
+      ? labelX - 8
+      : labelX - (estimatedLabelWidth / 2);
+  const right = anchor === "end"
+    ? labelX + 12
+    : anchor === "start"
+      ? labelX + estimatedLabelWidth + 12
+      : labelX + (estimatedLabelWidth / 2) + 12;
+  const top = Math.min(nameY - 16, dateY - 10, baselineY - 42);
   const bottom = baselineY + 16;
   return {
-    left: x - 54,
-    right: x + 74,
+    left,
+    right,
     top,
     bottom,
   };
@@ -2320,10 +2819,10 @@ function getJourneyDragSnapshot(milestoneId) {
   });
 
   if (!Number.isFinite(minDeltaDays)) {
-    minDeltaDays = -3650;
+    minDeltaDays = -JOURNEY_INTERACTION_CONFIG.dragFallbackRangeDays;
   }
   if (!Number.isFinite(maxDeltaDays)) {
-    maxDeltaDays = 3650;
+    maxDeltaDays = JOURNEY_INTERACTION_CONFIG.dragFallbackRangeDays;
   }
 
   return {
@@ -2342,6 +2841,7 @@ function renderJourneyDraft() {
   }
 
   const svg = elements.journeyTimeline;
+  svg.classList.toggle("is-dragging", Boolean(state.journeyDraft.dragMilestoneId && state.journeyDraft.dragMoved));
   svg.innerHTML = "";
   const timeline = getJourneyTimelineScale();
   const width = 1120;
@@ -2400,6 +2900,11 @@ function renderJourneyDraft() {
 
   svg.appendChild(svgNode("path", {
     d: buildTimelineSpinePath(leftPad, width - rightPad, baselineY),
+    class: "timeline-spine-glow",
+  }));
+
+  svg.appendChild(svgNode("path", {
+    d: buildTimelineSpinePath(leftPad, width - rightPad, baselineY),
     class: "timeline-spine",
   }));
 
@@ -2408,17 +2913,46 @@ function renderJourneyDraft() {
   let activeMilestoneRatio = null;
   const selectionBounds = [];
 
-  const labelLevels = [];
-  orderedMilestones.forEach((milestone, index) => {
+  const labelLayouts = [];
+  const laneLastRight = [];
+  const laneThreshold = 52;
+  const maxLanes = 6;
+  let clusterIndex = 0;
+  let previousX = null;
+  orderedMilestones.forEach((milestone) => {
     const x = xForDate(milestone.expected);
+    clusterIndex = previousX !== null && x - previousX < 136 ? clusterIndex + 1 : 0;
+    previousX = x;
+    const crowdAnchor = clusterIndex === 0
+      ? "middle"
+      : clusterIndex % 2 === 1
+        ? "start"
+        : "end";
+    const horizontalOffsetBase = crowdAnchor === "start" ? 28 : crowdAnchor === "end" ? -28 : 0;
+    const horizontalOffset = horizontalOffsetBase + (crowdAnchor === "middle" ? 0 : Math.min(clusterIndex, 4) * (crowdAnchor === "start" ? 7 : -7));
+    const estimatedWidth = Math.max(80, Math.min((milestone.name?.length || 0) * 7.4, 132));
+    const leftBound = x + horizontalOffset - (crowdAnchor === "end" ? estimatedWidth : crowdAnchor === "middle" ? estimatedWidth / 2 : 0);
+    const rightBound = x + horizontalOffset + (crowdAnchor === "start" ? estimatedWidth : crowdAnchor === "middle" ? estimatedWidth / 2 : 0);
     let level = 0;
-    if (index > 0) {
-      const prev = labelLevels[index - 1];
-      if (Math.abs(x - prev.x) < 90) {
-        level = (prev.level + 1) % 3;
+    for (let lane = 0; lane < maxLanes; lane += 1) {
+      const lastRight = laneLastRight[lane];
+      if (typeof lastRight !== "number" || leftBound - lastRight >= laneThreshold) {
+        level = lane;
+        laneLastRight[lane] = rightBound;
+        break;
+      }
+      if (lane === maxLanes - 1) {
+        level = lane;
+        laneLastRight[lane] = rightBound;
       }
     }
-    labelLevels.push({ id: milestone.id, x, level });
+    labelLayouts.push({
+      id: milestone.id,
+      x,
+      level,
+      anchor: crowdAnchor,
+      horizontalOffset,
+    });
   });
 
   orderedMilestones.forEach((milestone) => {
@@ -2426,24 +2960,27 @@ function renderJourneyDraft() {
     if (state.journeyDraft.activeMilestoneId === milestone.id) {
       activeMilestoneRatio = x / width;
     }
-    const level = labelLevels.find((item) => item.id === milestone.id)?.level ?? 0;
-    const verticalOffset = level * 16;
+    const layout = labelLayouts.find((item) => item.id === milestone.id) || { level: 0, anchor: "middle", horizontalOffset: 0 };
+    const level = layout.level ?? 0;
+    const verticalOffset = level * 24;
     const arrowTipY = baselineY;
     const arrowTopY = baselineY - 15;
-    const nameY = arrowTopY - 10 + verticalOffset;
-    const dateY = arrowTopY + 1 + verticalOffset;
+    const labelX = x + (layout.horizontalOffset ?? 0);
+    const nameY = arrowTopY - 19 - verticalOffset;
+    const dateY = nameY + 12;
     const isSelected = isJourneyMilestoneSelected(milestone.id);
+    const isActiveEditor = state.journeyDraft.activeMilestoneId === milestone.id;
     const isDraggable = state.journeyDraft.mode === "edit"
       ? true
       : milestone.type !== "custom" ? milestone.type === "kickoff" || milestone.type === "ga" : true;
-    const marker = svgNode("g", { class: `journey-marker ${isSelected ? "is-selected" : ""}` });
+    const marker = svgNode("g", { class: `journey-marker ${isSelected ? "is-selected" : ""} ${isActiveEditor ? "is-active-editor" : ""}` });
     if (isSelected) {
       marker.appendChild(svgNode("rect", {
-        x: String(x - 32),
-        y: String(nameY - 24),
-        width: "64",
-        height: "54",
-        rx: "18",
+        x: String(labelX - 56),
+        y: String(nameY - 34),
+        width: "112",
+        height: "80",
+        rx: "24",
         class: "journey-selection-halo",
       }));
     }
@@ -2455,9 +2992,10 @@ function renderJourneyDraft() {
       stroke: "rgba(103, 92, 83, 0.24)",
       "stroke-width": "1.05",
       "stroke-dasharray": "2 6",
+      class: "journey-marker-stem",
     }));
-    marker.appendChild(labelTextNode(milestone.name, x, nameY, "rgba(47, 55, 70, 0.88)", 12, "middle", "marker-label milestone-name"));
-    marker.appendChild(labelTextNode(formatCalendarDate(milestone.expected), x + 12, dateY, "var(--muted)", 10, "start", "marker-date date-text"));
+    marker.appendChild(labelTextNode(milestone.name, labelX, nameY, "rgba(47, 55, 70, 0.88)", 12, layout.anchor, "marker-label milestone-name"));
+    marker.appendChild(labelTextNode(formatShortDate(milestone.expected), labelX, dateY, "var(--muted)", 10, layout.anchor, "marker-date date-text"));
     marker.appendChild(svgNode("polygon", {
       points: `${x},${arrowTipY - 3} ${x - 7},${arrowTopY} ${x + 7},${arrowTopY}`,
       class: "expected-marker",
@@ -2491,9 +3029,14 @@ function renderJourneyDraft() {
     svg.appendChild(marker);
     selectionBounds.push({
       id: milestone.id,
-      ...getJourneyMilestoneSelectionBounds(milestone, x, nameY, dateY, baselineY),
+      ...getJourneyMilestoneSelectionBounds(milestone, labelX, x, nameY, dateY, baselineY, layout.anchor),
     });
   });
+
+  svg.appendChild(svgNode("path", {
+    d: `M${leftPad} ${baselineY + 28} C${leftPad + 154} ${baselineY + 27}, ${leftPad + 307} ${baselineY + 29}, ${leftPad + 460} ${baselineY + 28} C${leftPad + 614} ${baselineY + 27}, ${leftPad + 767} ${baselineY + 29}, ${width - rightPad} ${baselineY + 28}`,
+    class: "month-ruler-line-glow",
+  }));
 
   svg.appendChild(svgNode("path", {
     d: `M${leftPad} ${baselineY + 28} C${leftPad + 154} ${baselineY + 27}, ${leftPad + 307} ${baselineY + 29}, ${leftPad + 460} ${baselineY + 28} C${leftPad + 614} ${baselineY + 27}, ${leftPad + 767} ${baselineY + 29}, ${width - rightPad} ${baselineY + 28}`,
@@ -2546,7 +3089,7 @@ function addJourneyMilestone() {
     nextDate.setTime(dateishTime(gaMilestone.expected));
     nextDate.setDate(nextDate.getDate() - 10);
   }
-  const milestone = createJourneyMilestone("New Milestone", nextDate, "", "custom");
+  const milestone = createJourneyMilestone("New Milestone", nextDate, "", "", "custom");
   state.journeyDraft.milestones.push(milestone);
   state.journeyDraft.activeMilestoneId = milestone.id;
   renderJourneyDraft();
@@ -2581,37 +3124,46 @@ function updateJourneyDrag(clientX) {
   if (!state.journeyDraft.dragMilestoneId || !state.journeyDraft.dragCandidateMilestoneId || state.journeyDraft.dragStartX === null) {
     return;
   }
-  if (!state.journeyDraft.dragMoved && Math.abs(clientX - state.journeyDraft.dragStartX) < 6) {
+  state.journeyDraft.pendingDragClientX = clientX;
+  if (state.journeyDraft.dragRenderFrame !== null) {
     return;
   }
-  if (!state.journeyDraft.dragMoved) {
-    state.journeyDraft.dragMoved = true;
-    state.journeyDraft.activeMilestoneId = null;
-    renderJourneyPopover();
-  }
-  const snapshot = state.journeyDraft.dragGroupSnapshot || getJourneyDragSnapshot(state.journeyDraft.dragMilestoneId);
-  if (!snapshot) {
-    return;
-  }
-  const scale = getJourneyTimelineScale();
-  const point = getJourneySvgPoint(clientX, 0);
-  const clamped = Math.min(Math.max(point.x, 90), 1120 - 110);
-  const ratio = (clamped - 90) / Math.max(1120 - 90 - 110, 1);
-  const rawTime = scale.startTime + (ratio * scale.range);
-  const oneDay = 24 * 60 * 60 * 1000;
-  const snappedTime = Math.round(rawTime / oneDay) * oneDay;
-  const rawDeltaDays = Math.round((snappedTime - snapshot.anchorTime) / oneDay);
-  const deltaDays = Math.min(Math.max(rawDeltaDays, snapshot.minDeltaDays), snapshot.maxDeltaDays);
-  snapshot.selectedIds.forEach((id) => {
-    const milestone = state.journeyDraft.milestones.find((item) => item.id === id);
-    if (!milestone) {
+  state.journeyDraft.dragRenderFrame = requestAnimationFrame(() => {
+    if (!state.journeyDraft) {
       return;
     }
-    const shifted = new Date(snapshot.baseTimes[id] + (deltaDays * oneDay));
-    shifted.setHours(12, 0, 0, 0);
-    milestone.expected = shifted;
+    state.journeyDraft.dragRenderFrame = null;
+    const pendingClientX = state.journeyDraft.pendingDragClientX;
+    if (pendingClientX === null) {
+      return;
+    }
+    if (!state.journeyDraft.dragMoved && Math.abs(pendingClientX - state.journeyDraft.dragStartX) < JOURNEY_INTERACTION_CONFIG.dragStartThresholdPx) {
+      return;
+    }
+    if (!state.journeyDraft.dragMoved) {
+      state.journeyDraft.dragMoved = true;
+      state.journeyDraft.activeMilestoneId = null;
+      renderJourneyPopover();
+    }
+    const snapshot = state.journeyDraft.dragGroupSnapshot || getJourneyDragSnapshot(state.journeyDraft.dragMilestoneId);
+    if (!snapshot) {
+      return;
+    }
+    const oneDay = 24 * 60 * 60 * 1000;
+    const pixelDelta = pendingClientX - state.journeyDraft.dragStartX;
+    const rawDeltaDays = Math.round(pixelDelta / JOURNEY_INTERACTION_CONFIG.dragPixelsPerDay);
+    const deltaDays = Math.min(Math.max(rawDeltaDays, snapshot.minDeltaDays), snapshot.maxDeltaDays);
+    snapshot.selectedIds.forEach((id) => {
+      const milestone = state.journeyDraft.milestones.find((item) => item.id === id);
+      if (!milestone) {
+        return;
+      }
+      const shifted = new Date(snapshot.baseTimes[id] + (deltaDays * oneDay));
+      shifted.setHours(12, 0, 0, 0);
+      milestone.expected = shifted;
+    });
+    renderJourneyDraft();
   });
-  renderJourneyDraft();
 }
 
 function finishJourneyDrag() {
@@ -2629,6 +3181,11 @@ function finishJourneyDrag() {
     state.journeyDraft.dragCandidateMilestoneId = null;
     state.journeyDraft.dragStartX = null;
     state.journeyDraft.dragGroupSnapshot = null;
+    state.journeyDraft.pendingDragClientX = null;
+    if (state.journeyDraft.dragRenderFrame !== null) {
+      cancelAnimationFrame(state.journeyDraft.dragRenderFrame);
+      state.journeyDraft.dragRenderFrame = null;
+    }
     renderJourneyDraft();
     setTimeout(() => {
       if (state.journeyDraft) {
@@ -2650,7 +3207,11 @@ function updateJourneySelection(clientX, clientY) {
     width: Math.abs(current.x - start.x),
     height: Math.abs(current.y - start.y),
   };
-  if (!state.journeyDraft.selectionMoved && rect.width < 6 && rect.height < 6) {
+  if (
+    !state.journeyDraft.selectionMoved &&
+    rect.width < JOURNEY_INTERACTION_CONFIG.selectionStartThresholdPx &&
+    rect.height < JOURNEY_INTERACTION_CONFIG.selectionStartThresholdPx
+  ) {
     return;
   }
   state.journeyDraft.selectionMoved = true;
@@ -2682,40 +3243,14 @@ function finishJourneySelection() {
   renderJourneyDraft();
 }
 
-function openComposer(releaseId) {
-  elements.composerDialog.classList.remove("import-only");
-  syncComposerHeading("Studio", "Release rituals");
-  renderEditForm(releaseId);
-  renderReminderReleaseOptions(releaseId);
-  renderPluginReleaseOptions(releaseId);
-  if (elements.composerDialog.open) {
-    refreshOptionalSurfaces(releaseId);
-    return;
-  }
-  elements.composerDialog.showModal();
-  refreshOptionalSurfaces(releaseId);
-}
-
-function openComposerForImport() {
-  elements.composerDialog.classList.add("import-only");
-  syncComposerHeading("YAML", "Bring a Journey");
-  if (!elements.composerDialog.open) {
-    elements.composerDialog.showModal();
+function openImportDialog() {
+  elements.importMessage.textContent = "";
+  if (!elements.importDialog.open) {
+    elements.importDialog.showModal();
   }
   setTimeout(() => {
     elements.importFile.focus();
   }, 0);
-}
-
-function syncComposerHeading(kicker, title) {
-  const kickerNode = elements.composerDialog.querySelector(".dialog-kicker");
-  const titleNode = elements.composerDialog.querySelector(".dialog-head h2");
-  if (kickerNode) {
-    kickerNode.textContent = kicker;
-  }
-  if (titleNode) {
-    titleNode.textContent = title;
-  }
 }
 
 function toggleJourneyActionMenu() {
@@ -2732,21 +3267,46 @@ function openAckDialog(releaseId, milestoneId) {
   state.ackContext = { releaseId, milestoneId };
   elements.ackMessage.textContent = "";
   elements.ackSecret.value = "";
+  ensureAckActionsBound();
   syncAckFormState();
   if (elements.ackDialog.open) {
-    elements.ackSecret.focus();
+    elements.ackNote.focus();
     return;
   }
   elements.ackDialog.showModal();
-  elements.ackSecret.focus();
+  elements.ackNote.focus();
 }
 
-function closeComposer() {
-  if (elements.composerDialog.open) {
-    elements.composerDialog.close();
+async function openObservationDialog(releaseId) {
+  const release = getReleaseById(releaseId);
+  if (!release) {
+    return;
   }
-  elements.composerDialog.classList.remove("import-only");
-  syncComposerHeading("Studio", "Release rituals");
+
+  state.observationContext = buildObservationContext(
+    release,
+    state.observationByRelease[releaseId] || buildObservationWorkspaceFromRelease(release),
+  );
+  state.observationDetailPreview = false;
+  elements.observationMessage.textContent = "";
+  await loadObservationWorkspace(releaseId, { silent: true });
+  renderObservationWorkspace();
+  if (!elements.observationDialog.open) {
+    elements.observationDialog.showModal();
+  }
+  requestAnimationFrame(() => {
+    if (window.innerWidth <= 720) {
+      return;
+    }
+    elements.observationWhisper.focus();
+    elements.observationWhisper.select();
+  });
+}
+
+function closeImportDialog() {
+  if (elements.importDialog.open) {
+    elements.importDialog.close();
+  }
 }
 
 function closeAckDialog() {
@@ -2755,8 +3315,118 @@ function closeAckDialog() {
   }
 }
 
-function getSelectedEditRelease() {
-  return state.releases.find((item) => String(item.id) === elements.editRelease.value) || state.releases[0] || null;
+function closeObservationDialog() {
+  if (elements.observationDialog.open) {
+    elements.observationDialog.close();
+  }
+  state.observationContext = null;
+  state.observationDetailPreview = false;
+}
+
+function openEngineDialog() {
+  elements.engineSmtpTestMessage.textContent = "";
+  syncEngineDateFormat();
+  if (!elements.engineDialog.open) {
+    elements.engineDialog.showModal();
+  }
+  loadSystemStatus();
+}
+
+function closeEngineDialog() {
+  if (elements.engineDialog.open) {
+    elements.engineDialog.close();
+  }
+}
+
+function formatSmtpFrom(status) {
+  const name = status.from_name || "Boa";
+  if (status.from) {
+    return `${name} <${status.from}>`;
+  }
+  return name;
+}
+
+function formatSmtpSecurity(status) {
+  if (status.ssl) {
+    return "SSL";
+  }
+  if (status.starttls) {
+    return "STARTTLS";
+  }
+  return "None";
+}
+
+function renderSystemSmtp(status) {
+  if (!status) {
+    elements.engineSmtpStatus.textContent = "Unavailable";
+    elements.engineSmtpMessage.textContent = "The mail route could not be read right now.";
+    elements.engineSmtpHost.textContent = "Not set";
+    elements.engineSmtpFrom.textContent = "Not set";
+    elements.engineSmtpSecurity.textContent = "None";
+    elements.engineSmtpSendButton.disabled = true;
+    elements.engineSmtpLamp.classList.remove("is-ready", "is-error");
+    return;
+  }
+
+  let statusLabel = "Disabled";
+  if (status.enabled) {
+    statusLabel = status.ready ? "Ready" : "Not configured";
+  }
+  if (status.message && status.message.startsWith("SMTP configuration is invalid")) {
+    statusLabel = "Error";
+  }
+  elements.engineSmtpStatus.textContent = statusLabel;
+
+  const message = status.ready
+    ? "The mail route is ready."
+    : (status.message || "The mail route has not been prepared yet.");
+  elements.engineSmtpMessage.textContent = message;
+
+  elements.engineSmtpHost.textContent = status.host || "Not set";
+  elements.engineSmtpFrom.textContent = formatSmtpFrom(status);
+  elements.engineSmtpSecurity.textContent = formatSmtpSecurity(status);
+
+  elements.engineSmtpLamp.classList.remove("is-ready", "is-error");
+  if (status.ready) {
+    elements.engineSmtpLamp.classList.add("is-ready");
+  } else if (statusLabel === "Error") {
+    elements.engineSmtpLamp.classList.add("is-error");
+  }
+
+  elements.engineSmtpTestTo.value = status.test_to || "";
+  elements.engineSmtpSendButton.disabled = !status.ready;
+}
+
+async function loadSystemStatus() {
+  try {
+    const status = await request("/api/system/smtp");
+    renderSystemSmtp(status);
+  } catch (error) {
+    renderSystemSmtp(null);
+    elements.engineSmtpTestMessage.textContent = error.message;
+  }
+}
+
+async function submitEngineSmtpTest(event) {
+  event.preventDefault();
+  elements.engineSmtpTestMessage.textContent = "";
+  const to = elements.engineSmtpTestTo.value.trim();
+  elements.engineSmtpSendButton.disabled = true;
+  try {
+    const result = await request("/api/system/smtp/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(to ? { to } : {}),
+    });
+    elements.engineSmtpTestMessage.textContent = result.ok ? "A test email was sent." : (result.message || "The route answered unexpectedly.");
+    if (!result.ok && result.error) {
+      elements.engineSmtpTestMessage.textContent += ` ${result.error}`;
+    }
+  } catch (error) {
+    elements.engineSmtpTestMessage.textContent = error.message;
+  } finally {
+    loadSystemStatus();
+  }
 }
 
 function renderPreservingViewport() {
@@ -2777,15 +3447,6 @@ function closeReleaseMenu() {
   }
   state.activeMenuReleaseId = null;
   renderPreservingViewport();
-}
-
-function toggleReleaseDates(releaseId) {
-  if (state.expandedReleaseIds.has(releaseId)) {
-    state.expandedReleaseIds.delete(releaseId);
-  } else {
-    state.expandedReleaseIds.add(releaseId);
-  }
-  syncDateVisibility();
 }
 
 function toggleAllReleaseDates() {
@@ -2809,367 +3470,13 @@ function syncDateVisibility() {
 }
 
 function isMilestoneDragEnabled(releaseId) {
-  return elements.composerDialog.open && state.editReleaseId === releaseId;
-}
-
-function getSelectedReminderRelease() {
-  return state.releases.find((item) => String(item.id) === elements.reminderRelease.value) || state.releases[0] || null;
-}
-
-function getSelectedPluginRelease() {
-  return state.releases.find((item) => String(item.id) === elements.pluginRelease.value) || state.releases[0] || null;
-}
-
-function getSelectedPlugin() {
-  return state.pluginCatalog.find((item) => item.id === elements.pluginRunner.value) || state.pluginCatalog[0] || null;
-}
-
-function renderPluginRunnerOptions() {
-  const currentPluginId = elements.pluginRunner.value;
-  elements.pluginRunner.innerHTML = "";
-
-  state.pluginCatalog.forEach((plugin) => {
-    const option = document.createElement("option");
-    option.value = plugin.id;
-    option.textContent = plugin.name;
-    elements.pluginRunner.appendChild(option);
-  });
-
-  if (!state.pluginCatalog.length) {
-    const option = document.createElement("option");
-    option.value = "";
-    option.textContent = "No bug snapshot runner";
-    elements.pluginRunner.appendChild(option);
-    return;
-  }
-
-  if (currentPluginId && state.pluginCatalog.some((plugin) => plugin.id === currentPluginId)) {
-    elements.pluginRunner.value = currentPluginId;
-  } else {
-    elements.pluginRunner.value = state.pluginCatalog[0].id;
-  }
-}
-
-async function refreshOptionalSurfaces(selectedReleaseId) {
-  const releaseId = selectedReleaseId || state.editReleaseId || state.releases[0]?.id;
-  if (!releaseId) {
-    renderReminderPanel();
-    renderPluginPanel();
-    return;
-  }
-
-  await Promise.all([
-    loadReminderState(releaseId),
-    loadPluginCatalog(),
-  ]);
-  renderReminderReleaseOptions(releaseId);
-  renderPluginReleaseOptions(releaseId);
-}
-
-async function loadReminderState(releaseId) {
-  if (!releaseId) {
-    return;
-  }
-
-  state.reminderSupport = "loading";
-  renderReminderPanel();
-
-  const release = state.releases.find((item) => item.id === releaseId);
-  if (!release) {
-    return;
-  }
-
-  const releaseCandidates = [
-    `/api/releases/${releaseId}/notifications`,
-    `/api/releases/${releaseId}/reminders`,
-    `/api/releases/${releaseId}/notification-state`,
-    `/api/releases/${releaseId}/reminder-state`,
-  ];
-
-  for (const path of releaseCandidates) {
-    const response = await requestOptional(path);
-    if (response.ok) {
-      state.reminderSupport = "ready";
-      state.reminderByRelease[releaseId] = normalizeReminderState(response.payload, release);
-      return;
-    }
-    if (response.status && response.status !== 404) {
-      state.reminderSupport = "error";
-      state.reminderByRelease[releaseId] = {
-        label: "Error",
-        summary: "The reminder API responded, but not in a usable way.",
-        items: [],
-        message: extractOptionalError(response),
-      };
-      return;
-    }
-  }
-
-  const milestoneItems = [];
-  for (const milestone of release.milestones) {
-    const milestoneCandidates = [
-      `/api/milestones/${milestone.id}/notifications`,
-      `/api/milestones/${milestone.id}/reminders`,
-      `/api/milestones/${milestone.id}/notification-state`,
-      `/api/milestones/${milestone.id}/reminder-state`,
-    ];
-
-    let found = false;
-    for (const path of milestoneCandidates) {
-      const response = await requestOptional(path);
-      if (response.ok) {
-        found = true;
-        milestoneItems.push(...normalizeReminderItemsFromPayload(response.payload, milestone));
-        break;
-      }
-      if (response.status && response.status !== 404) {
-        state.reminderSupport = "error";
-        state.reminderByRelease[releaseId] = {
-          label: "Error",
-          summary: "The reminder API responded, but not in a usable way.",
-          items: [],
-          message: extractOptionalError(response),
-        };
-        return;
-      }
-    }
-
-    if (!found) {
-      continue;
-    }
-  }
-
-  if (milestoneItems.length) {
-    state.reminderSupport = "ready";
-    state.reminderByRelease[releaseId] = buildReminderStateFromItems(release, milestoneItems);
-    return;
-  }
-
-  state.reminderSupport = "missing";
-  state.reminderByRelease[releaseId] = {
-    label: "Unavailable",
-    summary: "This backend has not exposed reminder state endpoints yet.",
-    items: release.milestones.map((milestone) => ({
-      name: milestone.name,
-      badge: milestone.acked_at ? "acknowledged" : "pending",
-      badgeClass: milestone.acked_at ? "signal-badge-clear" : "signal-badge-pending",
-      meta: milestone.acked_at
-        ? `Milestone acknowledged ${formatDateTime(milestone.acked_at)}. Reminder state is not published here yet.`
-        : `Milestone expected ${formatDate(milestone.expected)}. Reminder state is not published here yet.`,
-      sortWeight: milestone.acked_at ? 2 : 1,
-    })),
-    message: "",
-  };
-}
-
-async function runReminderEngine() {
-  const releaseId = state.reminderReleaseId || state.releases[0]?.id;
-  if (!releaseId) {
-    elements.reminderMessage.textContent = "Bring in a release first.";
-    return;
-  }
-
-  setStatus("Running reminders");
-  elements.reminderRunButton.disabled = true;
-  try {
-    await request("/api/notifications/run", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ as_of: formatLocalDate(new Date()) }),
-    });
-    await loadReminderState(releaseId);
-    renderReminderPanel();
-    elements.reminderMessage.textContent = "Reminder engine refreshed.";
-    setStatus("Reminders ready");
-  } catch (error) {
-    console.error(error);
-    elements.reminderMessage.textContent = error.message;
-    setStatus("Reminder refresh failed");
-  } finally {
-    elements.reminderRunButton.disabled = false;
-  }
-}
-
-async function loadPluginCatalog() {
-  if (state.pluginCatalogSupport === "ready" || state.pluginCatalogSupport === "missing") {
-    return;
-  }
-
-  state.pluginCatalogSupport = "loading";
-  renderPluginPanel();
-
-  const candidates = [
-    "/api/plugins",
-    "/api/plugin-runners",
-    "/api/plugins/bug-snapshots",
-    "/api/plugins/bug-snapshot",
-  ];
-
-  for (const path of candidates) {
-    const response = await requestOptional(path);
-    if (response.ok) {
-      state.pluginCatalog = normalizePluginCatalog(response.payload);
-      state.pluginCatalogSupport = state.pluginCatalog.length ? "ready" : "missing";
-      return;
-    }
-    if (response.status && response.status !== 404) {
-      state.pluginCatalogSupport = "error";
-      elements.pluginMessage.textContent = extractOptionalError(response);
-      return;
-    }
-  }
-
-  state.pluginCatalog = [];
-  state.pluginCatalogSupport = "missing";
-}
-
-function normalizeReminderState(payload, release) {
-  const items = normalizeReminderItemsFromPayload(payload, null);
-  if (items.length) {
-    return buildReminderStateFromItems(release, items);
-  }
-
-  const currentCount = numberish(payload?.current_count ?? payload?.current ?? payload?.active_count);
-  const pendingCount = numberish(payload?.pending_count ?? payload?.pending ?? payload?.queued_count);
-  return {
-    label: pendingCount > 0 ? "Pending" : "Current",
-    summary: `${release.product} ${release.version} has ${pendingCount} pending reminder${pendingCount === 1 ? "" : "s"} and ${currentCount} current.`,
-    items: [],
-    message: "",
-  };
-}
-
-function normalizeReminderItemsFromPayload(payload, milestoneFallback) {
-  const rawItems = Array.isArray(payload)
-    ? payload
-    : payload?.milestones || payload?.reminders || payload?.notifications || payload?.items || (
-      payload && typeof payload === "object" && (
-        "state" in payload ||
-        "status" in payload ||
-        "pending_count" in payload ||
-        "next_due_at" in payload ||
-        "pending_types" in payload
-      )
-        ? [payload]
-        : []
-    );
-
-  if (!Array.isArray(rawItems)) {
-    return [];
-  }
-
-  return rawItems.map((entry, index) => normalizeReminderItem(entry, milestoneFallback, index)).filter(Boolean);
-}
-
-function normalizeReminderItem(entry, milestoneFallback, index) {
-  const notificationHistory = Array.isArray(entry?.notifications) ? entry.notifications : [];
-  const pendingTypes = Array.isArray(entry?.pending_types) ? entry.pending_types : Array.isArray(entry?.pendingTypes) ? entry.pendingTypes : [];
-  const pendingCount = numberish(
-    entry?.pending_count ?? entry?.pendingCount ?? entry?.queued_count ?? entry?.queuedCount ?? pendingTypes.length,
+  return Boolean(
+    elements.journeyDialog.open &&
+    state.journeyDraft?.mode === "edit" &&
+    state.journeyDraft?.releaseId === releaseId
   );
-  const currentCount = numberish(entry?.current_count ?? entry?.currentCount ?? entry?.current ?? entry?.active_count ?? entry?.activeCount ?? notificationHistory.length);
-  const status = String(entry?.state || entry?.status || entry?.type || "").toLowerCase();
-  const nextDueAt = entry?.next_due_at || entry?.nextDueAt || entry?.scheduled_for || entry?.scheduledFor;
-  const lastSentAt = entry?.last_sent_at || entry?.lastSentAt || entry?.sent_at || entry?.sentAt || notificationHistory.at(-1)?.sent_at || notificationHistory.at(-1)?.sentAt;
-  const expected = entry?.expected || milestoneFallback?.expected;
-  const name = entry?.milestone_name || entry?.name || entry?.title || milestoneFallback?.name || `Reminder ${index + 1}`;
-  const ackedAt = entry?.acked_at || entry?.ackedAt || milestoneFallback?.acked_at || milestoneFallback?.ackedAt;
-
-  let badge = "current";
-  let badgeClass = "signal-badge-current";
-
-  if (pendingCount > 0 || status.includes("pending") || status.includes("queue")) {
-    badge = pendingCount > 0 ? `${pendingCount} pending` : "pending";
-    badgeClass = "signal-badge-pending";
-  } else if (ackedAt || status.includes("clear") || status.includes("sent") || status.includes("complete")) {
-    badge = "current";
-    badgeClass = "signal-badge-clear";
-  } else if (currentCount > 0) {
-    badge = `${currentCount} current`;
-  }
-
-  const parts = [];
-  if (pendingTypes.length) {
-    parts.push(`due ${pendingTypes.join(", ")}`);
-  }
-  if (lastSentAt) {
-    parts.push(`last sent ${formatDateTime(lastSentAt)}`);
-  }
-  if (nextDueAt) {
-    parts.push(`next due ${formatDateTime(nextDueAt)}`);
-  }
-  if (expected) {
-    parts.push(`milestone expected ${formatDate(expected)}`);
-  }
-  if (ackedAt) {
-    parts.push(`acknowledged ${formatDateTime(ackedAt)}`);
-  }
-
-  return {
-    name,
-    badge,
-    badgeClass,
-    meta: parts.join(" • ") || "No reminder details published.",
-    sortWeight: pendingCount > 0 ? 0 : currentCount > 0 ? 1 : 2,
-  };
 }
 
-function buildReminderStateFromItems(release, items) {
-  const sortedItems = [...items].sort((left, right) => (
-    left.sortWeight - right.sortWeight || left.name.localeCompare(right.name)
-  ));
-  const pendingCount = sortedItems.filter((item) => item.badgeClass === "signal-badge-pending").length;
-  const currentCount = sortedItems.filter((item) => item.badgeClass !== "signal-badge-pending").length;
-
-  return {
-    label: pendingCount > 0 ? "Pending" : "Current",
-    summary: `${release.product} ${release.version} shows ${pendingCount} pending reminder${pendingCount === 1 ? "" : "s"} across ${sortedItems.length} milestone signal${sortedItems.length === 1 ? "" : "s"}.`,
-    items: sortedItems,
-    message: "",
-  };
-}
-
-function normalizePluginCatalog(payload) {
-  const rawItems = Array.isArray(payload)
-    ? payload
-    : payload?.plugins || payload?.runners || payload?.items || (
-      payload && typeof payload === "object" && (payload.id || payload.name)
-        ? [payload]
-        : []
-    );
-
-  if (!Array.isArray(rawItems)) {
-    return [];
-  }
-
-  return rawItems
-    .map((item, index) => {
-      const kind = String(item?.kind || item?.type || item?.category || "").toLowerCase();
-      const accepts = String(item?.accepts || item?.input_kind || item?.inputKind || "").toLowerCase();
-      const id = String(item?.id || item?.name || `plugin-${index + 1}`);
-      const supportsSnapshots = (
-        kind.includes("bug") ||
-        kind.includes("snapshot") ||
-        accepts.includes("bug") ||
-        accepts.includes("snapshot") ||
-        id.includes("bug") ||
-        id.includes("snapshot")
-      );
-
-      if (!supportsSnapshots) {
-        return null;
-      }
-
-      return {
-        id,
-        name: String(item?.label || item?.name || id),
-        description: String(item?.description || item?.summary || "Plugin-backed bug snapshot ingestion."),
-        contractLabel: String(item?.contract || item?.version || accepts || "plugin contract"),
-        endpoint: item?.endpoint || item?.run_endpoint || item?.runEndpoint || item?.import_endpoint || item?.importEndpoint || "",
-      };
-    })
-    .filter(Boolean);
-}
 
 function extractOptionalError(response) {
   if (response?.error?.message) {
@@ -3185,14 +3492,9 @@ function extractOptionalError(response) {
   return `Request failed with status ${response.status || "unknown"}.`;
 }
 
-function numberish(value) {
-  const parsed = Number(value ?? 0);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
 async function handleReleaseMenuAction(release, action) {
   closeReleaseMenu();
-  if (action === "edit") {
+  if (action === "settings") {
     openJourneyDialog(release);
     return;
   }
@@ -3208,7 +3510,7 @@ async function handleReleaseMenuAction(release, action) {
 }
 
 async function exportReleaseYaml(release) {
-  setStatus("Exporting");
+  setStatus("Preparing journey");
   try {
     const yamlText = await request(`/api/releases/${release.id}/export`);
     const blob = new Blob([yamlText], { type: "text/yaml;charset=utf-8" });
@@ -3220,23 +3522,22 @@ async function exportReleaseYaml(release) {
     anchor.click();
     anchor.remove();
     URL.revokeObjectURL(url);
-    elements.editMessage.textContent = `${release.product} ${release.version} exported.`;
-    setStatus("Exported");
+    setStatus("Journey downloaded");
   } catch (error) {
     console.error(error);
-    elements.editMessage.textContent = error.message;
-    setStatus("Export failed");
+    elements.importMessage.textContent = error.message;
+    setStatus("Journey download failed");
   }
 }
 
 async function deleteRelease(release) {
-  const secret = window.prompt(`Type the secret to remove ${release.product} ${release.version}.`);
+  const secret = window.prompt(`Type the journey key to remove ${release.product} ${release.version}.`);
   if (secret === null) {
     return;
   }
   if (secret.trim() !== String(release.secret || "").trim()) {
-    elements.editMessage.textContent = "Secret did not match. Release was not removed.";
-    setStatus("Delete cancelled");
+    elements.journeyMessage.textContent = "Journey key did not match. The journey was not removed.";
+    setStatus("Journey removal paused");
     return;
   }
   const confirmed = window.confirm(`Are you sure you want to remove this release?\n\n${release.product} ${release.version}\n\nThis removes its milestones and bug history.`);
@@ -3247,320 +3548,490 @@ async function deleteRelease(release) {
   setStatus("Deleting");
   try {
     await request(`/api/releases/${release.id}`, { method: "DELETE" });
-    elements.editMessage.textContent = `${release.product} ${release.version} deleted.`;
     await loadTimeline();
-    setStatus("Deleted");
+    setStatus("Journey removed");
   } catch (error) {
     console.error(error);
-    elements.editMessage.textContent = error.message;
-    setStatus("Delete failed");
+    elements.journeyMessage.textContent = error.message;
+    setStatus("Journey could not be removed");
   }
 }
 
+const DEMO_UNIVERSE_SCENARIOS = [
+  {
+    product: "Lantern Vale",
+    version: "1.2",
+    secret: "demo",
+    milestones: [
+      { name: "Kickoff", dayOffset: -148, owner: "aurore", ack: true },
+      { name: "Dev Ready", dayOffset: -112, owner: "lin", ack: true },
+      { name: "Regression Ready", dayOffset: -76, owner: "mika", ack: true },
+      { name: "GA Release", dayOffset: -42, owner: "sora", ack: true },
+    ],
+    bugSeries: [
+      { dayOffset: -122, openBugCount: 18 },
+      { dayOffset: -96, openBugCount: 32 },
+      { dayOffset: -74, openBugCount: 21 },
+      { dayOffset: -58, openBugCount: 11 },
+      { dayOffset: -46, openBugCount: 4 },
+      { dayOffset: -40, openBugCount: 0 },
+    ],
+    starlightMoments: [
+      {
+        observedOn: -144,
+        starlight: 18,
+        whisper: "The route was named and the first lanterns were lit.",
+        detail: {
+          type: "markdown",
+          content: "## Completed\n\n- Scope gathered around one clear route\n- First engineering rhythm agreed\n\n## Risk\n\n- Interface boundaries were still soft",
+        },
+        metrics: { done: 3, total: 21, blocked: 2 },
+      },
+      {
+        observedOn: -114,
+        starlight: 41,
+        whisper: "The valley stopped echoing and began to answer.",
+        detail: {
+          type: "markdown",
+          content: "## Completed\n\n- Core flow connected end to end\n- Owners settled the handoff shape\n\n## In Progress\n\n- Reliability passes along the edge cases",
+        },
+        metrics: { done: 9, total: 21, blocked: 2 },
+      },
+      {
+        observedOn: -79,
+        starlight: 72,
+        whisper: "Most of the rough weather had already passed behind us.",
+        detail: {
+          type: "markdown",
+          content: "## Completed\n\n- Regression route calmed down\n- Documentation caught up with the build\n\n## Risk\n\n- Final compatibility checks were still underway",
+        },
+        metrics: { done: 16, total: 21, blocked: 1 },
+      },
+      {
+        observedOn: -42,
+        starlight: 100,
+        whisper: "The lanterns held steady all the way to arrival.",
+        detail: {
+          type: "markdown",
+          content: "## Completed\n\n- General availability reached quietly\n- Post-release watch stayed calm\n\n## Notes\n\nThe trail is complete, but still visible.",
+        },
+        metrics: { done: 21, total: 21, blocked: 0 },
+      },
+    ],
+  },
+  {
+    product: "Lantern Vale",
+    version: "1.6",
+    secret: "demo",
+    milestones: [
+      { name: "Kickoff", dayOffset: -58, owner: "aurore", ack: true },
+      { name: "Dev Ready", dayOffset: -18, owner: "lin", ack: true },
+      { name: "Regression Ready", dayOffset: 14, owner: "mika", ack: false },
+      { name: "GA Release", dayOffset: 38, owner: "sora", ack: false },
+    ],
+    bugSeries: [
+      { dayOffset: -42, openBugCount: 9 },
+      { dayOffset: -30, openBugCount: 16 },
+      { dayOffset: -20, openBugCount: 28 },
+      { dayOffset: -12, openBugCount: 22 },
+      { dayOffset: -5, openBugCount: 13 },
+      { dayOffset: 0, openBugCount: 8 },
+    ],
+    starlightMoments: [
+      {
+        observedOn: -54,
+        starlight: 16,
+        whisper: "The path reopened, but the sky was still dim.",
+        detail: {
+          type: "markdown",
+          content: "## Completed\n\n- Kickoff aligned around one narrow goal\n- Design and backend started from the same map\n\n## Risk\n\n- Several interfaces were still provisional",
+        },
+        metrics: { done: 4, total: 24, blocked: 3 },
+      },
+      {
+        observedOn: -24,
+        starlight: 34,
+        whisper: "The second pass felt more certain than the first.",
+        detail: {
+          type: "markdown",
+          content: "## Completed\n\n- Core release flow reached staging\n- Release notes began to hold together\n\n## In Progress\n\n- Team is still closing tricky edge cases",
+        },
+        metrics: { done: 10, total: 24, blocked: 3 },
+      },
+      {
+        observedOn: -10,
+        starlight: 57,
+        whisper: "The route has shape now, even with weather still nearby.",
+        detail: {
+          type: "markdown",
+          content: "## Completed\n\n- Integration sweep settled the major breaks\n- Cross-team review became calmer\n\n## Risk\n\n- One auth seam still needs a final pass",
+        },
+        metrics: { done: 16, total: 24, blocked: 2 },
+      },
+      {
+        observedOn: 0,
+        starlight: 73,
+        whisper: "Confidence is gathering, even while the mountains still move.",
+        detail: {
+          type: "markdown",
+          content: "## Completed\n\n- Feature integration is steady\n- QA handoff feels composed\n- Support notes are almost ready\n\n## In Progress\n\n- Final task-state alignment\n\n## Risk\n\n- Token refresh edge cases still need one more pass",
+        },
+        metrics: { done: 19, total: 24, blocked: 1 },
+      },
+    ],
+  },
+  {
+    product: "Lantern Vale",
+    version: "2.0",
+    secret: "demo",
+    milestones: [
+      { name: "Kickoff", dayOffset: 16, owner: "aurore", ack: false },
+      { name: "Dev Ready", dayOffset: 48, owner: "lin", ack: false },
+      { name: "Regression Ready", dayOffset: 86, owner: "mika", ack: false },
+      { name: "GA Release", dayOffset: 126, owner: "sora", ack: false },
+    ],
+    bugSeries: [
+      { dayOffset: -18, openBugCount: 1 },
+      { dayOffset: -12, openBugCount: 2 },
+      { dayOffset: -7, openBugCount: 1 },
+      { dayOffset: -3, openBugCount: 3 },
+      { dayOffset: 0, openBugCount: 2 },
+    ],
+    starlightMoments: [
+      {
+        observedOn: -20,
+        starlight: 8,
+        whisper: "The next lantern is only a sketch on paper.",
+        detail: {
+          type: "markdown",
+          content: "## Completed\n\n- Early intent was written down\n- Teams agreed on the broad destination\n\n## Risk\n\n- Milestone dates are still gentle estimates",
+        },
+        metrics: { done: 1, total: 19, blocked: 0 },
+      },
+      {
+        observedOn: -9,
+        starlight: 17,
+        whisper: "A first route exists, but no one is rushing it.",
+        detail: {
+          type: "markdown",
+          content: "## Completed\n\n- Kickoff shape drafted\n- Technical questions narrowed\n\n## In Progress\n\n- Scoping the work that truly belongs in this journey",
+        },
+        metrics: { done: 3, total: 19, blocked: 1 },
+      },
+      {
+        observedOn: 0,
+        starlight: 29,
+        whisper: "The future journey is visible now, even from far away.",
+        detail: {
+          type: "markdown",
+          content: "## Completed\n\n- The first planning contour is stable\n- Owners can already see the long horizon\n\n## Risk\n\n- Schedule confidence is still intentionally modest",
+        },
+        metrics: { done: 5, total: 19, blocked: 1 },
+      },
+    ],
+  },
+  {
+    product: "Rose Current",
+    version: "3.4",
+    secret: "demo",
+    milestones: [
+      { name: "Kickoff", dayOffset: -132, owner: "iris", ack: true },
+      { name: "Dev Ready", dayOffset: -101, owner: "noel", ack: true },
+      { name: "Regression Ready", dayOffset: -66, owner: "toma", ack: true },
+      { name: "GA Release", dayOffset: -31, owner: "mina", ack: true },
+    ],
+    bugSeries: [
+      { dayOffset: -108, openBugCount: 14 },
+      { dayOffset: -86, openBugCount: 24 },
+      { dayOffset: -63, openBugCount: 18 },
+      { dayOffset: -48, openBugCount: 9 },
+      { dayOffset: -36, openBugCount: 3 },
+      { dayOffset: -29, openBugCount: 0 },
+    ],
+    starlightMoments: [
+      {
+        observedOn: -128,
+        starlight: 22,
+        whisper: "The current finally chose one direction.",
+        detail: {
+          type: "markdown",
+          content: "## Completed\n\n- Scope trimmed to one meaningful current\n- Team agreed on the release rhythm\n\n## Risk\n\n- Tooling support had not settled yet",
+        },
+        metrics: { done: 4, total: 17, blocked: 1 },
+      },
+      {
+        observedOn: -97,
+        starlight: 48,
+        whisper: "The work stopped drifting and began to hold shape.",
+        detail: {
+          type: "markdown",
+          content: "## Completed\n\n- Core integration held through the first long week\n- Deployment path became repeatable\n\n## In Progress\n\n- Final editor refinements",
+        },
+        metrics: { done: 9, total: 17, blocked: 1 },
+      },
+      {
+        observedOn: -62,
+        starlight: 78,
+        whisper: "Only small waves remained near the surface.",
+        detail: {
+          type: "markdown",
+          content: "## Completed\n\n- Regression layer quieted down\n- Review cycle shortened\n\n## Risk\n\n- A final telemetry check was still open",
+        },
+        metrics: { done: 14, total: 17, blocked: 1 },
+      },
+      {
+        observedOn: -31,
+        starlight: 100,
+        whisper: "Arrival felt light, almost like it happened on its own.",
+        detail: {
+          type: "markdown",
+          content: "## Completed\n\n- GA shipped without turbulence\n- Post-release monitoring stayed calm\n\n## Notes\n\nThis journey is now part of the remembered sky.",
+        },
+        metrics: { done: 17, total: 17, blocked: 0 },
+      },
+    ],
+  },
+  {
+    product: "Rose Current",
+    version: "3.8",
+    secret: "demo",
+    milestones: [
+      { name: "Kickoff", dayOffset: -44, owner: "iris", ack: true },
+      { name: "Dev Ready", dayOffset: -9, owner: "noel", ack: true },
+      { name: "Regression Ready", dayOffset: 21, owner: "toma", ack: false },
+      { name: "GA Release", dayOffset: 56, owner: "mina", ack: false },
+    ],
+    bugSeries: [
+      { dayOffset: -33, openBugCount: 6 },
+      { dayOffset: -22, openBugCount: 12 },
+      { dayOffset: -14, openBugCount: 19 },
+      { dayOffset: -8, openBugCount: 17 },
+      { dayOffset: -2, openBugCount: 11 },
+      { dayOffset: 0, openBugCount: 7 },
+    ],
+    starlightMoments: [
+      {
+        observedOn: -40,
+        starlight: 14,
+        whisper: "The water is moving again, but still quietly.",
+        detail: {
+          type: "markdown",
+          content: "## Completed\n\n- Kickoff aligned across product and infra\n- First release contour agreed\n\n## Risk\n\n- Several support paths are still being written",
+        },
+        metrics: { done: 3, total: 22, blocked: 2 },
+      },
+      {
+        observedOn: -19,
+        starlight: 31,
+        whisper: "The current has momentum now, though not yet peace.",
+        detail: {
+          type: "markdown",
+          content: "## Completed\n\n- Core path crossed staging\n- Cross-team confidence improved\n\n## In Progress\n\n- API contracts are being tightened",
+        },
+        metrics: { done: 8, total: 22, blocked: 2 },
+      },
+      {
+        observedOn: -6,
+        starlight: 53,
+        whisper: "The shore is visible, but the weather still matters.",
+        detail: {
+          type: "markdown",
+          content: "## Completed\n\n- Release branch is coherent\n- Most handoffs have settled\n\n## Risk\n\n- One compatibility seam remains noisy",
+        },
+        metrics: { done: 13, total: 22, blocked: 2 },
+      },
+      {
+        observedOn: 0,
+        starlight: 68,
+        whisper: "The journey is moving forward with patient confidence.",
+        detail: {
+          type: "markdown",
+          content: "## Completed\n\n- Integration path feels dependable\n- Preview signoff is nearly there\n\n## In Progress\n\n- Final regression sweep\n\n## Risk\n\n- Remaining bugs are smaller, but still real",
+        },
+        metrics: { done: 16, total: 22, blocked: 1 },
+      },
+    ],
+  },
+  {
+    product: "Rose Current",
+    version: "4.1",
+    secret: "demo",
+    milestones: [
+      { name: "Kickoff", dayOffset: 11, owner: "iris", ack: false },
+      { name: "Dev Ready", dayOffset: 37, owner: "noel", ack: false },
+      { name: "Regression Ready", dayOffset: 73, owner: "toma", ack: false },
+      { name: "GA Release", dayOffset: 108, owner: "mina", ack: false },
+    ],
+    bugSeries: [
+      { dayOffset: -15, openBugCount: 0 },
+      { dayOffset: -10, openBugCount: 1 },
+      { dayOffset: -6, openBugCount: 2 },
+      { dayOffset: -2, openBugCount: 1 },
+      { dayOffset: 0, openBugCount: 1 },
+    ],
+    starlightMoments: [
+      {
+        observedOn: -18,
+        starlight: 7,
+        whisper: "Only the first notes have been placed on the page.",
+        detail: {
+          type: "markdown",
+          content: "## Completed\n\n- Long-horizon planning has started\n- Early owners are already visible\n\n## Risk\n\n- Delivery shape is still intentionally open",
+        },
+        metrics: { done: 1, total: 20, blocked: 0 },
+      },
+      {
+        observedOn: -8,
+        starlight: 15,
+        whisper: "The next current is becoming easier to imagine.",
+        detail: {
+          type: "markdown",
+          content: "## Completed\n\n- The future release gained its first shared map\n- Work has been separated from wishful thinking\n\n## In Progress\n\n- Milestones are still being tuned",
+        },
+        metrics: { done: 2, total: 20, blocked: 1 },
+      },
+      {
+        observedOn: 0,
+        starlight: 24,
+        whisper: "Readiness is gathering, but still close to the horizon.",
+        detail: {
+          type: "markdown",
+          content: "## Completed\n\n- Planning assumptions are becoming steadier\n- The team can already see the first departure point\n\n## Risk\n\n- Timeline confidence should stay modest for now",
+        },
+        metrics: { done: 4, total: 20, blocked: 1 },
+      },
+    ],
+  },
+];
+
+const DEMO_BLUEPRINT_KICKOFF = "2025-01-15";
+const DEMO_GALAXY_NAMES = [...new Set(DEMO_UNIVERSE_SCENARIOS.map((scenario) => scenario.product))];
+
 async function seedDemo() {
   elements.seedButton.disabled = true;
-  elements.dialogSeedButton.disabled = true;
-  setStatus("Seeding");
+  setStatus("Seeding demo sky");
   try {
-    const scenarios = [
-      {
-        product: "FortiSASE",
-        version: "26.8",
-        secret: "boa-268",
-        milestones: [
-          { name: "Kickoff", dayOffset: -42, owner: "pm", ack: true },
-          { name: "Dev Ready", dayOffset: -10, owner: "alice", ack: true },
-          { name: "Regression Ready", dayOffset: 18, owner: "bob", ack: false },
-          { name: "GA Release", dayOffset: 48, owner: "manager", ack: false },
-        ],
-        bugSeries: [
-          { dayOffset: -30, openBugCount: 9 },
-          { dayOffset: -22, openBugCount: 22 },
-          { dayOffset: -13, openBugCount: 28 },
-          { dayOffset: -5, openBugCount: 17 },
-          { dayOffset: -2, openBugCount: 11 },
-          { dayOffset: 0, openBugCount: 8 },
-        ],
-      },
-      {
-        product: "FortiAnalyzer",
-        version: "8.0",
-        secret: "boa-800",
-        milestones: [
-          { name: "Kickoff", dayOffset: -54, owner: "pm", ack: true },
-          { name: "Dev Ready", dayOffset: -21, owner: "alice", ack: true },
-          { name: "Regression Ready", dayOffset: 11, owner: "bob", ack: false },
-          { name: "GA Release", dayOffset: 41, owner: "manager", ack: false },
-        ],
-        bugSeries: [
-          { dayOffset: -48, openBugCount: 5 },
-          { dayOffset: -34, openBugCount: 13 },
-          { dayOffset: -19, openBugCount: 19 },
-          { dayOffset: -11, openBugCount: 14 },
-          { dayOffset: -4, openBugCount: 10 },
-          { dayOffset: 0, openBugCount: 7 },
-        ],
-      },
-      {
-        product: "FortiExtender",
-        version: "7.6",
-        secret: "boa-076",
-        milestones: [
-          { name: "Kickoff", dayOffset: -76, owner: "pm", ack: true },
-          { name: "Dev Ready", dayOffset: -24, owner: "alice", ack: false },
-          { name: "Regression Ready", dayOffset: 32, owner: "bob", ack: false },
-          { name: "GA Release", dayOffset: 81, owner: "manager", ack: false },
-        ],
-        bugSeries: [
-          { dayOffset: -60, openBugCount: 6 },
-          { dayOffset: -42, openBugCount: 12 },
-          { dayOffset: -27, openBugCount: 18 },
-          { dayOffset: -8, openBugCount: 14 },
-          { dayOffset: -3, openBugCount: 20 },
-          { dayOffset: 0, openBugCount: 13 },
-        ],
-      },
-      {
-        product: "FortiManager",
-        version: "7.4",
-        secret: "boa-740",
-        milestones: [
-          { name: "Kickoff", dayOffset: -68, owner: "pm", ack: true },
-          { name: "Dev Ready", dayOffset: -36, owner: "alice", ack: true },
-          { name: "Regression Ready", dayOffset: 6, owner: "bob", ack: false },
-          { name: "GA Release", dayOffset: 29, owner: "manager", ack: false },
-        ],
-        bugSeries: [
-          { dayOffset: -59, openBugCount: 8 },
-          { dayOffset: -45, openBugCount: 18 },
-          { dayOffset: -31, openBugCount: 24 },
-          { dayOffset: -15, openBugCount: 16 },
-          { dayOffset: -6, openBugCount: 12 },
-          { dayOffset: 0, openBugCount: 9 },
-        ],
-      },
-      {
-        product: "FortiMail",
-        version: "25.1",
-        secret: "boa-251",
-        milestones: [
-          { name: "Kickoff", dayOffset: -39, owner: "pm", ack: true },
-          { name: "Dev Ready", dayOffset: -8, owner: "alice", ack: false },
-          { name: "Regression Ready", dayOffset: 24, owner: "bob", ack: false },
-          { name: "GA Release", dayOffset: 52, owner: "manager", ack: false },
-        ],
-        bugSeries: [
-          { dayOffset: -34, openBugCount: 7 },
-          { dayOffset: -26, openBugCount: 11 },
-          { dayOffset: -18, openBugCount: 15 },
-          { dayOffset: -9, openBugCount: 21 },
-          { dayOffset: -3, openBugCount: 16 },
-          { dayOffset: 0, openBugCount: 14 },
-        ],
-      },
-      {
-        product: "FortiClient",
-        version: "8.2",
-        secret: "boa-820",
-        milestones: [
-          { name: "Kickoff", dayOffset: -58, owner: "pm", ack: true },
-          { name: "Dev Ready", dayOffset: -29, owner: "alice", ack: true },
-          { name: "Regression Ready", dayOffset: 14, owner: "bob", ack: false },
-          { name: "GA Release", dayOffset: 36, owner: "manager", ack: false },
-        ],
-        bugSeries: [
-          { dayOffset: -52, openBugCount: 4 },
-          { dayOffset: -38, openBugCount: 10 },
-          { dayOffset: -25, openBugCount: 17 },
-          { dayOffset: -13, openBugCount: 12 },
-          { dayOffset: -5, openBugCount: 9 },
-          { dayOffset: 0, openBugCount: 6 },
-        ],
-      },
-      {
-        product: "FortiMonitor",
-        version: "3.9",
-        secret: "boa-390",
-        milestones: [
-          { name: "Kickoff", dayOffset: -47, owner: "pm", ack: true },
-          { name: "Dev Ready", dayOffset: -16, owner: "alice", ack: false },
-          { name: "Regression Ready", dayOffset: 17, owner: "bob", ack: false },
-          { name: "GA Release", dayOffset: 44, owner: "manager", ack: false },
-        ],
-        bugSeries: [
-          { dayOffset: -42, openBugCount: 9 },
-          { dayOffset: -33, openBugCount: 14 },
-          { dayOffset: -24, openBugCount: 22 },
-          { dayOffset: -12, openBugCount: 19 },
-          { dayOffset: -4, openBugCount: 12 },
-          { dayOffset: 0, openBugCount: 8 },
-        ],
-      },
-      {
-        product: "FortiRecorder",
-        version: "2.5",
-        secret: "boa-250",
-        milestones: [
-          { name: "Kickoff", dayOffset: -72, owner: "pm", ack: true },
-          { name: "Dev Ready", dayOffset: -44, owner: "alice", ack: true },
-          { name: "Regression Ready", dayOffset: -7, owner: "bob", ack: false },
-          { name: "GA Release", dayOffset: 18, owner: "manager", ack: false },
-        ],
-        bugSeries: [
-          { dayOffset: -66, openBugCount: 11 },
-          { dayOffset: -56, openBugCount: 19 },
-          { dayOffset: -41, openBugCount: 27 },
-          { dayOffset: -22, openBugCount: 23 },
-          { dayOffset: -9, openBugCount: 15 },
-          { dayOffset: 0, openBugCount: 10 },
-        ],
-      },
-    ];
+    const demoReleases = state.releases.filter(
+      (release) => String(release.secret || "").trim() === "demo" || DEMO_GALAXY_NAMES.includes(release.product),
+    );
+    const staleDemoCount = demoReleases.length;
 
-    const scenario = scenarios[state.releases.length % scenarios.length];
-    const product = scenario.product;
-    const version = scenario.version;
-    const secret = scenario.secret;
-    const created = await request("/api/releases", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ product, version, secret }),
-    });
-
-    const releaseId = created.id;
-    const [kickoff, gaRelease] = created.milestones;
-    const [kickoffSpec, devReadySpec, regressionSpec, gaSpec] = scenario.milestones;
-
-    await request(`/api/milestones/${kickoff.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: kickoffSpec.name,
-        expected: isoDateFromOffset(kickoffSpec.dayOffset),
-        owner: kickoffSpec.owner,
-      }),
-    });
-    await request(`/api/milestones/${gaRelease.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: gaSpec.name,
-        expected: isoDateFromOffset(gaSpec.dayOffset),
-        owner: gaSpec.owner,
-      }),
-    });
-    await request(`/api/releases/${releaseId}/milestones`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: devReadySpec.name,
-        expected: isoDateFromOffset(devReadySpec.dayOffset),
-        owner: devReadySpec.owner,
-      }),
-    });
-    await request(`/api/releases/${releaseId}/milestones`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: regressionSpec.name,
-        expected: isoDateFromOffset(regressionSpec.dayOffset),
-        owner: regressionSpec.owner,
-      }),
-    });
-
-    for (const entry of scenario.bugSeries) {
-      await request(`/api/releases/${releaseId}/bug-snapshots`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          open_bug_count: entry.openBugCount,
-        }),
-      });
+    for (const release of demoReleases) {
+      await request(`/api/releases/${release.id}`, { method: "DELETE" });
     }
 
-    const starlightMoments = [
-      {
-        observedOn: isoDateFromOffset(Math.min(kickoffSpec.dayOffset, -34)),
-        starlight: 20,
-        whisper: "Kickoff completed.",
-        detail: {
-          type: "markdown",
-          content: "## Completed\n\n- Journey kickoff aligned\n- Scope framed with engineering and PM\n\n## Risk\n\nOpen dependencies are still being mapped.",
-        },
-        metrics: { done: 4, total: 18, blocked: 1 },
-      },
-      {
-        observedOn: isoDateFromOffset(Math.min(devReadySpec.dayOffset, -18)),
-        starlight: 35,
-        whisper: "Core implementation completed.",
-        detail: {
-          type: "markdown",
-          content: "## Completed\n\n- Security API completed\n- RBAC flow connected\n- Core implementation settled\n\n## In Progress\n\n- Integration polish",
-        },
-        metrics: { done: 11, total: 18, blocked: 2 },
-      },
-      {
-        observedOn: isoDateFromOffset(Math.min(regressionSpec.dayOffset - 7, -3)),
-        starlight: 52,
-        whisper: "Regression path stabilized.",
-        detail: {
-          type: "markdown",
-          content: "## Completed\n\n- Regression path stabilized\n- Cross-team test rhythm re-established\n\n## Risk\n\nAwaiting one backend review before confidence can rise further.",
-        },
-        metrics: { done: 14, total: 18, blocked: 2 },
-      },
-      {
-        observedOn: isoDateFromOffset(0),
-        starlight: 78,
-        whisper: "Feature integration completed.",
-        detail: {
-          type: "markdown",
-          content: "## Completed\n\n- Feature integration completed\n- Release notes draft is ready\n- QA handoff is steady\n\n## In Progress\n\n- Final compatibility sweep\n\n## Risk\n\nA small auth edge case still needs confirmation.",
-        },
-        metrics: { done: 16, total: 18, blocked: 1 },
-      },
-    ];
-    for (const moment of starlightMoments) {
-      await request(`/api/releases/${releaseId}/starlight`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          observed_on: moment.observedOn,
-          starlight: moment.starlight,
-          whisper: moment.whisper,
-          detail: moment.detail,
-          metrics: moment.metrics,
-        }),
-      });
+    for (const scenario of DEMO_UNIVERSE_SCENARIOS) {
+      await createDemoJourney(scenario);
     }
 
     await loadTimeline();
-    const refreshed = state.releases.find((release) => release.id === releaseId);
-    if (refreshed?.milestones?.length) {
-      for (const milestoneSpec of scenario.milestones.filter((item) => item.ack)) {
-        const target = refreshed.milestones.find((item) => item.name === milestoneSpec.name);
-        if (!target) {
-          continue;
-        }
-        await request(`/api/milestones/${target.id}/ack`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ secret }),
-        });
-      }
-    }
-    await loadTimeline();
-    elements.createMessage.textContent = `${product} ${version} demo loaded.`;
-    setStatus("Demo ready");
-    openComposer(releaseId);
+    const rebuiltJourneys = DEMO_UNIVERSE_SCENARIOS.length;
+    const rebuiltGalaxies = new Set(DEMO_UNIVERSE_SCENARIOS.map((item) => item.product)).size;
+    const resetMessage = staleDemoCount
+      ? `${rebuiltJourneys} demo journeys were refreshed across ${rebuiltGalaxies} galaxies.`
+      : `${rebuiltJourneys} demo journeys loaded across ${rebuiltGalaxies} galaxies.`;
+    elements.importMessage.textContent = resetMessage;
+    setStatus("Demo sky ready");
   } catch (error) {
     console.error(error);
-    elements.ackMessage.textContent = error.message;
+    elements.importMessage.textContent = error.message;
     setStatus("Seed failed");
   } finally {
     elements.seedButton.disabled = false;
-    elements.dialogSeedButton.disabled = false;
   }
+}
+
+async function createDemoJourney(scenario) {
+  const kickoffDate = isoDateFromOffset(scenario.milestones[0].dayOffset);
+  const formData = new FormData();
+  formData.append(
+    "file",
+    new File(
+      [buildDemoBlueprintYaml(scenario)],
+      `${slugify(scenario.product)}-${String(scenario.version).replace(/\s+/g, "-")}.yaml`,
+      { type: "text/yaml" },
+    ),
+  );
+  formData.append("keep_original", "false");
+  formData.append("shift_timeline", "true");
+  formData.append("new_kickoff_date", kickoffDate);
+
+  const created = await request("/api/releases/import", {
+    method: "POST",
+    body: formData,
+  });
+
+  const releaseId = created.id;
+
+  for (const entry of scenario.bugSeries) {
+    await request(`/api/releases/${releaseId}/bug-snapshots`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        open_bug_count: entry.openBugCount,
+        observed_at: isoDateTimeFromOffset(entry.dayOffset),
+      }),
+    });
+  }
+
+  for (const moment of scenario.starlightMoments) {
+    await request(`/api/releases/${releaseId}/starlight`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        observed_on: isoDateFromOffset(moment.observedOn),
+        starlight: moment.starlight,
+        whisper: moment.whisper,
+        detail: moment.detail,
+        metrics: moment.metrics,
+      }),
+    });
+  }
+
+  await loadTimeline();
+  const refreshed = state.releases.find((release) => release.id === releaseId);
+  if (!refreshed?.milestones?.length) {
+    return;
+  }
+
+  for (const milestoneSpec of scenario.milestones.filter((item) => item.ack)) {
+    const target = refreshed.milestones.find((item) => item.name === milestoneSpec.name);
+    if (!target) {
+      continue;
+    }
+    await request(`/api/milestones/${target.id}/ack`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ secret: scenario.secret, ack_name: milestoneSpec.owner || "qa" }),
+    });
+  }
+}
+
+function buildDemoBlueprintYaml(scenario) {
+  const kickoffOffset = scenario.milestones[0]?.dayOffset || 0;
+  const anchor = new Date(`${DEMO_BLUEPRINT_KICKOFF}T12:00:00`);
+  const lines = [
+    `product: ${yamlScalar(scenario.product)}`,
+    `version: ${yamlScalar(String(scenario.version))}`,
+    `secret: ${yamlScalar(scenario.secret)}`,
+    "milestones:",
+  ];
+
+  scenario.milestones.forEach((milestone) => {
+    const relativeOffset = milestone.dayOffset - kickoffOffset;
+    const expected = new Date(anchor);
+    expected.setDate(expected.getDate() + relativeOffset);
+    lines.push(`  - name: ${yamlScalar(milestone.name)}`);
+    lines.push(`    expected: ${formatLocalDate(expected)}`);
+    lines.push(`    owner: ${yamlScalar(milestone.owner)}`);
+  });
+
+  return `${lines.join("\n")}\n`;
+}
+
+function yamlScalar(value) {
+  const text = String(value ?? "");
+  return JSON.stringify(text);
 }
 
 function isoDateFromOffset(dayOffset) {
@@ -3570,32 +4041,11 @@ function isoDateFromOffset(dayOffset) {
   return formatLocalDate(base);
 }
 
-async function submitCreate(event) {
-  event.preventDefault();
-  const product = elements.createProduct.value.trim();
-  const version = elements.createVersion.value.trim();
-  const secret = elements.createSecret.value.trim();
-  if (!product || !version || !secret) {
-    elements.createMessage.textContent = "Fill product, version, and secret.";
-    return;
-  }
-
-  try {
-    const created = await request("/api/releases", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ product, version, secret }),
-    });
-    elements.createMessage.textContent = `${product} ${version} created.`;
-    elements.createForm.reset();
-    await loadTimeline();
-    openComposer(created.id);
-    setStatus("Release created");
-  } catch (error) {
-    console.error(error);
-    elements.createMessage.textContent = error.message;
-    setStatus("Create failed");
-  }
+function isoDateTimeFromOffset(dayOffset) {
+  const base = new Date();
+  base.setUTCHours(12, 0, 0, 0);
+  base.setUTCDate(base.getUTCDate() + dayOffset);
+  return base.toISOString();
 }
 
 async function submitJourneyCreate(event) {
@@ -3613,7 +4063,7 @@ async function submitJourneyCreate(event) {
   const secret = state.journeyDraft.secret.trim();
 
   if (!product || !version || !secret) {
-    elements.journeyMessage.textContent = "Fill product, version, and secret.";
+    elements.journeyMessage.textContent = "Fill product, version, and the journey key.";
     return;
   }
 
@@ -3647,6 +4097,8 @@ async function submitJourneyCreate(event) {
           name: kickoff.name,
           expected: formatCalendarDate(kickoff.expected),
           owner: kickoff.owner || "pm",
+          email: kickoff.email?.trim() || null,
+          note: kickoff.note?.trim() ? { content: kickoff.note.trim() } : null,
         }),
       });
     }
@@ -3659,6 +4111,8 @@ async function submitJourneyCreate(event) {
           name: gaRelease.name,
           expected: formatCalendarDate(gaRelease.expected),
           owner: gaRelease.owner || "manager",
+          email: gaRelease.email?.trim() || null,
+          note: gaRelease.note?.trim() ? { content: gaRelease.note.trim() } : null,
         }),
       });
     }
@@ -3671,6 +4125,8 @@ async function submitJourneyCreate(event) {
           name: milestone.name.trim(),
           expected: formatCalendarDate(milestone.expected),
           owner: milestone.owner.trim(),
+          email: milestone.email?.trim() || null,
+          note: milestone.note?.trim() ? { content: milestone.note.trim() } : null,
         }),
       });
     }
@@ -3691,35 +4147,49 @@ async function submitJourneyEdit() {
   }
   const release = state.releases.find((item) => item.id === state.journeyDraft.releaseId);
   if (!release) {
-    elements.journeyMessage.textContent = "Release could not be found.";
+    elements.journeyMessage.textContent = "Journey could not be found.";
     return;
   }
   if (state.journeyDraft.secret.trim() !== String(state.journeyDraft.expectedSecret || "").trim()) {
-    elements.journeyMessage.textContent = "Enter the correct secret to save changes.";
+    elements.journeyMessage.textContent = "Enter the correct journey key to save changes.";
     return;
   }
 
   setStatus("Saving journey");
   try {
-    const orderedDraftMilestones = [...state.journeyDraft.milestones]
-      .sort((left, right) => new Date(left.expected).getTime() - new Date(right.expected).getTime());
-    const orderedReleaseMilestones = [...release.milestones]
-      .sort((left, right) => new Date(left.expected).getTime() - new Date(right.expected).getTime());
+    const orderedDraftMilestones = [...state.journeyDraft.milestones].sort(
+      (left, right) => new Date(left.expected).getTime() - new Date(right.expected).getTime(),
+    );
+    const releaseMilestoneIds = new Set(release.milestones.map((item) => item.id));
+    const draftSourceIds = new Set(orderedDraftMilestones.map((item) => item.sourceId).filter(Boolean));
 
-    for (let index = 0; index < orderedReleaseMilestones.length; index += 1) {
-      const target = orderedReleaseMilestones[index];
-      const draftMilestone = orderedDraftMilestones[index];
-      if (!draftMilestone) {
+    for (const target of release.milestones) {
+      if (!draftSourceIds.has(target.id)) {
+        await request(`/api/milestones/${target.id}`, { method: "DELETE" });
+      }
+    }
+
+    for (const draftMilestone of orderedDraftMilestones) {
+      const payload = {
+        name: draftMilestone.name.trim(),
+        expected: formatCalendarDate(draftMilestone.expected),
+        owner: draftMilestone.owner?.trim() || "",
+        email: draftMilestone.email?.trim() || null,
+        note: draftMilestone.note?.trim() ? { content: draftMilestone.note.trim() } : null,
+      };
+      if (draftMilestone.sourceId && releaseMilestoneIds.has(draftMilestone.sourceId)) {
+        await request(`/api/milestones/${draftMilestone.sourceId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
         continue;
       }
-      await request(`/api/milestones/${target.id}`, {
-        method: "PUT",
+
+      await request(`/api/releases/${release.id}/milestones`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: target.name,
-          expected: formatCalendarDate(draftMilestone.expected),
-          owner: draftMilestone.owner?.trim() || target.owner || "",
-        }),
+        body: JSON.stringify(payload),
       });
     }
 
@@ -3729,7 +4199,7 @@ async function submitJourneyEdit() {
   } catch (error) {
     console.error(error);
     elements.journeyMessage.textContent = error.message;
-    setStatus("Save failed");
+    setStatus("Journey could not be saved");
   }
 }
 
@@ -3767,273 +4237,282 @@ async function submitImport(event) {
     const draft = createJourneyDraftFromBlueprint(blueprint);
     elements.importForm.reset();
     syncImportMode();
-    closeComposer();
+    closeImportDialog();
     openJourneyDialogFromDraft(draft);
     elements.journeyMessage.textContent = `${blueprint.product} ${blueprint.version} is ready to begin.`;
     setStatus("Journey prepared");
   } catch (error) {
     console.error(error);
     elements.importMessage.textContent = error.message;
-    setStatus("Prepare failed");
+    setStatus("Journey could not be prepared");
   }
 }
 
-async function submitAck(event) {
-  event.preventDefault();
+function validateAckForm() {
   const milestone = getSelectedAckMilestone();
-  const release = getSelectedAckRelease();
   const milestoneId = milestone?.id;
   const secret = elements.ackSecret.value.trim();
-  const note = elements.ackNote.value.trim();
-  if (!milestoneId || !secret) {
-    elements.ackMessage.textContent = !secret ? "Secret is required." : "No milestone selected.";
+  const ackName = String(milestone?.owner || "").trim();
+  setAckFieldState(elements.ackSecret);
+  if (!milestoneId || !secret || !ackName) {
+    if (!secret) {
+      setAckFieldState(elements.ackSecret, "required");
+    }
+    elements.ackMessage.textContent = !secret
+      ? "Enter the journey key to leave the mark."
+      : !ackName
+        ? "Set a keeper for this milestone before acknowledging it."
+        : "No milestone selected.";
+    resetAckConfirmationState();
+    return null;
+  }
+  return { milestone, milestoneId, secret, ackName };
+}
+
+function armAckConfirmation() {
+  const validation = validateAckForm();
+  if (!validation) {
+    return false;
+  }
+  if (!state.ackSubmitPendingConfirmation) {
+    state.ackSubmitPendingConfirmation = true;
+    state.ackSubmitConfirmationArmedAt = Date.now();
+    elements.ackSubmitButton.disabled = true;
+    syncAckSubmitButton();
+    elements.ackMessage.textContent = "Press again to confirm this acknowledgement.";
+    state.ackSubmitConfirmUnlockTimer = window.setTimeout(() => {
+      state.ackSubmitConfirmUnlockTimer = null;
+      if (!state.ackSubmitPendingConfirmation) {
+        return;
+      }
+      elements.ackSubmitButton.disabled = false;
+    }, 700);
+    return false;
+  }
+  if (Date.now() - state.ackSubmitConfirmationArmedAt < 450) {
+    elements.ackMessage.textContent = "Press once more to confirm.";
+    return false;
+  }
+  return true;
+}
+
+async function submitAck(event) {
+  event?.preventDefault?.();
+  const validation = validateAckForm();
+  if (!validation) {
     return;
   }
-
+  const { milestoneId, secret, ackName } = validation;
+  const release = getSelectedAckRelease();
+  const note = elements.ackNote.value.trim();
   try {
     const ack = await request(`/api/milestones/${milestoneId}/ack`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ secret, note }),
+      body: JSON.stringify({
+        secret,
+        ack_name: ackName,
+        note: note ? { content: note } : null,
+      }),
     });
-    elements.ackMessage.textContent = milestone?.acked_at
-      ? "Acknowledgement note updated."
-      : "Milestone acknowledged.";
+    elements.ackMessage.textContent = "Acknowledgement confirmed.";
     await loadTimeline();
     if (release) {
       state.ackContext = { releaseId: release.id, milestoneId };
     }
     const refreshed = getSelectedAckMilestone();
-    elements.ackNote.value = refreshed?.ack_note || ack.note || "";
+    elements.ackName.value = refreshed?.owner || ackName;
+    elements.ackKeeperDisplay.textContent = refreshed?.owner || ackName || "No keeper set";
+    elements.ackNote.value = "";
     syncAckFormState();
     setStatus("Acknowledged");
+    closeAckDialog();
   } catch (error) {
     console.error(error);
-    elements.ackMessage.textContent = error.message;
-    setStatus("Ack failed");
-  }
-}
-
-async function saveReleaseBasics() {
-  const release = getSelectedEditRelease();
-  const product = elements.editProduct.value.trim();
-  const version = elements.editVersion.value.trim();
-  const secret = elements.editSecret.value.trim();
-
-  if (!release) {
-    elements.editMessage.textContent = "Choose a release first.";
-    return;
-  }
-
-  if (!product || !version || !secret) {
-    elements.editMessage.textContent = "Release basics need product, version, and secret.";
-    return;
-  }
-
-  setStatus("Saving release");
-  try {
-    await request(`/api/releases/${release.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ product, version, secret }),
-    });
-    elements.editMessage.textContent = `${product} ${version} updated.`;
-    await loadTimeline();
-    renderEditForm(release.id);
-    setStatus("Release saved");
-  } catch (error) {
-    console.error(error);
-    elements.editMessage.textContent = error.message;
-    setStatus("Save failed");
-  }
-}
-
-async function saveMilestone(milestoneId, container) {
-  const name = container.querySelector('[data-field="name"]').value.trim();
-  const expected = container.querySelector('[data-field="expected"]').value;
-  const owner = container.querySelector('[data-field="owner"]').value.trim();
-
-  if (!name || !expected || !owner) {
-    elements.editMessage.textContent = "Each milestone needs name, date, and owner.";
-    return;
-  }
-
-  setStatus("Saving");
-  try {
-    await request(`/api/milestones/${milestoneId}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, expected, owner }),
-    });
-    elements.editMessage.textContent = `${name} updated.`;
-    await loadTimeline();
-    renderEditForm(state.editReleaseId);
-    setStatus("Saved");
-  } catch (error) {
-    console.error(error);
-    elements.editMessage.textContent = error.message;
-    setStatus("Save failed");
-  }
-}
-
-async function submitPluginImport(event) {
-  event.preventDefault();
-  const release = getSelectedPluginRelease();
-  const plugin = getSelectedPlugin();
-  const file = elements.pluginFile.files?.[0];
-  const payload = elements.pluginPayload.value.trim();
-
-  if (!release) {
-    elements.pluginMessage.textContent = "Choose a release first.";
-    return;
-  }
-
-  if (!plugin) {
-    elements.pluginMessage.textContent = "No bug snapshot runner is available.";
-    return;
-  }
-
-  if (!file && !payload) {
-    elements.pluginMessage.textContent = "Provide either a file or a manual payload.";
-    return;
-  }
-
-  let submissions;
-  try {
-    submissions = await parsePluginSubmissions({ file, payload });
-  } catch (error) {
-    elements.pluginMessage.textContent = error.message;
-    return;
-  }
-
-  const endpoint = plugin.endpoint || `/api/plugins/${encodeURIComponent(plugin.id)}/releases/${release.id}/bug-snapshots`;
-
-  setStatus("Running plugin");
-  for (const submission of submissions) {
-    const response = await requestOptional(endpoint.replace("{release_id}", String(release.id)), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(submission),
-    });
-
-    if (response.ok) {
-      continue;
+    state.ackSubmitPendingConfirmation = false;
+    state.ackSubmitConfirmationArmedAt = 0;
+    syncAckSubmitButton();
+    const message = error.message === "Invalid journey key."
+      ? "The journey key did not match."
+      : error.message;
+    if (message === "The journey key did not match.") {
+      setAckFieldState(elements.ackSecret, "mismatch");
     }
-    if (response.status) {
-      elements.pluginMessage.textContent = extractOptionalError(response);
-      setStatus("Plugin failed");
+    elements.ackMessage.textContent = message;
+    setStatus("Acknowledgement could not be recorded");
+  }
+}
+
+function handleAckSubmitButtonClick() {
+  if (!armAckConfirmation()) {
+    return;
+  }
+  submitAck();
+}
+
+function normalizeObservationMetricsInput(doneRaw, totalRaw, blockedRaw) {
+  if (!doneRaw && !totalRaw && !blockedRaw) {
+    return null;
+  }
+  return {
+    done: Number(doneRaw || 0),
+    total: Number(totalRaw || 0),
+    blocked: Number(blockedRaw || 0),
+  };
+}
+
+function areMetricsEqual(left, right) {
+  if (!left && !right) {
+    return true;
+  }
+  if (!left || !right) {
+    return false;
+  }
+  return left.done === right.done && left.total === right.total && left.blocked === right.blocked;
+}
+
+async function submitObservation(event) {
+  event.preventDefault();
+  const context = state.observationContext;
+  const release = getObservationRelease();
+  if (!context || !release) {
+    elements.observationMessage.textContent = "Open a journey observation first.";
+    return;
+  }
+
+  const starlight = Number(elements.observationStarlight.value);
+  const today = formatLocalDate(new Date());
+  const observedOn = today;
+  const whisper = elements.observationWhisper.value.trim();
+  const detailContent = elements.observationDetail.value;
+  const stormsRaw = elements.observationStorms.value.trim();
+  const doneRaw = elements.observationDone.value.trim();
+  const totalRaw = elements.observationTotal.value.trim();
+  const blockedRaw = elements.observationBlocked.value.trim();
+  const metrics = normalizeObservationMetricsInput(doneRaw, totalRaw, blockedRaw);
+  const initialMetrics = normalizeStarlightMetrics(context.current?.metrics);
+  const observationChanged = (
+    starlight !== (context.current?.starlight ?? 0) ||
+    observedOn !== (context.current?.observed_on || context.fields.observedOn) ||
+    whisper !== (context.current?.whisper || "") ||
+    detailContent !== (context.current?.detail?.content || "") ||
+    !areMetricsEqual(metrics, initialMetrics)
+  );
+
+  if (observationChanged) {
+    if (!Number.isFinite(starlight) || starlight < 0 || starlight > 100) {
+      elements.observationMessage.textContent = "Starlight must stay between 0 and 100.";
+      return;
+    }
+    if (!whisper) {
+      elements.observationMessage.textContent = "Today’s Reading is required.";
       return;
     }
   }
 
-  elements.pluginMessage.textContent = `${plugin.name} imported ${submissions.length} bug snapshot${submissions.length === 1 ? "" : "s"} for ${release.product} ${release.version}.`;
-  elements.pluginPayload.value = "";
-  elements.pluginFile.value = "";
-  await loadTimeline();
-  setStatus("Plugin complete");
-}
-
-async function parsePluginSubmissions({ file, payload }) {
-  if (payload) {
-    return normalizePluginSubmissions(JSON.parse(payload));
-  }
-
-  const text = await file.text();
-  if (file.name.endsWith(".csv")) {
-    const rows = text
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
-    if (rows.length < 2) {
-      throw new Error("CSV import needs a header and at least one row.");
-    }
-    const headers = rows[0].split(",").map((item) => item.trim().toLowerCase());
-    const countIndex = headers.findIndex((item) => item === "open_bug_count" || item === "openbugs" || item === "open_bugs");
-    const signalTypeIndex = headers.findIndex((item) => item === "signal_type" || item === "type");
-    if (countIndex === -1) {
-      throw new Error("CSV import needs an open_bug_count column.");
-    }
-    return normalizePluginSubmissions(rows.slice(1).map((row) => {
-      const columns = row.split(",").map((item) => item.trim());
-      return {
-        open_bug_count: Number(columns[countIndex]),
-        signal_type: signalTypeIndex === -1 ? undefined : columns[signalTypeIndex],
-      };
-    }));
-  }
-
-  return normalizePluginSubmissions(JSON.parse(text));
-}
-
-function normalizePluginSubmissions(payload) {
-  const rawEntries = Array.isArray(payload) ? payload : [payload];
-  const submissions = rawEntries.map((entry) => ({
-    open_bug_count: Number(entry?.open_bug_count ?? entry?.openBugCount),
-    signal_type: String(entry?.signal_type ?? entry?.signalType ?? "total").trim() || "total",
-  })).filter((entry) => Number.isFinite(entry.open_bug_count) && entry.open_bug_count >= 0);
-
-  if (!submissions.length) {
-    throw new Error("Plugin payload must contain open_bug_count.");
-  }
-
-  return submissions;
-}
-
-async function deleteMilestone(milestoneId, milestoneName) {
-  const confirmed = window.confirm(`Delete milestone "${milestoneName}"?`);
-  if (!confirmed) {
+  if (context.initialStorms !== null && stormsRaw === "") {
+    elements.observationMessage.textContent = "Current Storms can stay blank only while they are still unknown.";
     return;
   }
 
-  setStatus("Deleting milestone");
+  const storms = stormsRaw === "" ? null : Number(stormsRaw);
+  if (storms !== null && (!Number.isFinite(storms) || storms < 0)) {
+    elements.observationMessage.textContent = "Current Storms must be zero or higher.";
+    return;
+  }
+  const stormsChanged = storms !== context.initialStorms;
+
+  if (!observationChanged && !stormsChanged) {
+    elements.observationMessage.textContent = "Nothing changed yet.";
+    return;
+  }
+
+  setStatus("Recording observation");
+  elements.observationSaveButton.disabled = true;
   try {
-    await request(`/api/milestones/${milestoneId}`, { method: "DELETE" });
-    elements.editMessage.textContent = `${milestoneName} deleted.`;
-    await loadTimeline();
-    renderEditForm(state.editReleaseId);
-    setStatus("Milestone deleted");
+    const results = await Promise.allSettled([
+      observationChanged
+        ? request(`/api/releases/${release.id}/observation`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            starlight,
+            whisper,
+            detail: {
+              type: "markdown",
+              content: detailContent,
+            },
+            metrics,
+            observed_on: observedOn,
+          }),
+        })
+        : Promise.resolve(null),
+      stormsChanged && storms !== null
+        ? request(`/api/releases/${release.id}/bug-snapshots`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            open_bug_count: storms,
+          }),
+        })
+        : Promise.resolve(null),
+    ]);
+
+    const [observationResult, stormsResult] = results;
+    const messages = [];
+    const failures = [];
+    let didSave = false;
+
+    if (observationChanged) {
+      if (observationResult.status === "fulfilled") {
+        didSave = true;
+        state.observationByRelease[release.id] = normalizeObservationWorkspace(observationResult.value, release);
+        messages.push("Starlight updated.");
+      } else {
+        failures.push(`Starlight could not be updated: ${observationResult.reason.message}`);
+      }
+    }
+
+    if (stormsChanged && storms !== null) {
+      if (stormsResult.status === "fulfilled") {
+        didSave = true;
+        messages.push("Storms updated.");
+      } else {
+        failures.push(`Storms could not be updated: ${stormsResult.reason.message}`);
+      }
+    }
+
+    if (didSave) {
+      await loadTimeline();
+      const refreshedRelease = getReleaseById(release.id);
+      if (refreshedRelease) {
+        state.observationContext = buildObservationContext(
+          refreshedRelease,
+          state.observationByRelease[release.id] || buildObservationWorkspaceFromRelease(refreshedRelease),
+        );
+        renderObservationWorkspace();
+      }
+    }
+
+    if (didSave && !failures.length) {
+      elements.observationMessage.textContent = "";
+      closeObservationDialog();
+      setStatus("Observation recorded");
+      return;
+    }
+
+    elements.observationMessage.textContent = [...messages, ...failures].join(" ");
+    if (failures.length && !didSave) {
+      setStatus("Observation could not be recorded");
+    } else {
+      setStatus(failures.length ? "Observation partially recorded" : "Observation recorded");
+    }
   } catch (error) {
     console.error(error);
-    elements.editMessage.textContent = error.message;
-    setStatus("Delete failed");
-  }
-}
-
-async function submitEdit(event) {
-  event.preventDefault();
-  const release = getSelectedEditRelease();
-  const name = elements.editNewName.value.trim();
-  const expected = elements.editNewDate.value;
-  const owner = elements.editNewOwner.value.trim();
-
-  if (!release) {
-    elements.editMessage.textContent = "Choose a release first.";
-    return;
-  }
-
-  if (!name || !expected || !owner) {
-    elements.editMessage.textContent = "New milestones need name, date, and owner.";
-    return;
-  }
-
-  setStatus("Adding milestone");
-  try {
-    await request(`/api/releases/${release.id}/milestones`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, expected, owner }),
-    });
-    elements.editMessage.textContent = `${name} added to ${release.product} ${release.version}.`;
-    elements.editNewName.value = "";
-    elements.editNewDate.value = "";
-    elements.editNewOwner.value = "";
-    await loadTimeline();
-    renderEditForm(release.id);
-    setStatus("Milestone added");
-  } catch (error) {
-    console.error(error);
-    elements.editMessage.textContent = error.message;
-    setStatus("Add failed");
+    elements.observationMessage.textContent = error.message;
+    setStatus("Observation could not be recorded");
+  } finally {
+    elements.observationSaveButton.disabled = false;
   }
 }
 
@@ -4056,7 +4535,7 @@ function updateBoardSummary() {
   const prefix = state.pageScope.mode === "galaxy"
     ? `${state.pageScope.label || formatGalaxyTitle(state.pageScope.galaxySlug)} galaxy • `
     : "";
-  elements.boardSummary.textContent = `${prefix}${releaseCount} releases • ${milestoneCount} milestones • ${pendingCount} pending${collapsedNote}`;
+  elements.boardSummary.textContent = `${prefix}${releaseCount} journeys • ${milestoneCount} milestones • ${pendingCount} pending${collapsedNote}`;
 }
 
 function getBoardReleaseGroups(releases) {
@@ -4226,7 +4705,14 @@ function selectPerspective(perspective) {
 }
 
 function formatShortDate(value) {
-  return value.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const date = parseDateish(value);
+  if (state.dateFormat === "iso") {
+    return formatCalendarDate(date);
+  }
+  if (state.dateFormat === "day-first") {
+    return `${date.getDate()} ${date.toLocaleDateString(undefined, { month: "short" })}`;
+  }
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 function parseDateish(value) {
@@ -4248,6 +4734,38 @@ function dateishTime(value) {
   return parseDateish(value).getTime();
 }
 
+function calendarKeyParts(year, month, day) {
+  return [
+    String(year).padStart(4, "0"),
+    String(month).padStart(2, "0"),
+    String(day).padStart(2, "0"),
+  ].join("-");
+}
+
+function dateishDayKey(value) {
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
+  return formatCalendarDate(value);
+}
+
+function dateishDayKeyInLastTimezone(value) {
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
+  const date = parseDateish(value);
+  // "Anywhere on Earth" keeps a milestone valid until the day has passed in UTC-12.
+  const aoeDate = new Date(date.getTime() - 12 * 60 * 60 * 1000);
+  return calendarKeyParts(aoeDate.getUTCFullYear(), aoeDate.getUTCMonth() + 1, aoeDate.getUTCDate());
+}
+
+function isAckAfterExpectedDay(ackValue, expectedValue) {
+  if (!ackValue || !expectedValue) {
+    return false;
+  }
+  return dateishDayKeyInLastTimezone(ackValue) > dateishDayKey(expectedValue);
+}
+
 function formatCalendarDate(value) {
   const date = parseDateish(value);
   const year = date.getFullYear();
@@ -4265,7 +4783,14 @@ function formatLocalDate(value) {
 }
 
 function formatDate(value) {
-  return new Date(value).toLocaleDateString(undefined, {
+  const date = parseDateish(value);
+  if (state.dateFormat === "iso") {
+    return formatCalendarDate(date);
+  }
+  if (state.dateFormat === "day-first") {
+    return `${date.getDate()} ${date.toLocaleDateString(undefined, { month: "short" })} ${date.getFullYear()}`;
+  }
+  return date.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -4273,12 +4798,69 @@ function formatDate(value) {
 }
 
 function formatDateTime(value) {
-  return new Date(value).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
+  const date = parseDateish(value);
+  const time = date.toLocaleTimeString(undefined, {
     hour: "numeric",
     minute: "2-digit",
   });
+  return `${formatDate(date)}, ${time}`;
+}
+
+function getDateFormatPreference() {
+  try {
+    const saved = window.localStorage.getItem(DATE_FORMAT_STORAGE_KEY);
+    if (Object.hasOwn(DATE_FORMAT_OPTIONS, saved)) {
+      return saved;
+    }
+  } catch (error) {
+    console.warn("Date format preference could not be read.", error);
+  }
+  return "storybook";
+}
+
+function setDateFormatPreference(format) {
+  if (!Object.hasOwn(DATE_FORMAT_OPTIONS, format)) {
+    return;
+  }
+  state.dateFormat = format;
+  try {
+    window.localStorage.setItem(DATE_FORMAT_STORAGE_KEY, format);
+  } catch (error) {
+    console.warn("Date format preference could not be saved.", error);
+  }
+}
+
+function syncEngineDateFormat() {
+  if (!elements.engineDateFormatLabel) {
+    return;
+  }
+  elements.engineDateFormatLabel.textContent = DATE_FORMAT_OPTIONS[state.dateFormat].label;
+  elements.engineDateFormatMenu?.querySelectorAll("[data-format]").forEach((item) => {
+    const isSelected = item.dataset.format === state.dateFormat;
+    item.classList.toggle("is-selected", isSelected);
+    item.setAttribute("aria-current", isSelected ? "true" : "false");
+  });
+}
+
+function setEngineDateFormatMenuOpen(isOpen) {
+  elements.engineDateFormatMenu?.classList.toggle("hidden", !isOpen);
+  elements.engineDateFormatButton?.setAttribute("aria-expanded", String(isOpen));
+}
+
+function applyDateFormatPreference(format) {
+  setDateFormatPreference(format);
+  syncEngineDateFormat();
+  render(false);
+  if (state.journeyDraft) {
+    renderJourneyDraft();
+    renderJourneyPopover();
+  }
+  if (elements.ackDialog.open) {
+    syncAckFormState();
+  }
+  if (elements.observationDialog.open) {
+    renderObservationWorkspace();
+  }
 }
 
 function slugify(value) {
@@ -4294,6 +4876,14 @@ function syncImportMode() {
   }
 }
 
+function syncImportFileSummary() {
+  if (!elements.importFileSummary) {
+    return;
+  }
+  const file = elements.importFile?.files?.[0];
+  elements.importFileSummary.textContent = file ? file.name : "No page chosen yet";
+}
+
 function escapeHtml(text) {
   return text
     .replaceAll("&", "&amp;")
@@ -4304,7 +4894,6 @@ function escapeHtml(text) {
 }
 
 elements.seedButton.addEventListener("click", seedDemo);
-elements.dialogSeedButton.addEventListener("click", seedDemo);
 elements.newReleaseButton.addEventListener("click", (event) => {
   event.stopPropagation();
   toggleJourneyActionMenu();
@@ -4315,10 +4904,11 @@ elements.newJourneyOption.addEventListener("click", () => {
 });
 elements.importJourneyOption.addEventListener("click", () => {
   setJourneyActionMenuOpen(false);
-  openComposerForImport();
+  openImportDialog();
 });
 elements.emptyNewReleaseButton.addEventListener("click", () => openJourneyDialog());
 elements.closeJourneyDialogButton.addEventListener("click", closeJourneyDialog);
+elements.closeImportDialogButton.addEventListener("click", closeImportDialog);
 elements.journeyForm.addEventListener("submit", submitJourneyCreate);
 elements.journeyAddMilestone.addEventListener("click", addJourneyMilestone);
 elements.journeyMilestonePopover.addEventListener("submit", (event) => event.preventDefault());
@@ -4350,36 +4940,77 @@ elements.journeySecret.addEventListener("input", () => {
 });
 elements.journeyMilestoneName.addEventListener("input", () => updateJourneyActiveMilestone("name", elements.journeyMilestoneName.value));
 elements.journeyMilestoneOwner.addEventListener("input", () => updateJourneyActiveMilestone("owner", elements.journeyMilestoneOwner.value));
-elements.closeDialogButton.addEventListener("click", closeComposer);
+elements.journeyMilestoneNote.addEventListener("input", () => updateJourneyActiveMilestone("note", elements.journeyMilestoneNote.value));
+elements.journeyMilestoneEmail.addEventListener("input", () => updateJourneyActiveMilestone("email", elements.journeyMilestoneEmail.value));
 elements.closeAckDialogButton.addEventListener("click", closeAckDialog);
-elements.createForm.addEventListener("submit", submitCreate);
+elements.closeObservationDialogButton.addEventListener("click", closeObservationDialog);
+elements.ackKeeperChangeButton?.addEventListener("click", () => {
+  const release = getSelectedAckRelease();
+  const milestone = getSelectedAckMilestone();
+  closeAckDialog();
+  openJourneyDialogForMilestone(release, milestone?.id, "keeper");
+});
+elements.engineButton.addEventListener("click", openEngineDialog);
+elements.closeEngineDialogButton.addEventListener("click", closeEngineDialog);
+elements.engineDateFormatButton?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  const isOpen = elements.engineDateFormatMenu?.classList.contains("hidden");
+  setEngineDateFormatMenuOpen(Boolean(isOpen));
+});
+elements.engineDateFormatMenu?.querySelectorAll("[data-format]").forEach((item) => {
+  item.addEventListener("click", (event) => {
+    event.stopPropagation();
+    applyDateFormatPreference(item.dataset.format);
+    setEngineDateFormatMenuOpen(false);
+  });
+});
+elements.engineSmtpTestForm.addEventListener("submit", submitEngineSmtpTest);
 elements.importForm.addEventListener("submit", submitImport);
-elements.ackForm.addEventListener("submit", submitAck);
+elements.observationForm.addEventListener("submit", submitObservation);
+elements.observationDetailPreviewToggle?.addEventListener("click", () => {
+  state.observationDetailPreview = !state.observationDetailPreview;
+  syncObservationDetailPreview();
+});
 elements.ackSecret.addEventListener("input", () => {
   if (elements.ackMessage.textContent) {
     elements.ackMessage.textContent = "";
   }
+  setAckFieldState(elements.ackSecret);
+  resetAckConfirmationState();
 });
-elements.editForm.addEventListener("submit", submitEdit);
-elements.editReleaseSaveButton.addEventListener("click", saveReleaseBasics);
-elements.editRelease.addEventListener("change", () => {
-  state.editReleaseId = Number(elements.editRelease.value);
-  renderEditForm(state.editReleaseId);
-  refreshOptionalSurfaces(state.editReleaseId);
+elements.ackNote.addEventListener("input", () => {
+  if (elements.ackMessage.textContent) {
+    elements.ackMessage.textContent = "";
+  }
+  resetAckConfirmationState();
 });
-elements.reminderRelease.addEventListener("change", () => {
-  state.reminderReleaseId = Number(elements.reminderRelease.value);
-  loadReminderState(state.reminderReleaseId).then(() => renderReminderPanel());
+[
+  elements.observationStarlight,
+  elements.observationStorms,
+  elements.observationWhisper,
+  elements.observationDetail,
+  elements.observationDone,
+  elements.observationTotal,
+  elements.observationBlocked,
+].forEach((field) => {
+  field?.addEventListener("input", () => {
+    if (elements.observationMessage.textContent) {
+      elements.observationMessage.textContent = "";
+    }
+    if (field === elements.observationDetail && state.observationDetailPreview) {
+      renderObservationDetailPreview();
+    }
+  });
 });
-elements.reminderRunButton.addEventListener("click", runReminderEngine);
-elements.pluginForm.addEventListener("submit", submitPluginImport);
-elements.pluginRelease.addEventListener("change", () => {
-  state.pluginReleaseId = Number(elements.pluginRelease.value);
-  renderPluginPanel();
+elements.observationStarlight.addEventListener("input", () => {
+  syncObservationStarlightReadout(elements.observationStarlight.value);
 });
-elements.pluginRunner.addEventListener("change", renderPluginPanel);
+elements.observationStorms.addEventListener("input", () => {
+  syncObservationStormSummary(elements.observationStorms.value);
+});
 elements.importKeepOriginal.addEventListener("change", syncImportMode);
 elements.importShiftTimeline.addEventListener("change", syncImportMode);
+elements.importFile?.addEventListener("change", syncImportFileSummary);
 elements.horizonSelector?.addEventListener("click", (event) => {
   const option = event.target.closest("[data-horizon-months]");
   if (!option) {
@@ -4397,15 +5028,37 @@ elements.perspectiveSelector?.addEventListener("click", (event) => {
   }
   selectPerspective(option.dataset.perspective);
 });
-elements.composerDialog.addEventListener("click", (event) => {
-  if (event.target === elements.composerDialog) {
-    closeComposer();
+elements.importDialog.addEventListener("click", (event) => {
+  if (event.target === elements.importDialog) {
+    closeImportDialog();
   }
+});
+elements.importDialog.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  closeImportDialog();
 });
 elements.ackDialog.addEventListener("click", (event) => {
   if (event.target === elements.ackDialog) {
     closeAckDialog();
   }
+});
+elements.observationDialog.addEventListener("click", (event) => {
+  if (event.target === elements.observationDialog) {
+    closeObservationDialog();
+  }
+});
+elements.observationDialog.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  closeObservationDialog();
+});
+elements.engineDialog.addEventListener("click", (event) => {
+  if (event.target === elements.engineDialog) {
+    closeEngineDialog();
+  }
+});
+elements.engineDialog.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  closeEngineDialog();
 });
 elements.journeyDialog.addEventListener("click", (event) => {
   if (event.target === elements.journeyDialog) {
@@ -4423,6 +5076,9 @@ document.addEventListener("click", (event) => {
   if (!event.target.closest(".release-menu-shell")) {
     closeReleaseMenu();
   }
+  if (!event.target.closest(".engine-date-format-field")) {
+    setEngineDateFormatMenuOpen(false);
+  }
   if (state.journeyDraft?.activeMilestoneId) {
     const clickedInsideJourneyEditor = event.target.closest("#journey-milestone-popover, .journey-milestone-hit, #journey-add-milestone");
     if (!clickedInsideJourneyEditor) {
@@ -4437,7 +5093,7 @@ document.addEventListener("click", (event) => {
   ) {
     return;
   }
-  if (elements.composerDialog.open || elements.ackDialog.open) {
+  if (elements.importDialog.open || elements.ackDialog.open) {
     return;
   }
   const currentScrollX = window.scrollX;
@@ -4459,6 +5115,10 @@ document.addEventListener("pointermove", (event) => {
   }
 });
 document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && elements.observationDialog.open) {
+    closeObservationDialog();
+    return;
+  }
   if (event.key === "Escape" && elements.journeyDialog.open) {
     if (state.journeyDraft?.activeMilestoneId) {
       elements.journeyMilestoneMenuPanel.classList.add("hidden");
@@ -4496,20 +5156,6 @@ if (visualViewportRef) {
     visualViewportRef.removeEventListener("scroll", handleVisualViewportChange);
   }, { once: true });
 }
-window.BOA_DEBUG = {
-  BUG_WAVE_MANUAL_FIXTURES,
-  STARLIGHT_VISUAL_CONFIG,
-  starlightToY,
-  getBugRisk,
-  computePeakRisk,
-  getBugWaveEffectiveMaxRatio,
-  normalizeBugWaveHeight,
-  smoothRiskSeries,
-  buildBugWaveMetrics,
-  inspectBugWaveSeries,
-  inspectBugWaveFixtures,
-};
-
 async function init() {
   await loadAppConfig();
   syncBoardControls();
@@ -4518,4 +5164,7 @@ async function init() {
 
 syncNowControls();
 syncImportMode();
+syncImportFileSummary();
+syncEngineDateFormat();
+ensureAckActionsBound();
 init();
