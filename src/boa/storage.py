@@ -574,30 +574,6 @@ class BoaStorage:
             note=note,
         )
 
-    def list_milestone_ack_history(self, milestone_id: int) -> list[AckRecord]:
-        milestone = self.get_milestone(milestone_id)
-        with self.connect() as connection:
-            rows = connection.execute(
-                """
-                SELECT id, release_id, milestone_id, ack_name, owner, acked_at, note
-                FROM milestone_ack
-                WHERE milestone_id = ?
-                ORDER BY acked_at DESC, id DESC
-                """,
-                (milestone_id,),
-            ).fetchall()
-        return [
-            AckRecord(
-                id=int(row["id"]),
-                release_id=int(row["release_id"]),
-                milestone_id=int(row["milestone_id"]),
-                ack_name=str(row["ack_name"]) if row["ack_name"] else str(row["owner"]),
-                acked_at=datetime.fromisoformat(str(row["acked_at"])),
-                note=str(row["note"]) if row["note"] is not None else "",
-            )
-            for row in rows
-        ]
-
     def list_bug_snapshots(self, release_id: int) -> list[BugSnapshot]:
         self.get_release(release_id)
         with self.connect() as connection:

@@ -610,13 +610,6 @@
   border-color: rgba(163, 136, 91, 0.24);
 }
 
-.mini-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-
 .engine-dialog {
   width: min(653px, calc(100vw - 28px));
 }

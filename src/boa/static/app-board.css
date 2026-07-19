@@ -71,15 +71,6 @@
   text-shadow: 0 0 10px rgba(var(--release-soft-rgb, 216, 227, 245), 0.32);
 }
 
-.release-action-inline {
-  min-height: 26px;
-  padding: 0 10px;
-  margin-top: 0;
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
 .release-menu-shell {
   position: relative;
   flex: 0 0 auto;
@@ -614,8 +605,7 @@
 }
 
 .marker-label,
-.marker-date,
-.marker-owner {
+.marker-date {
   font-family: "Libre Baskerville", "Georgia", serif;
   fill: var(--ink);
 }
@@ -678,10 +668,6 @@
 
 .release-row.dates-visible .milestone-date {
   opacity: 1;
-}
-
-.milestone-owner {
-  opacity: 0.92;
 }
 
 .wave-source-glow {
@@ -928,4 +914,3 @@
     gap: 14px 18px;
   }
 }
-

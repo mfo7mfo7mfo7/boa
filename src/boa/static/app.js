@@ -36,13 +36,6 @@ const JOURNEY_INTERACTION_CONFIG = {
   dragFallbackRangeDays: 3650,
   selectionStartThresholdPx: 8,
 };
-const BUG_WAVE_MANUAL_FIXTURES = {
-  normalConvergence: [10, 30, 80, 50, 20],
-  newPeakToday: [10, 30, 80, 90],
-  lowRiskRelease: [0, 1, 2, 1, 0],
-  noBugs: [0, 0, 0],
-  flatHighRisk: [50, 50, 50, 50],
-};
 const DATE_FORMAT_STORAGE_KEY = "boa.dateFormat";
 const DATE_FORMAT_OPTIONS = {
   storybook: {
@@ -1903,15 +1896,6 @@ function bindMilestoneNoteTrigger(target, card, svg, point, milestone) {
   });
 }
 
-function composeStarlightTitleLines(event) {
-  const lines = [`Starlight ${event.starlight}`, event.whisper];
-  const metricBits = summarizeStarlightMetrics(event.metrics);
-  if (metricBits) {
-    lines.push(metricBits);
-  }
-  return lines;
-}
-
 function summarizeStarlightMetrics(metrics) {
   if (!metrics) {
     return "";
@@ -2401,39 +2385,6 @@ function wavePointY(snapshot, metrics, index, baselineY = RELEASE_VIEWBOX.baseli
   const pointIndex = Number.isFinite(index) && index >= 0 ? index : 0;
   const normalized = metrics.normalizedRisks[pointIndex] || 0;
   return baselineY - (normalized * metrics.apexHeight);
-}
-
-function inspectBugWaveSeries(risks, baselineY = RELEASE_VIEWBOX.baselineY, config = STARLIGHT_VISUAL_CONFIG) {
-  const snapshots = risks.map((risk, index) => ({
-    open_bug_count: risk,
-    observed_at: new Date(Date.UTC(2026, 0, index + 1)).toISOString(),
-  }));
-  const metrics = buildBugWaveMetrics(snapshots, baselineY, config);
-  return {
-    config,
-    baselineY,
-    starlight75Y: starlightToY(config.bugWaveApexStarlight),
-    apexY: metrics.apexY,
-    sameSkyCoordinateSystem: metrics.apexY === starlightToY(config.bugWaveApexStarlight),
-    yAxisDirection: "smaller-y-is-higher",
-    releasePeakRisk: metrics.releasePeakRisk,
-    effectiveMaxRatio: metrics.effectiveMaxRatio,
-    maxNormalizedRisk: metrics.maxNormalizedRisk,
-    peakPointY: metrics.peakPointY,
-    points: snapshots.map((snapshot, index) => ({
-      risk: risks[index],
-      smoothedRisk: metrics.smoothedRisks[index],
-      peakRisk: metrics.peaks[index],
-      normalizedRisk: metrics.normalizedRisks[index],
-      y: wavePointY(snapshot, metrics, index, baselineY),
-    })),
-  };
-}
-
-function inspectBugWaveFixtures() {
-  return Object.fromEntries(
-    Object.entries(BUG_WAVE_MANUAL_FIXTURES).map(([name, risks]) => [name, inspectBugWaveSeries(risks)]),
-  );
 }
 
 function getReleasePalette(release, fallbackIndex = 0) {
@@ -3478,10 +3429,6 @@ async function submitEngineSmtpTest(event) {
   }
 }
 
-function getSelectedEditRelease() {
-  return state.releases.find((item) => String(item.id) === elements.editRelease.value) || state.releases[0] || null;
-}
-
 function renderPreservingViewport() {
   const currentScrollX = window.scrollX;
   const currentScrollY = window.scrollY;
@@ -3500,15 +3447,6 @@ function closeReleaseMenu() {
   }
   state.activeMenuReleaseId = null;
   renderPreservingViewport();
-}
-
-function toggleReleaseDates(releaseId) {
-  if (state.expandedReleaseIds.has(releaseId)) {
-    state.expandedReleaseIds.delete(releaseId);
-  } else {
-    state.expandedReleaseIds.add(releaseId);
-  }
-  syncDateVisibility();
 }
 
 function toggleAllReleaseDates() {
@@ -3552,11 +3490,6 @@ function extractOptionalError(response) {
     return JSON.stringify(detail);
   }
   return `Request failed with status ${response.status || "unknown"}.`;
-}
-
-function numberish(value) {
-  const parsed = Number(value ?? 0);
-  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 async function handleReleaseMenuAction(release, action) {

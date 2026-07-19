@@ -253,7 +253,6 @@ dd {
 }
 
 .brand-name,
-.intro-kicker,
 .dialog-kicker,
 .empty-eyebrow {
   color: var(--muted);
@@ -459,8 +458,7 @@ dd {
 
 .primary-button,
 .ghost-button,
-.icon-button,
-.release-action {
+.icon-button {
   cursor: pointer;
   border: 1px solid rgba(164, 138, 97, 0.14);
   background:
@@ -475,8 +473,7 @@ dd {
 
 .primary-button:hover,
 .ghost-button:hover,
-.icon-button:hover,
-.release-action:hover {
+.icon-button:hover {
   transform: translateY(-1px);
   border-color: rgba(150, 125, 88, 0.24);
   box-shadow:
@@ -487,7 +484,6 @@ dd {
 .primary-button:active,
 .ghost-button:active,
 .icon-button:active,
-.release-action:active,
 .release-menu-item:active,
 .journey-action-item:active,
 .page-note-action:active,
@@ -497,8 +493,7 @@ dd {
 
 .primary-button:disabled,
 .ghost-button:disabled,
-.icon-button:disabled,
-.release-action:disabled {
+.icon-button:disabled {
   cursor: default;
   transform: none;
   opacity: 0.48;
@@ -644,8 +639,7 @@ dd {
   outline: none;
 }
 
-.ghost-button,
-.release-action {
+.ghost-button {
   min-height: 40px;
   padding: 0 16px;
   border-radius: 999px;
@@ -853,9 +847,7 @@ dd {
 }
 
 .summary-line,
-.form-note,
-.release-secret,
-.release-facts dd {
+.form-note {
   color: var(--muted);
 }
 
@@ -1164,4 +1156,3 @@ dd {
 .legend-overdue {
   color: rgba(199, 91, 74, 0.9);
 }
-

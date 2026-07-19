@@ -4,7 +4,6 @@ Boa is a journey visualization platform. These guides are the field notes for tr
 
 ## Product
 
-- [Release Plan 2.1.1](release-plan-2.1.1.md) — four-sprint stabilization and polish plan
 - [Release Notes 2.1](release-notes-2.1.md) — automation client and integration examples
 - [Release Notes 2.0](release-notes-2.0.md) — Boa Universe, Observation Notebook, Starlight, Storms, Marks, Engine Room
 - [Release Notes 1.8](release-notes-1.8.md)

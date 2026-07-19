@@ -223,13 +223,6 @@ textarea {
     inset 0 1px 0 rgba(255, 255, 255, 0.58);
 }
 
-.paper-dialog-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: center;
-}
-
 .paper-dialog-footer {
   display: flex;
   align-items: center;
@@ -299,12 +292,7 @@ textarea {
   grid-template-columns: auto minmax(112px, 168px) minmax(0, 1fr);
 }
 
-.dialog-footer-dual {
-  grid-template-columns: auto auto;
-}
-
-.dialog-footer-keyed .paper-note,
-.dialog-footer-dual .paper-note {
+.dialog-footer-keyed .paper-note {
   grid-column: auto;
   flex: none;
   order: 3;
@@ -450,10 +438,6 @@ textarea {
   white-space: nowrap;
 }
 
-.dialog-head-single .dialog-head-copy {
-  gap: 0;
-}
-
 .dialog-head-double .dialog-head-copy {
   grid-template-rows: auto auto;
 }
@@ -594,17 +578,6 @@ textarea {
   background: rgba(255, 250, 240, 0.4);
 }
 
-.paper-soft-block {
-  min-height: 44px;
-  padding: 13px 15px;
-  border: 1px solid rgba(166, 139, 95, 0.1);
-  border-radius: 16px;
-  background:
-    linear-gradient(180deg, rgba(255, 252, 246, 0.54), rgba(249, 242, 230, 0.36));
-  color: rgba(118, 98, 72, 0.8);
-  line-height: 1.5;
-}
-
 .paper-field-optional {
   color: rgba(126, 107, 84, 0.72);
   font-size: 12px;
@@ -632,12 +605,6 @@ textarea {
     inset 0 1px 0 rgba(255, 255, 255, 0.66),
     0 1px 0 rgba(151, 179, 124, 0.12),
     0 10px 18px rgba(158, 186, 132, 0.08);
-}
-
-.paper-button-quiet {
-  background:
-    linear-gradient(180deg, rgba(255, 252, 246, 0.84), rgba(248, 240, 228, 0.68)),
-    radial-gradient(circle at 28% 24%, rgba(255, 255, 255, 0.44), transparent 42%);
 }
 
 @media (max-width: 640px) {

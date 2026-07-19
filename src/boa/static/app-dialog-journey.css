@@ -403,12 +403,6 @@
   cursor: grab;
 }
 
-.journey-drag-line {
-  stroke: rgba(78, 121, 199, 0.4);
-  stroke-width: 1.1;
-  stroke-dasharray: 3 6;
-}
-
 .journey-timeline .timeline-spine,
 .journey-timeline .timeline-spine-glow,
 .journey-timeline .month-ruler-line-glow,

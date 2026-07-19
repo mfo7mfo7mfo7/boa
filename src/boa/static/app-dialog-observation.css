@@ -507,14 +507,6 @@
   margin: 0;
 }
 
-.observation-body-text {
-  color: rgba(101, 82, 57, 0.82);
-  font-family: "Libre Baskerville", "Georgia", serif;
-  font-size: 15px;
-  line-height: 1.58;
-  max-width: 28ch;
-}
-
 .observation-special-text {
   color: rgba(106, 84, 45, 0.92);
   font-variant-numeric: tabular-nums;
@@ -831,99 +823,6 @@
   }
 }
 
-.observation-shell-starlight .observation-shell-inner {
-  min-height: 360px;
-}
-
-.observation-shell-storms .observation-shell-inner {
-  min-height: 238px;
-}
-
-.milestone-state {
-  color: var(--faint);
-  font-size: 12px;
-}
-
-.mini-heading {
-  color: var(--ink);
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.signal-list {
-  display: grid;
-  gap: 10px;
-}
-
-.signal-item {
-  display: grid;
-  gap: 6px;
-  padding: 13px 15px;
-  border: 1px solid rgba(166, 139, 95, 0.1);
-  border-radius: 16px;
-  background:
-    linear-gradient(180deg, rgba(255, 252, 246, 0.5), rgba(249, 242, 230, 0.34));
-}
-
-.signal-topline,
-.plugin-detail-line {
-  display: flex;
-  justify-content: space-between;
-  align-items: start;
-  gap: 12px;
-}
-
-.signal-name {
-  font-size: 15px;
-}
-
-.signal-meta,
-.plugin-detail-copy {
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.45;
-  white-space: pre-line;
-}
-
-.signal-badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 20px;
-  padding: 0 2px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: rgba(120, 102, 79, 0.72);
-  font-size: 11px;
-  font-style: italic;
-  letter-spacing: 0.03em;
-  white-space: nowrap;
-  position: relative;
-}
-
-.signal-badge::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -2px;
-  height: 1px;
-  background: linear-gradient(90deg, rgba(176, 145, 89, 0.28), rgba(176, 145, 89, 0.05));
-  opacity: 0.72;
-}
-
-.signal-badge-pending {
-  color: #8b5b31;
-}
-
-.signal-badge-current {
-  color: #546a86;
-}
-
-.signal-badge-clear {
-  color: #5f7e67;
-}
-
 .status-pill {
   display: inline-flex;
 }
@@ -960,12 +859,6 @@
     align-items: start;
   }
 
-  .shared-today-line {
-    left: 50%;
-  }
-
-  .mini-grid,
-  .observation-top-grid,
   .observation-metrics-grid {
     grid-template-columns: 1fr;
   }
@@ -978,11 +871,6 @@
   .observation-side-column {
     position: static;
     gap: 14px;
-  }
-
-  .observation-shell-starlight,
-  .observation-shell-storms {
-    transform: none;
   }
 
   .masthead {
@@ -1097,10 +985,6 @@
   .legend-hover-shell {
     width: 100%;
     justify-content: flex-start;
-  }
-
-  .intro-copy {
-    font-size: 16px;
   }
 
   .release-track,
@@ -1299,13 +1183,6 @@
     overflow: hidden;
   }
 
-  .observation-header {
-    grid-template-columns: 1fr;
-    display: grid;
-    gap: 12px;
-    padding: 14px 14px 15px;
-  }
-
   .dialog-body-split {
     grid-template-columns: 1fr;
     gap: 14px;
@@ -1328,17 +1205,7 @@
 
   .observation-main-column,
   .observation-side-column {
-    gap: 14px;
-  }
-
-  .observation-main-column {
-    order: 1;
-  }
-
-  .observation-side-column {
-    order: 2;
-    position: static;
-    padding-top: 0;
+    display: contents;
   }
 
   .observation-card,
