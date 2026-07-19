@@ -4,17 +4,17 @@ build-backend = "hatchling.build"
 
 [project]
 name = "boa"
-version = "0.1.0"
-description = "A timeline-centric release health dashboard."
+version = "2.0.0"
+description = "A quiet storybook for release journeys."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
 authors = [
   { name = "Boa Contributors" },
 ]
-keywords = ["release", "timeline", "dashboard", "yaml", "sqlite"]
+keywords = ["release", "timeline", "journey", "starlight", "sqlite"]
 classifiers = [
-  "Development Status :: 2 - Pre-Alpha",
+  "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",
   "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",

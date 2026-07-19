@@ -208,7 +208,7 @@ def get_smtp_status(config: SmtpConfig | None = None) -> dict:
     validation = _validation_message(config)
 
     if not config.enabled:
-        message = "SMTP is disabled."
+        message = "Email delivery is not enabled."
     elif validation:
         message = validation
     elif not configured:

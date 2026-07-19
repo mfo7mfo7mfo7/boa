@@ -76,7 +76,7 @@ def test_smtp_status_disabled_by_default(base_client: TestClient, monkeypatch: p
     assert payload["starttls"] is True
     assert payload["ssl"] is False
     assert payload["test_to"] is None
-    assert payload["message"] == "SMTP is disabled."
+    assert payload["message"] == "Email delivery is not enabled."
 
 
 def test_smtp_status_enabled_missing_host(base_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -142,7 +142,7 @@ def test_smtp_test_disabled_returns_400(base_client: TestClient, monkeypatch: py
     monkeypatch.setattr(os, "environ", env)
     response = base_client.post("/api/system/smtp/test", json={"to": "admin@example.com"})
     assert response.status_code == 400
-    assert "disabled" in response.json()["detail"].lower()
+    assert "not enabled" in response.json()["detail"].lower()
 
 
 def test_smtp_test_misconfigured_returns_400(base_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -178,3 +178,7 @@ curl -X POST http://127.0.0.1:8000/api/plugins/manual_bug_snapshot/releases/21/b
 - `open_bug_count` must be a non-negative integer.
 - Boa currently treats `bug_snapshots` as the raw source data for the Bug Wave.
 - The frontend normalizes these snapshots into wave height; it does not render raw absolute bug-count bars.
+
+## Milestone Email and Acknowledgements
+
+Milestones may include an optional `email` field for the Email Ack Workflow. Bug Wave remains focused on bug snapshots and known troubles; the `email` field does not affect wave calculation.

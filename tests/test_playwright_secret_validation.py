@@ -94,41 +94,36 @@ def test_acknowledge_milestone_with_wrong_secret(page: Page) -> None:
     # 4. Try to acknowledge with the WRONG secret
     page.locator("#ack-secret").fill("wrong-secret")
     page.locator("#ack-submit-button").click()
+    expect(page.locator("#ack-message")).to_contain_text("Press again to confirm")
+    page.wait_for_timeout(750)
+    page.locator("#ack-submit-button").click()
 
     # 5. Verify that the error message is displayed in the UI
-    # The API returns 403 with "Invalid release secret."
-    expect(page.locator("#ack-message")).to_contain_text("Invalid release secret.")
+    expect(page.locator("#ack-message")).to_contain_text("The journey key did not match.")
 
     # 6. Check that the dialog is still open (it shouldn't close on failure)
     expect(page.locator("#ack-dialog")).to_be_visible()
 
-def test_edit_journey_updates_secret(page: Page) -> None:
-    # 1. Create a journey with an old secret
-    old_secret = "old-secret"
-    begin_new_journey(page, product="TestProduct", version="1.0", secret=old_secret)
+def test_tend_journey_requires_the_current_journey_key(page: Page) -> None:
+    # 1. Create a journey with a known key
+    journey_key = "correct-journey-key"
+    begin_new_journey(page, product="TestProduct", version="1.0", secret=journey_key)
     page.locator("#journey-create-button").click()
     expect(page.locator("#journey-dialog")).not_to_be_visible()
 
     # 2. Open the Edit Release dialog
     page.locator(".release-menu-button").first.click()
-    page.locator('.release-menu-item[data-action="edit"]').click()
+    page.locator('.release-menu-item[data-action="settings"]').click()
     expect(page.locator("#journey-dialog")).to_be_visible()
-    expect(page.locator("#journey-kicker")).to_contain_text("Edit Journey")
+    expect(page.locator("#journey-kicker")).to_contain_text("Tend Journey")
 
-    # 3. Update the secret to a new one
-    new_secret = "new-secret"
-    page.locator("#journey-secret").fill(new_secret)
+    # 3. A wrong key cannot save changes
+    page.locator("#journey-secret").fill("wrong-journey-key")
     page.locator("#journey-create-button").click()
+    expect(page.locator("#journey-message")).to_contain_text("Enter the correct journey key to save changes.")
+    expect(page.locator("#journey-dialog")).to_be_visible()
 
-    # 4. Verify the update was successful
-    try:
-        expect(page.locator("#journey-dialog")).not_to_be_visible()
-    except Exception:
-        error_msg = page.locator("#journey-message").text_content()
-        print(f"\nDEBUG: journey-message is: {error_msg}")
-        raise
-    # Check the API to see if the secret was actually updated
-    updated_secret = page.evaluate(
-        "async () => (await fetch('/api/timeline')).then(r => r.json()).then(items => items[0].secret)"
-    )
-    assert updated_secret == new_secret
+    # 4. The current key permits the edit flow to save
+    page.locator("#journey-secret").fill(journey_key)
+    page.locator("#journey-create-button").click()
+    expect(page.locator("#journey-dialog")).not_to_be_visible()

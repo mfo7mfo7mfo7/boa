@@ -1,0 +1,1507 @@
+.observation-dialog {
+  width: min(1120px, calc(100vw - 28px));
+}
+
+.observation-surface {
+  max-height: min(880px, calc(100dvh - 28px));
+  min-height: min(736px, calc(100dvh - 28px));
+  overflow: hidden;
+}
+
+.observation-form {
+  flex: 1 1 auto;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.dialog-title-1 {
+  margin: 0;
+  color: rgba(70, 60, 46, 0.92);
+  font-family: "Libre Baskerville", "Georgia", serif;
+  font-size: 18px;
+  line-height: 1.08;
+  font-weight: 400;
+}
+
+.dialog-title-2 {
+  margin: 0;
+  color: rgba(129, 108, 80, 0.76);
+  font-family: "Instrument Sans", "Helvetica Neue", sans-serif;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.dialog-title-3 {
+  margin: 0;
+  color: rgba(121, 101, 73, 0.74);
+  font-family: "Instrument Sans", "Helvetica Neue", sans-serif;
+  font-size: 11px;
+  line-height: 1.45;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+}
+
+.dialog-body-note {
+  color: rgba(120, 99, 67, 0.8);
+  font-family: "Instrument Sans", "Helvetica Neue", sans-serif;
+  font-size: 12px;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+  font-weight: 500;
+  text-wrap: pretty;
+}
+
+.dialog-input,
+.dialog-textarea {
+  width: 100%;
+  color: rgba(70, 60, 46, 0.92);
+  border: 1px solid rgba(166, 139, 95, 0.16);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 253, 248, 0.94), rgba(250, 244, 233, 0.84));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    0 1px 0 rgba(214, 191, 149, 0.08),
+    0 12px 24px rgba(220, 198, 159, 0.05);
+}
+
+.dialog-input {
+  min-height: 46px;
+  padding: 0 15px;
+  font-family: "Libre Baskerville", "Georgia", serif;
+  font-size: 14px;
+}
+
+.dialog-textarea {
+  min-height: 110px;
+  padding: 12px 14px;
+  font-family: "Libre Baskerville", "Georgia", serif;
+  font-size: 13px;
+  line-height: 1.58;
+  resize: vertical;
+}
+
+.dialog-input-compact,
+.dialog-input-count {
+  min-height: 34px;
+  border-radius: 12px;
+  font-family: "Instrument Sans", "Helvetica Neue", sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  text-align: center;
+  padding: 0 12px;
+}
+
+.dialog-input-count {
+  width: 104px;
+  max-width: 104px;
+}
+
+.dialog-input-date {
+  font-family: "Instrument Sans", "Helvetica Neue", sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.01em;
+}
+
+.dialog-detail-value {
+  font-size: 14px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.observation-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(348px, 0.92fr);
+  gap: 18px;
+  height: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 18px;
+  scrollbar-gutter: stable;
+  align-items: start;
+}
+
+.observation-main-column,
+.observation-side-column {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  min-height: 0;
+}
+
+.observation-main-column {
+  grid-auto-rows: min-content;
+}
+
+.observation-side-column {
+  padding-top: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.observation-release-name {
+  margin: 0;
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1.04;
+  text-wrap: nowrap;
+  max-width: none;
+}
+
+.observation-release-version {
+  margin: 0;
+  color: rgba(137, 117, 90, 0.74);
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  font-family: "Instrument Sans", "Helvetica Neue", sans-serif;
+  font-weight: 600;
+  text-transform: uppercase;
+  transform: translateY(-1px);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.dialog-head-meta .paper-status-pill {
+  display: none;
+}
+
+.observation-field-head {
+  display: grid;
+  gap: 5px;
+}
+
+.observation-detail-field .observation-field-head {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+}
+
+.observation-detail-field .observation-field-head > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.observation-detail-field .observation-title-1,
+.observation-detail-field .observation-title-3 {
+  display: block;
+}
+
+.observation-detail-field .observation-title-3 {
+  max-width: 34ch;
+}
+
+.observation-detail-field {
+  min-height: 100%;
+  align-content: start;
+}
+
+.observation-field input,
+.observation-field textarea {
+  border-color: rgba(166, 139, 95, 0.16);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 253, 248, 0.94), rgba(250, 244, 233, 0.84));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    0 1px 0 rgba(214, 191, 149, 0.08),
+    0 12px 24px rgba(220, 198, 159, 0.05);
+}
+
+.observation-detail-field textarea,
+.observation-detail-preview {
+  min-height: clamp(320px, 42dvh, 480px);
+  background-image:
+    linear-gradient(180deg, transparent 0, transparent 30px, rgba(212, 191, 154, 0.12) 30px, rgba(212, 191, 154, 0.12) 31px);
+  background-size: 100% 31px;
+  background-position: 0 13px;
+}
+
+.observation-detail-field textarea {
+  line-height: 1.72;
+}
+
+.observation-detail-preview-toggle {
+  align-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 28px;
+  padding: 4px 10px 4px 8px;
+  border: 1px solid rgba(202, 181, 142, 0.26);
+  border-radius: 999px;
+  background: rgba(255, 252, 245, 0.52);
+  color: rgba(132, 111, 80, 0.74);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.68),
+    0 6px 16px rgba(221, 196, 154, 0.06);
+  transition:
+    border-color 180ms ease,
+    background 180ms ease,
+    color 180ms ease,
+    transform 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.observation-detail-preview-toggle:hover {
+  border-color: rgba(204, 175, 113, 0.36);
+  background: rgba(255, 250, 240, 0.74);
+  color: rgba(112, 90, 58, 0.84);
+}
+
+.observation-detail-preview-toggle:focus-visible {
+  outline: none;
+  border-color: rgba(187, 152, 84, 0.42);
+  box-shadow:
+    0 0 0 3px rgba(231, 206, 155, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.76),
+    0 8px 20px rgba(221, 196, 154, 0.08);
+}
+
+.observation-detail-preview-toggle.is-active {
+  border-color: rgba(198, 166, 103, 0.34);
+  background: linear-gradient(180deg, rgba(255, 249, 236, 0.78), rgba(248, 239, 217, 0.7));
+  color: rgba(104, 82, 50, 0.88);
+}
+
+.observation-detail-preview-glyph {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid rgba(208, 180, 124, 0.38);
+  background:
+    radial-gradient(circle at 50% 50%, rgba(247, 229, 176, 0.72), rgba(240, 213, 144, 0.24) 48%, transparent 68%);
+  box-shadow: 0 0 8px rgba(231, 188, 82, 0.1);
+}
+
+.observation-detail-preview-glyph::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: rgba(255, 250, 238, 0.76);
+}
+
+.observation-detail-preview-label {
+  font-family: "Instrument Sans", "Helvetica Neue", sans-serif;
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.observation-detail-preview {
+  padding: 15px 16px 16px;
+  overflow-y: auto;
+  border: 1px solid rgba(166, 139, 95, 0.16);
+  border-radius: 20px;
+  background:
+    linear-gradient(180deg, rgba(255, 253, 248, 0.94), rgba(250, 244, 233, 0.84));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    0 1px 0 rgba(214, 191, 149, 0.08),
+    0 12px 24px rgba(220, 198, 159, 0.05);
+}
+
+.observation-detail-preview.boa-note-body {
+  gap: 12px;
+  margin-top: 0;
+  color: rgba(93, 76, 52, 0.9);
+  font-family: "Libre Baskerville", "Georgia", serif;
+  font-size: 14px;
+  line-height: 1.66;
+}
+
+.observation-detail-preview > :first-child {
+  margin-top: 0;
+}
+
+.observation-detail-preview > :last-child {
+  margin-bottom: 0;
+}
+
+.observation-detail-preview.boa-note-body p,
+.observation-detail-preview.boa-note-body ul,
+.observation-detail-preview.boa-note-body ol,
+.observation-detail-preview.boa-note-body li,
+.observation-detail-preview.boa-note-body pre {
+  margin: 0;
+}
+
+.observation-detail-preview.boa-note-body h2,
+.observation-detail-preview.boa-note-body h3 {
+  color: rgba(118, 96, 61, 0.84);
+  font-family: "Instrument Sans", "Helvetica Neue", sans-serif;
+  font-size: 10.25px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  line-height: 1.34;
+  text-transform: uppercase;
+  margin: 2px 0 0;
+}
+
+.observation-detail-preview.boa-note-body ul,
+.observation-detail-preview.boa-note-body ol {
+  gap: 7px;
+  padding-left: 18px;
+}
+
+.observation-detail-preview.boa-note-body li {
+  line-height: 1.62;
+}
+
+.observation-detail-preview.boa-note-body pre {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(244, 236, 221, 0.68);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.54);
+}
+
+.observation-detail-preview.boa-note-body code {
+  font-size: 0.9em;
+}
+
+.observation-detail-preview.boa-note-body a {
+  color: rgba(111, 127, 158, 0.9);
+}
+
+.observation-card {
+  padding: 17px 18px 18px;
+  border-radius: 28px;
+}
+
+.observation-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.observation-starlight-readout {
+  margin: 0;
+  color: rgba(106, 84, 45, 0.92);
+  font-size: 14px;
+  white-space: nowrap;
+  padding: 9px 13px;
+  border-radius: 999px;
+  background: rgba(255, 249, 238, 0.52);
+  border: 1px solid rgba(220, 200, 162, 0.34);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.64),
+    0 10px 24px rgba(218, 191, 147, 0.05);
+  font-variant-numeric: tabular-nums;
+  font-family: "Libre Baskerville", "Georgia", serif;
+}
+
+.observation-trail-line {
+  color: rgba(120, 99, 67, 0.78);
+  font-size: 11.5px;
+  line-height: 1.48;
+  padding: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.observation-starlight-slider {
+  width: 100%;
+  min-height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  appearance: none;
+}
+
+.observation-starlight-slider::-webkit-slider-runnable-track {
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(219, 190, 124, 0.94), rgba(224, 210, 172, 0.38));
+}
+
+.observation-starlight-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  margin-top: -9px;
+  border: 1px solid rgba(176, 138, 71, 0.34);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 32%, rgba(255, 251, 238, 0.96), rgba(238, 210, 149, 0.92) 62%, rgba(210, 172, 86, 0.96));
+  box-shadow:
+    0 10px 18px rgba(165, 130, 68, 0.24),
+    0 0 0 5px rgba(235, 213, 164, 0.14);
+}
+
+.observation-starlight-slider::-moz-range-track {
+  height: 10px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(219, 190, 124, 0.94), rgba(224, 210, 172, 0.38));
+}
+
+.observation-starlight-slider::-moz-range-thumb {
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(176, 138, 71, 0.34);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 32%, rgba(255, 251, 238, 0.96), rgba(238, 210, 149, 0.92) 62%, rgba(210, 172, 86, 0.96));
+  box-shadow:
+    0 10px 18px rgba(165, 130, 68, 0.24),
+    0 0 0 5px rgba(235, 213, 164, 0.14);
+}
+
+/* Observation v2 card system */
+.observation-card-whisper {
+  min-height: auto;
+}
+
+.observation-card-whisper .observation-input {
+  min-height: 44px;
+  font-size: 13.5px;
+}
+
+.observation-card-details {
+  min-height: auto;
+  gap: 12px;
+}
+
+.observation-card-starlight {
+  min-height: auto;
+}
+
+.observation-card-starlight .observation-title-2 {
+  margin: 2px 0 0;
+}
+
+.observation-card-storms {
+  min-height: auto;
+}
+
+.observation-title-1 {
+  font-size: 17px;
+}
+
+.observation-title-2 {
+  color: rgba(101, 82, 57, 0.86);
+  font-size: 11px;
+  line-height: 1.28;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.observation-title-3 {
+  line-height: 1.42;
+  font-weight: 500;
+  letter-spacing: 0.025em;
+}
+
+.observation-meta-line {
+  margin: 0;
+}
+
+.observation-body-text {
+  color: rgba(101, 82, 57, 0.82);
+  font-family: "Libre Baskerville", "Georgia", serif;
+  font-size: 15px;
+  line-height: 1.58;
+  max-width: 28ch;
+}
+
+.observation-special-text {
+  color: rgba(106, 84, 45, 0.92);
+  font-variant-numeric: tabular-nums;
+}
+
+.observation-input {
+  min-height: 46px;
+  padding: 0 15px;
+  font-family: "Libre Baskerville", "Georgia", serif;
+  font-size: 14px;
+}
+
+.observation-textarea {
+  min-height: 300px;
+  padding: 13px 15px;
+  font-family: "Libre Baskerville", "Georgia", serif;
+  font-size: 14px;
+  line-height: 1.66;
+  resize: vertical;
+  border-radius: 20px;
+}
+
+.observation-input-count {
+  min-height: 42px;
+  border-radius: 14px;
+  font-size: 12px;
+}
+
+.observation-input-metric {
+  min-height: 34px;
+  border-radius: 14px;
+  font-family: "Instrument Sans", "Helvetica Neue", sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.observation-expand {
+  margin-top: 0;
+  padding: 11px 0 0;
+  border-top: 1px solid rgba(190, 162, 116, 0.18);
+  background: transparent;
+}
+
+.observation-expand summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.observation-expand summary::-webkit-details-marker {
+  display: none;
+}
+
+.observation-expand .observation-title-3 {
+  display: block;
+  margin-top: 6px;
+  max-width: 30ch;
+}
+
+.observation-expand[open] summary {
+  margin-bottom: 2px;
+}
+
+.observation-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.observation-metrics-grid .observation-field {
+  gap: 8px;
+}
+
+.observation-metrics-grid .observation-title-3 {
+  margin-top: 0;
+}
+
+.observation-storms-field {
+  display: grid;
+  gap: 10px;
+}
+
+.observation-card .observation-section-head {
+  align-items: start;
+}
+
+.observation-card .observation-starlight-readout {
+  font-family: "Libre Baskerville", "Georgia", serif;
+}
+
+#observation-state-summary {
+  min-height: auto;
+  align-content: start;
+  max-width: 22ch;
+}
+
+#observation-trail-summary {
+  margin-top: 0;
+  max-width: 24ch;
+}
+
+@media (max-width: 980px) {
+  .observation-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .observation-metrics-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+#observation-state-summary {
+  min-height: 112px;
+  align-content: center;
+}
+
+.observation-card-starlight {
+  gap: 14px;
+}
+
+.observation-card-starlight .observation-section-head {
+  align-items: center;
+}
+
+.observation-card-starlight .observation-title-2 {
+  margin: 0;
+  color: rgba(126, 103, 69, 0.82);
+  font-size: 10.5px;
+  line-height: 1.3;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.observation-card-starlight .observation-starlight-readout {
+  font-size: 14px;
+  line-height: 1.15;
+  font-weight: 400;
+  padding: 8px 12px;
+  border: 1px solid rgba(220, 200, 162, 0.34);
+  background: rgba(255, 250, 241, 0.52);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.64),
+    0 10px 24px rgba(218, 191, 147, 0.05);
+}
+
+.observation-card-starlight .observation-starlight-slider {
+  margin-top: -2px;
+}
+
+.observation-starlight-section {
+  display: grid;
+  gap: 6px;
+}
+
+.observation-card-starlight .observation-starlight-note {
+  color: rgba(120, 99, 67, 0.8);
+  font-family: "Instrument Sans", "Helvetica Neue", sans-serif;
+  font-size: 11.25px;
+  line-height: 1.48;
+  letter-spacing: 0.01em;
+  font-weight: 500;
+  text-wrap: pretty;
+}
+
+.observation-card-starlight #observation-state-summary {
+  min-height: auto;
+  align-content: start;
+  max-width: none;
+}
+
+.observation-card-starlight #observation-trail-summary {
+  margin-top: 0;
+  max-width: none;
+}
+
+.observation-card-starlight .observation-expand .observation-title-3,
+.observation-card-starlight .observation-metrics-grid .observation-title-3 {
+  font-family: "Instrument Sans", "Helvetica Neue", sans-serif;
+}
+
+.observation-card-starlight .observation-expand summary.observation-title-2 {
+  color: rgba(126, 103, 69, 0.82);
+  font-size: 10.5px;
+  line-height: 1.3;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.observation-card-starlight .observation-expand .observation-title-3 {
+  font-size: 10.75px;
+  line-height: 1.48;
+  letter-spacing: 0.02em;
+  font-weight: 500;
+  color: rgba(125, 104, 72, 0.72);
+  max-width: none;
+}
+
+.observation-card-starlight .observation-expand {
+  margin-top: 2px;
+  padding: 10px 0 0;
+  border-top: 1px solid rgba(196, 170, 126, 0.2);
+}
+
+.observation-card-starlight .observation-expand .observation-title-3 {
+  margin-top: 6px;
+  letter-spacing: 0.05em;
+}
+
+.observation-card-starlight .observation-metrics-grid {
+  gap: 9px;
+  margin-top: 8px;
+}
+
+.observation-card-starlight .observation-metrics-grid .observation-field {
+  gap: 6px;
+}
+
+.observation-card-starlight .observation-metrics-grid .observation-title-3 {
+  font-size: 10.25px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.observation-card-starlight .observation-input-metric {
+  min-height: 32px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0 12px;
+}
+
+.observation-card-storms {
+  gap: 0;
+}
+
+.observation-storms-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: start;
+}
+
+.observation-storms-copy {
+  display: grid;
+  gap: 5px;
+  max-width: 26ch;
+}
+
+.observation-card-storms .observation-section-head {
+  align-items: start;
+}
+
+.observation-card-storms .observation-title-1 {
+  font-size: 18px;
+}
+
+.observation-storms-kicker {
+  margin: 0;
+  color: rgba(126, 103, 69, 0.82);
+  font-size: 10.5px;
+  line-height: 1.32;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.observation-card-storms .observation-storms-field {
+  gap: 5px;
+  justify-items: end;
+  align-self: center;
+}
+
+.observation-storms-input-label {
+  color: rgba(125, 104, 72, 0.72);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.observation-card-storms .observation-input-count {
+  min-height: 38px;
+  width: 108px;
+  max-width: 108px;
+  border-radius: 14px;
+  font-size: 11px;
+  margin: 0;
+  appearance: textfield;
+}
+
+.observation-card-storms .observation-input-count::-webkit-outer-spin-button,
+.observation-card-storms .observation-input-count::-webkit-inner-spin-button {
+  margin: 0;
+}
+
+.observation-card-storms .observation-storm-note {
+  color: rgba(120, 99, 67, 0.78);
+  font-family: "Instrument Sans", "Helvetica Neue", sans-serif;
+  font-size: 11.25px;
+  line-height: 1.46;
+  letter-spacing: 0.02em;
+  max-width: 22ch;
+}
+
+@media (max-width: 980px) {
+  .observation-storms-layout {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .observation-card-storms .observation-storms-field {
+    justify-items: start;
+  }
+}
+
+.observation-shell-starlight .observation-shell-inner {
+  min-height: 360px;
+}
+
+.observation-shell-storms .observation-shell-inner {
+  min-height: 238px;
+}
+
+.milestone-state {
+  color: var(--faint);
+  font-size: 12px;
+}
+
+.mini-heading {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.signal-list {
+  display: grid;
+  gap: 10px;
+}
+
+.signal-item {
+  display: grid;
+  gap: 6px;
+  padding: 13px 15px;
+  border: 1px solid rgba(166, 139, 95, 0.1);
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 252, 246, 0.5), rgba(249, 242, 230, 0.34));
+}
+
+.signal-topline,
+.plugin-detail-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 12px;
+}
+
+.signal-name {
+  font-size: 15px;
+}
+
+.signal-meta,
+.plugin-detail-copy {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-line;
+}
+
+.signal-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: rgba(120, 102, 79, 0.72);
+  font-size: 11px;
+  font-style: italic;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  position: relative;
+}
+
+.signal-badge::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(176, 145, 89, 0.28), rgba(176, 145, 89, 0.05));
+  opacity: 0.72;
+}
+
+.signal-badge-pending {
+  color: #8b5b31;
+}
+
+.signal-badge-current {
+  color: #546a86;
+}
+
+.signal-badge-clear {
+  color: #5f7e67;
+}
+
+.status-pill {
+  display: inline-flex;
+}
+
+.hidden {
+  display: none !important;
+}
+
+@media (max-width: 980px) {
+  .app-shell {
+    padding: 24px 28px 60px;
+  }
+
+  .app-shell::before,
+  .app-shell::after {
+    display: none;
+  }
+
+  .timeline-board {
+    --identity-col: 1fr;
+    --row-gap: 0px;
+  }
+
+  .release-row {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .release-identity {
+    padding-top: 0;
+  }
+
+  .release-heading {
+    align-items: start;
+  }
+
+  .shared-today-line {
+    left: 50%;
+  }
+
+  .mini-grid,
+  .observation-top-grid,
+  .observation-metrics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .observation-workspace {
+    grid-template-columns: 1fr;
+    padding-right: 2px;
+  }
+
+  .observation-side-column {
+    position: static;
+    gap: 14px;
+  }
+
+  .observation-shell-starlight,
+  .observation-shell-storms {
+    transform: none;
+  }
+
+  .masthead {
+    min-height: auto;
+    align-items: start;
+  }
+
+  .masthead-actions,
+  .masthead-controls {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 720px) {
+  html,
+  body {
+    overflow-x: clip;
+  }
+
+  .masthead {
+    flex-direction: column;
+    margin-bottom: 18px;
+    padding: 6px 0 10px;
+    gap: 14px;
+    top: 8px;
+  }
+
+  .app-shell {
+    width: 100%;
+    max-width: 100%;
+    padding: 16px 14px 56px;
+    overflow-x: clip;
+  }
+
+  .brand,
+  .masthead-actions,
+  .masthead-controls,
+  .timeline-board,
+  .release-row,
+  .release-identity,
+  .release-stage,
+  .release-track,
+  .release-canvas {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .brand {
+    gap: 10px;
+  }
+
+  .brand-mark {
+    width: 56px;
+    height: 30px;
+  }
+
+  .brand-copy {
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .brand-name {
+    font-size: 28px;
+    letter-spacing: 0.12em;
+  }
+
+  .brand-tagline {
+    font-size: 9.5px;
+    letter-spacing: 0.1em;
+    max-width: 16ch;
+  }
+
+  .masthead-actions {
+    justify-items: stretch;
+    gap: 10px;
+  }
+
+  .masthead-controls {
+    display: grid;
+    grid-template-columns: 1fr;
+    align-items: start;
+    justify-content: stretch;
+    gap: 10px;
+  }
+
+  .selector-field {
+    width: 100%;
+  }
+
+  .segmented-selector {
+    width: 100%;
+  }
+
+  .segmented-selector-wide {
+    min-width: 0;
+  }
+
+  .segment-option {
+    min-height: 26px;
+    padding: 0 10px 2px;
+    font-size: 12px;
+  }
+
+  .selector-label {
+    padding-left: 10px;
+    font-size: 10px;
+  }
+
+  .legend-hover-shell {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .intro-copy {
+    font-size: 16px;
+  }
+
+  .release-track,
+  .release-canvas {
+    min-height: clamp(168px, 48vw, 238px);
+    height: auto;
+  }
+
+  .release-track {
+    padding-left: 0;
+  }
+
+  .release-track::before {
+    inset: 14px 0 44px;
+  }
+
+  .release-track::after {
+    inset: 8px 2% 96px;
+  }
+
+  .release-heading {
+    width: 100%;
+  }
+
+  .release-heading-copy {
+    width: 100%;
+  }
+
+  .release-identity {
+    gap: 12px;
+    padding-right: 0;
+  }
+
+  .starlight-summary {
+    max-width: 100%;
+  }
+
+  .release-product,
+  .release-version,
+  .starlight-whisper {
+    max-width: 100%;
+  }
+
+  .now-label {
+    top: 30px;
+  }
+
+  .now-line {
+    top: 52px;
+    bottom: 92px;
+  }
+
+  .now-toggle-top {
+    top: 52px;
+  }
+
+  .now-toggle-bottom {
+    bottom: 92px;
+  }
+
+  .page-note-shell {
+    left: 14px;
+  }
+
+  .engine-note-shell {
+    right: 14px;
+  }
+
+  .journey-action-menu {
+    left: 0;
+    bottom: calc(100% + 12px);
+  }
+
+  .month-ruler-wrap {
+    width: calc(100vw - 32px);
+  }
+
+  .timeline-legend {
+    display: none;
+  }
+
+  .month-ruler-wrap,
+  .now-line,
+  .now-label,
+  .now-toggle,
+  .marker-label,
+  .marker-date {
+    display: none !important;
+  }
+
+  .release-canvas {
+    aspect-ratio: 390 / 170;
+    min-height: 170px;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+
+  .milestone-marker {
+    pointer-events: auto;
+  }
+
+  .release-track {
+    overflow: hidden;
+  }
+
+  .starlight-detail-card,
+  .milestone-note-card {
+    max-height: min(68vh, calc(100% - 16px));
+  }
+
+  .paper-dialog {
+    width: calc(100vw - 12px);
+    max-width: calc(100vw - 12px);
+    margin: 6px auto;
+  }
+
+  .dialog-surface.paper-surface,
+  .dialog-surface-large.paper-surface {
+    padding: 18px 14px 14px;
+  }
+
+  .dialog-floating-card {
+    padding: 16px;
+    border-radius: 24px;
+  }
+
+  .journey-identity-field input {
+    min-height: 36px;
+    font-size: 13px;
+  }
+
+  .journey-popover-kicker,
+  .journey-popover-field span {
+    font-size: 10px;
+    letter-spacing: 0.08em;
+  }
+
+  .journey-builder {
+    min-height: 552px;
+    padding-top: 0;
+  }
+
+  .journey-milestone-popover {
+    position: relative;
+    left: auto;
+    top: auto;
+    transform: none;
+    width: 100%;
+    max-width: none;
+    margin-bottom: 12px;
+    padding: 16px;
+    border-radius: 24px;
+  }
+
+  .journey-popover-title {
+    font-size: 17px;
+  }
+
+  .journey-popover-date {
+    font-size: 10px;
+  }
+
+  .journey-popover-field input {
+    min-height: 44px;
+    font-size: 14px;
+  }
+
+  .journey-popover-field textarea {
+    min-height: 100px;
+  }
+
+  .journey-canvas-shell {
+    min-height: 250px;
+    padding: 12px 6px 0;
+  }
+
+  .journey-canvas-shell.has-active-editor {
+    padding-top: 12px;
+  }
+
+  .journey-timeline {
+    height: 220px;
+  }
+
+  .journey-add-milestone {
+    top: auto;
+    right: 8px;
+    bottom: 18px;
+  }
+
+  .dialog-surface-scrollable {
+    min-height: auto;
+    max-height: calc(100dvh - 16px);
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .observation-header {
+    grid-template-columns: 1fr;
+    display: grid;
+    gap: 12px;
+    padding: 14px 14px 15px;
+  }
+
+  .dialog-body-split {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .observation-workspace,
+  .observation-main-column,
+  .observation-side-column {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .observation-workspace {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding-right: 0;
+    overflow-x: hidden;
+  }
+
+  .observation-main-column,
+  .observation-side-column {
+    gap: 14px;
+  }
+
+  .observation-main-column {
+    order: 1;
+  }
+
+  .observation-side-column {
+    order: 2;
+    position: static;
+    padding-top: 0;
+  }
+
+  .observation-card,
+  .observation-card-whisper,
+  .observation-card-details,
+  .observation-card-starlight,
+  .observation-card-storms {
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    padding: 16px 16px 18px;
+    border-radius: 26px;
+  }
+
+  .observation-title-1 {
+    font-size: 18px;
+  }
+
+  .observation-title-2 {
+    font-size: 13px;
+    line-height: 1.3;
+  }
+
+  .observation-title-3 {
+    font-size: 11.5px;
+    line-height: 1.35;
+    letter-spacing: 0.04em;
+  }
+
+  .observation-card-starlight .observation-section-head,
+  .observation-storms-layout {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .observation-card-starlight .observation-section-head {
+    display: grid;
+    gap: 10px;
+  }
+
+  .observation-card-starlight .observation-starlight-readout {
+    justify-self: start;
+  }
+
+  .observation-card-starlight .observation-starlight-slider {
+    margin-top: 0;
+  }
+
+  .observation-starlight-section {
+    gap: 6px;
+  }
+
+  .observation-card-storms .observation-storms-field {
+    justify-items: start;
+    width: 100%;
+  }
+
+  .observation-card-storms .observation-input-count {
+    width: 100%;
+    max-width: 124px;
+  }
+
+  .observation-release-name {
+    font-size: 20px;
+  }
+
+  .observation-release-version,
+  .observation-title-3,
+  .observation-card-starlight .observation-starlight-note,
+  .observation-card-storms .observation-storm-note {
+    text-wrap: pretty;
+  }
+
+  .observation-input,
+  .observation-textarea {
+    font-size: 16px;
+  }
+
+  .observation-metrics-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .observation-detail-field textarea,
+  .observation-textarea {
+    min-height: 220px;
+    background-size: 100% 28px;
+    background-position: 0 11px;
+  }
+
+  .observation-detail-field textarea {
+    min-height: clamp(220px, 32dvh, 320px);
+  }
+
+  .observation-workspace {
+    padding-right: 0;
+  }
+
+
+  .journey-timeline .month-label {
+    font-size: 16px;
+  }
+
+  .journey-timeline .milestone-name {
+    font-size: 14.5px;
+  }
+
+  .journey-timeline .date-text {
+    font-size: 11.5px;
+    letter-spacing: 0.01em;
+  }
+}
+
+/* ── journey-star ──────────────────────────────────────────────
+   One quiet star near the journey horizon.
+   Not magic. Not fantasy. Just a tiny suggestion that the
+   journey is still gathering starlight somewhere.
+   Reference feeling: a quiet old book page under afternoon sunlight.
+   ────────────────────────────────────────────────────────────── */
+.journey-star {
+  position: absolute;
+  /* near the horizon edge — offset, never centered, never obvious */
+  top: 34%;
+  right: 14%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  /* a grain of dust catching afternoon light — warm, barely luminous */
+  background: radial-gradient(
+    circle,
+    rgba(255, 250, 235, 0.95) 0%,
+    rgba(255, 246, 225, 0.4) 45%,
+    transparent 100%
+  );
+  opacity: 0.08;
+  filter: blur(0.5px);
+  pointer-events: none;
+  z-index: 5;
+  animation: journey-star-breathe 12s ease-in-out infinite;
+}
+
+@keyframes journey-star-breathe {
+  0%, 100% {
+    opacity: 0.04;
+    transform: scale(0.8);
+  }
+  42% {
+    opacity: 0.15;
+    transform: scale(1.15);
+  }
+  50% {
+    opacity: 0.13;
+    transform: scale(1.08);
+  }
+  58% {
+    opacity: 0.11;
+    transform: scale(1.0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .journey-star {
+    animation: none;
+    opacity: 0.08;
+  }
+}

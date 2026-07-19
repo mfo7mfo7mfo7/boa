@@ -122,7 +122,7 @@ def test_galaxy_route_does_not_shadow_static_assets(tmp_path) -> None:
         response = client.get("/static/app.css")
 
     assert response.status_code == 200
-    assert ".masthead" in response.text
+    assert "app-core.css" in response.text
 
 
 def test_integer_path_parameters_reject_non_integer_values(tmp_path) -> None:
@@ -515,3 +515,82 @@ def test_plugin_runner_rejects_hostile_plugin_name_and_invalid_snapshot_payload(
     assert payload[0]["signal_type"] == "total"
     assert payload[0]["quality"] == "normal"
     assert payload[0]["observed_at"]
+
+
+def test_large_timeline_remains_readable(tmp_path: Path) -> None:
+    """A long release with many milestones and observations should still serialize."""
+    from datetime import date, timedelta
+    app = create_app(BoaStorage(tmp_path / "boa.db"))
+    with TestClient(app) as client:
+        release = client.post(
+            "/api/releases",
+            json={"product": "Odyssey", "version": "12.0", "secret": "odyssey-12"},
+        ).json()
+        release_id = release["id"]
+        first_milestone_id = release["milestones"][0]["id"]
+
+        # Add 20 milestones spanning two years
+        base = date.today()
+        for i in range(20):
+            client.post(
+                f"/api/releases/{release_id}/milestones",
+                json={
+                    "name": f"Waypoint {i + 1}",
+                    "expected": (base + timedelta(days=30 * i)).isoformat(),
+                    "owner": "navigator",
+                    "email": None,
+                    "note": None,
+                },
+            )
+
+        # Record 50 observations
+        for i in range(50):
+            client.put(
+                f"/api/releases/{release_id}/observation",
+                json={
+                    "starlight": (i * 2) % 101,
+                    "whisper": f"Observation {i + 1}",
+                    "detail": {"type": "markdown", "content": f"Note {i + 1}"},
+                    "metrics": {"done": i, "total": 50, "blocked": 0},
+                    "observed_on": (base - timedelta(days=i)).isoformat(),
+                },
+            )
+
+        timeline = client.get("/api/timeline")
+        assert timeline.status_code == 200
+        payload = timeline.json()
+        item = next((t for t in payload if t["id"] == release_id), None)
+        assert item is not None
+        assert len(item["milestones"]) == 22
+        assert len(item["starlight_trail"]) >= 50
+
+
+def test_many_acknowledgements_immutable_history(tmp_path: Path) -> None:
+    """Each acknowledgement is recorded; the latest ack wins for display."""
+    from datetime import date
+    app = create_app(BoaStorage(tmp_path / "boa.db"))
+    with TestClient(app) as client:
+        release = client.post(
+            "/api/releases",
+            json={"product": "Archive", "version": "1.0", "secret": "archive-10"},
+        ).json()
+        milestone_id = release["milestones"][0]["id"]
+        due = (date.today()).isoformat()
+        client.put(
+            f"/api/milestones/{milestone_id}",
+            json={"name": "Final", "expected": due, "owner": "a", "email": None, "note": None},
+        )
+        client.post(
+            f"/api/milestones/{milestone_id}/ack",
+            json={"secret": "archive-10", "ack_name": "First Ack", "note": {"content": "initial"}},
+        )
+        client.post(
+            f"/api/milestones/{milestone_id}/ack",
+            json={"secret": "archive-10", "ack_name": "Second Ack", "note": {"content": "updated"}},
+        )
+        timeline = client.get("/api/timeline").json()
+        milestone = next(m for m in timeline[0]["milestones"] if m["id"] == milestone_id)
+        # Marks form a trail; the latest mark is used for timeline display.
+        assert milestone["ack_name"] == "Second Ack"
+        assert milestone["ack_note"]["content"] == "updated"
+        assert [item["ack_name"] for item in milestone["ack_trail"]] == ["Second Ack", "First Ack"]

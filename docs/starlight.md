@@ -2,9 +2,12 @@
 
 Boa's `Starlight` represents journey readiness.
 
+For user-facing integrations, prefer the [Observation Client](automation-client.md). It writes Starlight through the Observation Notebook API so product language stays aligned with **Where are we now?**.
+
+This lower-level guide documents the raw Starlight model and legacy endpoint shape.
+
 This guide shows:
 
-- how to create a release
 - how to submit the current starlight state
 - how to use markdown detail and optional metrics
 - how to query the trail and timeline output
@@ -250,3 +253,7 @@ The recommended payload shape looks like this:
   "observed_on": "2026-06-18"
 }
 ```
+
+## Milestone Email and Acknowledgements
+
+Milestones may include an optional `email` field for the Email Ack Workflow. Starlight continues to represent journey readiness independently; acknowledgements feed back into the timeline without changing how Starlight is observed.

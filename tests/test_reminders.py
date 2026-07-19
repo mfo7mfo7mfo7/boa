@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from boa.api import create_app
+from boa.domain import Milestone, ReleaseBlueprint
 from boa.storage import BoaStorage
 
 
@@ -258,3 +259,74 @@ def test_reminder_state_includes_email_logs(tmp_path: Path, monkeypatch: pytest.
         kickoff_state = next(item for item in payload if item["milestone_name"] == "Kickoff")
         assert len(kickoff_state["emails"]) == 1
         assert kickoff_state["emails"][0]["recipient"] == "qa@example.com"
+
+
+def test_reminder_t_minus_days_uses_default_and_parses_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from boa.reminder_config import reminder_t_minus_days
+
+    monkeypatch.setattr("os.environ", {})
+    assert reminder_t_minus_days() == ((7, "t-7"), (3, "t-3"), (1, "t-1"))
+
+    monkeypatch.setattr("os.environ", {"BOA_REMINDER_DAYS_BEFORE": "14, 7, 1"})
+    assert reminder_t_minus_days() == ((14, "t-14"), (7, "t-7"), (1, "t-1"))
+
+    monkeypatch.setattr("os.environ", {"BOA_REMINDER_DAYS_BEFORE": "not-a-number, 5, 3"})
+    assert reminder_t_minus_days() == ((5, "t-5"), (3, "t-3"))
+
+    monkeypatch.setattr("os.environ", {"BOA_REMINDER_DAYS_BEFORE": "0, -1, abc"})
+    assert reminder_t_minus_days() == ((7, "t-7"), (3, "t-3"), (1, "t-1"))
+
+
+def test_scheduled_reminder_cycle_sends_emails_when_smtp_ready(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    env = {
+        "BOA_SMTP_ENABLED": "true",
+        "BOA_SMTP_HOST": "smtp.example.com",
+        "BOA_SMTP_FROM": "boa@example.com",
+        "BOA_BASE_URL": "http://localhost:8000",
+    }
+    monkeypatch.setattr("os.environ", env)
+
+    storage = BoaStorage(tmp_path / "boa.db")
+    storage.initialize()
+    release = storage.create_release(
+        ReleaseBlueprint(
+            product="FortiSASE",
+            version="26.2",
+            secret="boa-262",
+            milestones=(
+                Milestone(
+                    name="Kickoff",
+                    expected=date.today() + timedelta(days=1),
+                    owner="qa",
+                    email="qa@example.com",
+                ),
+            ),
+        )
+    )
+
+    sent_emails: list[dict] = []
+
+    def fake_send_email(config, *, to, subject, body_text, body_html=None):
+        sent_emails.append({"to": to, "subject": subject})
+
+    monkeypatch.setattr("boa.reminder_service.send_email", fake_send_email)
+
+    from boa.api import _run_scheduled_reminder_cycle
+
+    _run_scheduled_reminder_cycle(storage)
+
+    assert len(sent_emails) == 1
+    assert sent_emails[0]["to"] == "qa@example.com"
+
+    milestone_id = storage.list_milestones(release.id)[0].id
+    notifications = storage.list_notifications(milestone_id=milestone_id)
+    assert len(notifications) == 1
+
+    emails = storage.list_email_logs(milestone_id=milestone_id)
+    assert len(emails) == 1
+    assert emails[0].template_name == "reminder"

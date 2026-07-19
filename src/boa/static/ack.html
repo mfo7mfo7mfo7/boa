@@ -3,28 +3,104 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Acknowledge · Boa</title>
-    <link rel="stylesheet" href="/static/app.css?v=starlight-36">
+    <title>Mark recorded · Boa</title>
+    <link rel="stylesheet" href="/static/app.css?v=starlight-172">
     <style>
       .ack-page {
-        min-height: 100vh;
+        min-height: 100dvh;
         display: flex;
         align-items: center;
         justify-content: center;
         padding: 24px;
+        position: relative;
+        overflow: hidden;
+      }
+      .ack-page::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background:
+          radial-gradient(circle at 22% 28%, rgba(220, 190, 120, 0.22), transparent 32%),
+          radial-gradient(circle at 78% 18%, rgba(180, 145, 85, 0.12), transparent 26%),
+          radial-gradient(circle at 50% 86%, rgba(120, 145, 180, 0.08), transparent 34%);
+      }
+      .ack-stars {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 0;
+      }
+      .ack-star {
+        position: absolute;
+        color: rgba(180, 145, 85, 0.34);
+        font-size: 14px;
+        line-height: 1;
+        animation: ackTwinkle 4s ease-in-out infinite;
+      }
+      .ack-star:nth-child(1) { top: 14%; left: 18%; animation-delay: 0s; }
+      .ack-star:nth-child(2) { top: 22%; right: 22%; font-size: 20px; animation-delay: 1.2s; }
+      .ack-star:nth-child(3) { top: 62%; left: 12%; font-size: 12px; animation-delay: 2.4s; }
+      .ack-star:nth-child(4) { bottom: 18%; right: 16%; font-size: 16px; animation-delay: 0.8s; }
+      .ack-star:nth-child(5) { top: 46%; right: 8%; font-size: 10px; animation-delay: 1.8s; }
+      .ack-star:nth-child(6) { bottom: 32%; left: 26%; font-size: 18px; animation-delay: 3s; }
+      @keyframes ackTwinkle {
+        0%, 100% { opacity: 0.3; transform: scale(0.96) rotate(0deg); }
+        50% { opacity: 0.8; transform: scale(1.04) rotate(8deg); }
       }
       .ack-card {
+        position: relative;
+        z-index: 1;
         width: 100%;
         max-width: 520px;
-        background: #fffdf7;
-        border: 1px solid rgba(103, 92, 83, 0.16);
-        border-radius: 6px;
-        padding: 32px;
+        text-align: center;
+        padding: 48px 36px 44px;
+        border: 1px solid rgba(118, 95, 76, 0.1);
+        border-radius: 50% 50% 48% 52% / 54% 54% 46% 46%;
+        background:
+          radial-gradient(circle at 30% 30%, rgba(255, 252, 246, 0.98), transparent 50%),
+          radial-gradient(circle at 70% 70%, rgba(249, 243, 230, 0.96), transparent 50%),
+          rgba(255, 252, 246, 0.94);
+        box-shadow:
+          0 24px 60px rgba(62, 48, 34, 0.08),
+          0 6px 16px rgba(62, 48, 34, 0.04),
+          inset 0 1px 0 rgba(255, 255, 255, 0.7);
+      }
+      .ack-card::before {
+        content: "";
+        position: absolute;
+        inset: 10px;
+        border: 1px dashed rgba(118, 95, 76, 0.12);
+        border-radius: 50% 50% 48% 52% / 54% 54% 46% 46%;
+        pointer-events: none;
+      }
+      .ack-hero-star {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 84px;
+        height: 84px;
+        margin: 0 auto 24px;
+        border-radius: 50%;
+        background:
+          radial-gradient(circle at 35% 32%, rgba(255, 251, 238, 0.96), rgba(238, 210, 149, 0.92) 62%, rgba(210, 172, 86, 0.96));
+        border: 1px solid rgba(176, 138, 71, 0.28);
+        box-shadow:
+          0 10px 28px rgba(165, 130, 68, 0.2),
+          0 0 0 8px rgba(235, 213, 164, 0.12);
+        color: rgba(120, 92, 52, 0.9);
+        font-size: 38px;
+        line-height: 1;
+        animation: ackHeroPulse 2.6s ease-in-out infinite;
+      }
+      @keyframes ackHeroPulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.04); }
       }
       .ack-card h1 {
-        font-size: 22px;
+        font-size: 24px;
         font-weight: 400;
-        margin: 0 0 8px 0;
+        margin: 0 0 10px 0;
         color: #4a3b2a;
       }
       .ack-card .ack-kicker {
@@ -36,8 +112,9 @@
       }
       .ack-card .ack-meta {
         color: #6d5f52;
-        margin: 0 0 24px 0;
+        margin: 0 0 28px 0;
         line-height: 1.55;
+        font-size: 15px;
       }
       .ack-card .ack-form {
         display: flex;
@@ -50,6 +127,7 @@
         gap: 6px;
         font-size: 13px;
         color: #6d5f52;
+        text-align: left;
       }
       .ack-card input,
       .ack-card textarea {
@@ -57,8 +135,8 @@
         font-size: 15px;
         padding: 10px 12px;
         border: 1px solid rgba(103, 92, 83, 0.22);
-        border-radius: 4px;
-        background: #fffdf7;
+        border-radius: 12px;
+        background: rgba(255, 253, 247, 0.8);
         color: #4a3b2a;
       }
       .ack-card input:focus,
@@ -69,25 +147,28 @@
       .ack-card button {
         font-family: "Inter", "SF Pro Text", system-ui, sans-serif;
         font-size: 14px;
-        padding: 12px 20px;
+        padding: 12px 24px;
         background: #6f9f7a;
         color: #fffdf7;
         border: none;
-        border-radius: 4px;
+        border-radius: 999px;
         cursor: pointer;
-        align-self: flex-start;
+        align-self: center;
+        transition: background-color 180ms ease, transform 160ms ease;
       }
       .ack-card button:hover,
       .ack-card button:focus {
         background: #5d8a67;
+        transform: translateY(-1px);
       }
       .ack-card button:disabled {
         opacity: 0.6;
         cursor: not-allowed;
+        transform: none;
       }
       .ack-card .ack-message {
-        margin: 12px 0 0 0;
-        font-size: 13px;
+        margin: 16px 0 0 0;
+        font-size: 14px;
         color: #9c8b7a;
       }
       .ack-card .ack-message.error {
@@ -96,34 +177,93 @@
       .ack-card .ack-message.success {
         color: #6f9f7a;
       }
+      .ack-success-actions {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        flex-wrap: wrap;
+        margin-top: 22px;
+      }
+      .ack-success-actions.hidden {
+        display: none;
+      }
+      .ack-return,
+      .ack-close {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: rgba(74, 60, 42, 0.74);
+        font-size: 14px;
+        text-decoration: none;
+        background: transparent;
+        border: 0;
+        padding: 0;
+        cursor: pointer;
+        font-family: "Inter", "SF Pro Text", system-ui, sans-serif;
+        transition: color 180ms ease;
+      }
+      .ack-return:hover,
+      .ack-return:focus,
+      .ack-close:hover,
+      .ack-close:focus {
+        color: rgba(74, 60, 42, 0.96);
+      }
+      .ack-return::before {
+        content: "←";
+      }
       .ack-brand {
+        position: absolute;
+        top: 22px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1;
         text-align: center;
-        margin-bottom: 24px;
       }
       .ack-brand img {
-        width: 48px;
-        height: 48px;
-        opacity: 0.85;
+        width: 40px;
+        height: 40px;
+        opacity: 0.75;
       }
       .ack-brand p {
-        margin: 8px 0 0 0;
-        font-size: 12px;
-        letter-spacing: 0.08em;
+        margin: 6px 0 0 0;
+        font-size: 11px;
+        letter-spacing: 0.1em;
         text-transform: uppercase;
         color: #9c8b7a;
+      }
+      @media (max-width: 560px) {
+        .ack-card {
+          padding: 40px 24px 36px;
+        }
+        .ack-card h1 {
+          font-size: 20px;
+        }
       }
     </style>
   </head>
   <body>
+    <div class="ack-stars" aria-hidden="true">
+      <span class="ack-star">✦</span>
+      <span class="ack-star">✦</span>
+      <span class="ack-star">✦</span>
+      <span class="ack-star">✦</span>
+      <span class="ack-star">✦</span>
+      <span class="ack-star">✦</span>
+    </div>
+
+    <div class="ack-brand">
+      <img src="/static/boa-logo.png" alt="">
+      <p>Boa</p>
+    </div>
+
     <div class="ack-page">
       <div class="ack-card">
-        <div class="ack-brand">
-          <img src="/static/boa-logo.png" alt="">
-          <p>Boa</p>
-        </div>
-        <p class="ack-kicker" id="ack-kicker">Acknowledge a milestone</p>
+        <div class="ack-hero-star" aria-hidden="true">✦</div>
+        <p class="ack-kicker" id="ack-kicker">A milestone reached</p>
         <h1 id="ack-title">Loading...</h1>
         <p class="ack-meta" id="ack-meta"></p>
+
         <form class="ack-form" id="ack-form">
           <label>
             Your name
@@ -131,11 +271,16 @@
           </label>
           <label>
             Note <span>(optional)</span>
-            <textarea id="ack-note" rows="3" placeholder="A short acknowledgement note"></textarea>
+            <textarea id="ack-note" rows="3" placeholder="A short note about this milestone"></textarea>
           </label>
           <button id="ack-submit" type="submit">Acknowledge</button>
         </form>
+
         <p class="ack-message" id="ack-message" aria-live="polite"></p>
+        <div class="ack-success-actions hidden" id="ack-success-actions">
+          <a class="ack-return" id="ack-return" href="/">Return to the timeline</a>
+          <button class="ack-close" id="ack-close" type="button">Close this page</button>
+        </div>
       </div>
     </div>
 
@@ -147,10 +292,33 @@
         return match ? match[1] : null;
       }
 
+      function getDateFormatPreference() {
+        try {
+          const saved = window.localStorage.getItem("boa.dateFormat");
+          return ["storybook", "iso", "day-first"].includes(saved) ? saved : "storybook";
+        } catch {
+          return "storybook";
+        }
+      }
+
+      function formatCalendarDate(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, "0");
+        const day = String(date.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+      }
+
       function formatDate(iso) {
         if (!iso) return "";
-        const d = new Date(iso);
-        return d.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+        const date = new Date(iso);
+        const format = getDateFormatPreference();
+        if (format === "iso") {
+          return formatCalendarDate(date);
+        }
+        if (format === "day-first") {
+          return `${date.getDate()} ${date.toLocaleDateString(undefined, { month: "short" })} ${date.getFullYear()}`;
+        }
+        return date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
       }
 
       async function request(path, options = {}) {
@@ -168,13 +336,13 @@
       async function loadInfo() {
         const token = getToken();
         if (!token) {
-          showError("This acknowledgement link is missing.");
+          showError("This mark link is missing.");
           return;
         }
         try {
           const info = await request(`/api/ack/${token}`);
           if (!info.valid) {
-            showError(info.message || "This acknowledgement link is not valid.");
+            showError(info.message || "This mark link is not valid.");
             return;
           }
           document.getElementById("ack-title").textContent = info.milestone_name;
@@ -188,18 +356,39 @@
       function showError(message) {
         const form = document.getElementById("ack-form");
         const messageEl = document.getElementById("ack-message");
+        const returnEl = document.getElementById("ack-return");
         form.style.display = "none";
         messageEl.textContent = message;
         messageEl.className = "ack-message error";
+        returnEl.classList.add("hidden");
       }
 
       function showSuccess(message) {
         const form = document.getElementById("ack-form");
         const messageEl = document.getElementById("ack-message");
+        const actionsEl = document.getElementById("ack-success-actions");
+        const kickerEl = document.getElementById("ack-kicker");
         form.style.display = "none";
+        kickerEl.textContent = "Marked";
         messageEl.textContent = message;
         messageEl.className = "ack-message success";
+        if (actionsEl) actionsEl.classList.remove("hidden");
+        window.setTimeout(() => {
+          if (window.history.length > 1) {
+            window.history.back();
+            return;
+          }
+          window.close();
+        }, 220);
       }
+
+      document.getElementById("ack-close").addEventListener("click", () => {
+        if (window.history.length > 1) {
+          window.history.back();
+        } else {
+          window.close();
+        }
+      });
 
       document.getElementById("ack-form").addEventListener("submit", async (event) => {
         event.preventDefault();
@@ -217,7 +406,7 @@
               note: note ? { content: note } : undefined,
             }),
           });
-          showSuccess(result.message || "Milestone acknowledged.");
+          showSuccess(result.message || "Your mark has been recorded.");
         } catch (error) {
           document.getElementById("ack-message").textContent = error.message;
           document.getElementById("ack-message").className = "ack-message error";

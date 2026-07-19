@@ -549,34 +549,6 @@ class BoaStorage:
     def ack_milestone(self, milestone_id: int, ack_name: str, note: str) -> AckRecord:
         milestone = self.get_milestone(milestone_id)
         with self.connect() as connection:
-            existing = connection.execute(
-                """
-                SELECT id, release_id, milestone_id, owner, ack_name, acked_at, note
-                FROM milestone_ack
-                WHERE milestone_id = ?
-                ORDER BY acked_at DESC, id DESC
-                LIMIT 1
-                """,
-                (milestone_id,),
-            ).fetchone()
-            if existing is not None:
-                connection.execute(
-                    """
-                    UPDATE milestone_ack
-                    SET note = ?
-                    WHERE id = ?
-                    """,
-                    (note, int(existing["id"])),
-                )
-                return AckRecord(
-                    id=int(existing["id"]),
-                    release_id=int(existing["release_id"]),
-                    milestone_id=int(existing["milestone_id"]),
-                    ack_name=str(existing["ack_name"]) if existing["ack_name"] else str(existing["owner"]),
-                    acked_at=datetime.fromisoformat(str(existing["acked_at"])),
-                    note=note,
-                )
-
             acked_at = datetime.now(timezone.utc).replace(microsecond=0)
             cursor = connection.execute(
                 """
@@ -601,6 +573,30 @@ class BoaStorage:
             acked_at=acked_at,
             note=note,
         )
+
+    def list_milestone_ack_history(self, milestone_id: int) -> list[AckRecord]:
+        milestone = self.get_milestone(milestone_id)
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT id, release_id, milestone_id, ack_name, owner, acked_at, note
+                FROM milestone_ack
+                WHERE milestone_id = ?
+                ORDER BY acked_at DESC, id DESC
+                """,
+                (milestone_id,),
+            ).fetchall()
+        return [
+            AckRecord(
+                id=int(row["id"]),
+                release_id=int(row["release_id"]),
+                milestone_id=int(row["milestone_id"]),
+                ack_name=str(row["ack_name"]) if row["ack_name"] else str(row["owner"]),
+                acked_at=datetime.fromisoformat(str(row["acked_at"])),
+                note=str(row["note"]) if row["note"] is not None else "",
+            )
+            for row in rows
+        ]
 
     def list_bug_snapshots(self, release_id: int) -> list[BugSnapshot]:
         self.get_release(release_id)
@@ -1293,6 +1289,29 @@ class BoaStorage:
                 """,
                 (release_id,),
             ).fetchall()
+            ack_rows = connection.execute(
+                """
+                SELECT id, release_id, milestone_id, ack_name, owner, acked_at, note
+                FROM milestone_ack
+                WHERE release_id = ?
+                ORDER BY acked_at DESC, id DESC
+                """,
+                (release_id,),
+            ).fetchall()
+
+        ack_history_by_milestone: dict[int, list[AckRecord]] = {}
+        for row in ack_rows:
+            milestone_id = int(row["milestone_id"])
+            ack_history_by_milestone.setdefault(milestone_id, []).append(
+                AckRecord(
+                    id=int(row["id"]),
+                    release_id=int(row["release_id"]),
+                    milestone_id=milestone_id,
+                    ack_name=str(row["ack_name"]) if row["ack_name"] else str(row["owner"]),
+                    acked_at=datetime.fromisoformat(str(row["acked_at"])),
+                    note=str(row["note"]) if row["note"] is not None else "",
+                )
+            )
 
         return ReleaseTimeline(
             release=release,
@@ -1312,6 +1331,7 @@ class BoaStorage:
                     ),
                     ack_name=str(row["ack_name"]) if row["ack_name"] else None,
                     ack_note=str(row["ack_note"]) if row["ack_note"] is not None else None,
+                    ack_trail=tuple(ack_history_by_milestone.get(int(row["id"]), [])),
                 )
                 for row in milestone_rows
             ),

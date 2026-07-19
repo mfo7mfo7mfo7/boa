@@ -235,6 +235,7 @@ class BugSnapshotCreateRequest(BaseModel):
 
     signal_type: str = "total"
     open_bug_count: int = Field(ge=0)
+    observed_at: datetime | None = None
 
     @field_validator("signal_type")
     @classmethod
@@ -454,6 +455,14 @@ class TimelineMilestoneResponse(BaseModel):
     acked_at: str | None
     ack_name: str | None
     ack_note: NoteContentResponse | None
+    ack_trail: list["TimelineAckEventResponse"] = []
+
+
+class TimelineAckEventResponse(BaseModel):
+    id: int
+    acked_at: str
+    ack_name: str
+    note: NoteContentResponse | None
 
 
 class ReleaseTimelineResponse(BaseModel):
@@ -514,18 +523,63 @@ class ObservationWorkspaceResponse(BaseModel):
     trail: list[StarlightEventResponse] = []
 
 
+
+def _perform_acknowledgement(
+    storage: BoaStorage,
+    *,
+    release_id: int,
+    milestone_id: int,
+    ack_name: str,
+    note: str,
+) -> AckRecord:
+    """Record an acknowledgement and optionally send a confirmation email.
+
+    This is the single product path for acknowledging a milestone. Both the
+    authenticated dialog and the secret token flow use it so behavior stays
+    identical. Email failures are swallowed so acknowledgement itself never
+    breaks because of delivery.
+    """
+    ack = storage.ack_milestone(milestone_id, ack_name, note)
+
+    try:
+        smtp_config = load_smtp_config()
+        if smtp_config.ready:
+            send_acknowledgement_confirmation(
+                storage,
+                smtp_config,
+                release_id=release_id,
+                milestone_id=milestone_id,
+                ack_name=ack.ack_name,
+                ack_note=note,
+            )
+    except Exception as exc:  # noqa: BLE001
+        import logging
+
+        logging.getLogger("boa.ack").warning("Acknowledgement confirmation email failed: %s", exc)
+
+    return ack
+
+
+def _run_scheduled_reminder_cycle(storage: BoaStorage) -> None:
+    """Single scheduler tick: generate notifications and send emails if SMTP ready."""
+    try:
+        smtp_config = load_smtp_config()
+        if smtp_config.ready:
+            send_due_reminder_emails(storage, smtp_config, as_of=date.today())
+        else:
+            storage.generate_due_notifications(as_of=date.today())
+    except Exception as exc:  # noqa: BLE001
+        import logging
+
+        logging.getLogger("boa.scheduler").warning("Scheduled reminder email run failed: %s", exc)
+
+
 def create_app(storage: BoaStorage | None = None) -> FastAPI:
     db_path = Path(os.getenv("BOA_DB_PATH", Path(__file__).resolve().parents[2] / "boa.db"))
 
     async def reminder_scheduler(app: FastAPI) -> None:
         while True:
-            app.state.storage.generate_due_notifications(as_of=date.today())
-            try:
-                smtp_config = load_smtp_config()
-                if smtp_config.ready:
-                    send_due_reminder_emails(app.state.storage, smtp_config, as_of=date.today())
-            except Exception:
-                pass
+            _run_scheduled_reminder_cycle(app.state.storage)
             await asyncio.sleep(60 * 60)
 
     @asynccontextmanager
@@ -541,7 +595,7 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
             with contextlib.suppress(asyncio.CancelledError):
                 await app.state.reminder_scheduler
 
-    app = FastAPI(title="Boa API", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="Boa API", version="2.0.0", lifespan=lifespan)
     app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 
     def get_storage() -> BoaStorage:
@@ -607,7 +661,7 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
         if not config.enabled:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="SMTP is disabled.",
+                detail="Email delivery is not enabled.",
             )
         if not config.ready:
             status_msg = get_smtp_status(config)["message"]
@@ -746,16 +800,16 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
         storage: BoaStorage = Depends(get_storage),
     ) -> MilestoneResponse:
         try:
-                milestone = storage.add_milestone(
-                    release_id,
-                    Milestone(
-                        name=request.name,
-                        expected=request.expected,
-                        owner=request.owner,
-                        email=request.email,
-                        note=_note_content_or_none(request.note),
-                    ),
-                )
+            milestone = storage.add_milestone(
+                release_id,
+                Milestone(
+                    name=request.name,
+                    expected=request.expected,
+                    owner=request.owner,
+                    email=request.email,
+                    note=_note_content_or_none(request.note),
+                ),
+            )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return _milestone_response(milestone)
@@ -767,16 +821,16 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
         storage: BoaStorage = Depends(get_storage),
     ) -> MilestoneResponse:
         try:
-                milestone = storage.update_milestone(
-                    milestone_id,
-                    Milestone(
-                        name=request.name,
-                        expected=request.expected,
-                        owner=request.owner,
-                        email=request.email,
-                        note=_note_content_or_none(request.note),
-                    ),
-                )
+            milestone = storage.update_milestone(
+                milestone_id,
+                Milestone(
+                    name=request.name,
+                    expected=request.expected,
+                    owner=request.owner,
+                    email=request.email,
+                    note=_note_content_or_none(request.note),
+                ),
+            )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return _milestone_response(milestone)
@@ -855,32 +909,19 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
         release = storage.get_release(token_record.release_id)
 
         ack_note = _note_content_or_none(request.note) or ""
-        ack = storage.ack_milestone(
-            milestone.id,
-            request.ack_name,
-            ack_note,
+        ack = _perform_acknowledgement(
+            storage,
+            release_id=release.id,
+            milestone_id=milestone.id,
+            ack_name=request.ack_name,
+            note=ack_note,
         )
 
-        used_at = ack.acked_at
         storage.mark_ack_token_used(
             token_record.id,
             ack_id=ack.id,
-            used_at=used_at,
+            used_at=ack.acked_at,
         )
-
-        try:
-            smtp_config = load_smtp_config()
-            if smtp_config.ready:
-                send_acknowledgement_confirmation(
-                    storage,
-                    smtp_config,
-                    release_id=release.id,
-                    milestone_id=milestone.id,
-                    ack_name=ack.ack_name,
-                    ack_note=ack_note,
-                )
-        except Exception:
-            pass
 
         return AckByTokenResponse(
             acked=True,
@@ -932,12 +973,15 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
         if request.secret != release.blueprint.secret:
-            raise HTTPException(status_code=403, detail="Invalid release secret.")
+            raise HTTPException(status_code=403, detail="Invalid journey key.")
 
-        ack = storage.ack_milestone(
-            milestone_id,
-            request.ack_name,
-            _note_content_or_none(request.note) or "",
+        note = _note_content_or_none(request.note) or ""
+        ack = _perform_acknowledgement(
+            storage,
+            release_id=release.id,
+            milestone_id=milestone_id,
+            ack_name=request.ack_name,
+            note=note,
         )
         return AckResponse(
             acked=True,
@@ -961,6 +1005,7 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
                 release_id,
                 open_bug_count=request.open_bug_count,
                 signal_type=request.signal_type,
+                observed_at=request.observed_at,
             )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -1354,6 +1399,15 @@ def _timeline_response(timeline: ReleaseTimeline) -> ReleaseTimelineResponse:
                 acked_at=milestone.acked_at.isoformat() if milestone.acked_at else None,
                 ack_name=milestone.ack_name,
                 ack_note=_note_response(milestone.ack_note),
+                ack_trail=[
+                    TimelineAckEventResponse(
+                        id=ack.id,
+                        acked_at=ack.acked_at.isoformat(),
+                        ack_name=ack.ack_name,
+                        note=_note_response(ack.note),
+                    )
+                    for ack in milestone.ack_trail
+                ],
             )
             for milestone in timeline.milestones
         ],

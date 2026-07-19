@@ -1,0 +1,633 @@
+.journey-dialog {
+  width: min(1180px, calc(100vw - 42px));
+}
+
+.journey-identity-row {
+  gap: 8px;
+  margin-top: 2px;
+  min-width: 0;
+  max-width: 368px;
+}
+
+.journey-identity-field {
+  min-width: 0;
+}
+
+.journey-identity-field:first-child {
+  flex: 0 1 248px;
+}
+
+.journey-identity-field-version {
+  flex: 0 0 82px;
+}
+
+.journey-identity-field input {
+  min-height: 31px;
+  padding: 0 12px;
+  border: 1px solid rgba(166, 139, 95, 0.12);
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(255, 253, 248, 0.76), rgba(250, 244, 233, 0.58));
+  color: rgba(73, 63, 48, 0.92);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.76),
+    0 6px 14px rgba(220, 198, 159, 0.03);
+  font-family: "Libre Baskerville", "Georgia", serif;
+  font-size: 12.5px;
+  line-height: 1.2;
+  width: 100%;
+}
+
+.journey-identity-field input::placeholder {
+  color: rgba(133, 115, 91, 0.62);
+}
+
+.journey-identity-field input:focus-visible {
+  outline: none;
+  border-color: rgba(157, 137, 88, 0.34);
+  box-shadow:
+    0 0 0 3px rgba(217, 195, 150, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.58);
+}
+
+.journey-identity-field input:disabled,
+#journey-milestone-name:disabled {
+  color: rgba(47, 55, 70, 0.44);
+  background: rgba(239, 233, 223, 0.72);
+  border-color: rgba(118, 95, 76, 0.08);
+  cursor: default;
+}
+
+.journey-protection-shell {
+  min-width: 0;
+  flex: 0 1 168px;
+  order: 0;
+}
+
+.journey-protection-input {
+  width: 100%;
+}
+
+.journey-protection-input:hover,
+.journey-protection-input:focus-visible {
+  color: rgba(72, 59, 42, 0.94);
+}
+
+.journey-builder {
+  position: relative;
+  min-height: 336px;
+  padding: 8px 0 0;
+  border-radius: 34px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 253, 247, 0.34), transparent 44%),
+    linear-gradient(180deg, rgba(255, 250, 239, 0.2), rgba(255, 250, 239, 0.05));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.44),
+    0 16px 28px rgba(214, 191, 149, 0.04);
+}
+
+.journey-builder::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid rgba(197, 173, 132, 0.08);
+  pointer-events: none;
+}
+
+.journey-milestone-popover {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  --journey-popover-arrow-x: 50%;
+  width: min(336px, calc(100% - 104px));
+  padding: 14px 16px 15px;
+  border-radius: 22px;
+  transform-origin: center top;
+  background:
+    linear-gradient(180deg, rgba(255, 251, 243, 0.94), rgba(248, 240, 226, 0.82)),
+    radial-gradient(circle at 18% 0%, rgba(255, 255, 255, 0.2), transparent 38%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.82),
+    0 14px 28px rgba(216, 190, 146, 0.11),
+    0 2px 0 rgba(218, 194, 154, 0.1);
+}
+
+.journey-milestone-popover::before {
+  content: "";
+  position: absolute;
+  left: var(--journey-popover-arrow-x);
+  bottom: -20px;
+  width: 1px;
+  height: 18px;
+  background: linear-gradient(180deg, rgba(206, 179, 129, 0.5), rgba(206, 179, 129, 0));
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.journey-milestone-popover::after {
+  content: "";
+  position: absolute;
+  left: var(--journey-popover-arrow-x);
+  bottom: -7px;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(240, 220, 182, 0.94);
+  border: 1px solid rgba(191, 159, 108, 0.22);
+  box-shadow: 0 4px 10px rgba(214, 191, 149, 0.08);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.journey-popover-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(202, 176, 129, 0.18);
+}
+
+.journey-popover-heading {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.journey-popover-kicker {
+  color: rgba(124, 104, 78, 0.68);
+  font-family: "Instrument Sans", "Helvetica Neue", sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.journey-popover-title {
+  margin: 0;
+  color: rgba(72, 60, 43, 0.94);
+  font-family: "Libre Baskerville", "Georgia", serif;
+  font-size: 16px;
+  font-style: normal;
+  line-height: 1.16;
+  font-weight: 400;
+  text-wrap: pretty;
+}
+
+.journey-popover-date {
+  margin: 1px 0 0;
+  color: rgba(131, 108, 80, 0.72);
+  font-family: "Instrument Sans", "Helvetica Neue", sans-serif;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.journey-delete-shell {
+  position: relative;
+}
+
+.journey-milestone-menu {
+  color: rgba(88, 75, 63, 0.5);
+  transform: translateY(-1px);
+  border: 0;
+  cursor: pointer;
+  transition:
+    color 240ms cubic-bezier(0.32, 0.72, 0, 1),
+    transform 240ms cubic-bezier(0.32, 0.72, 0, 1),
+    box-shadow 240ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.journey-milestone-menu:hover,
+.journey-milestone-menu:focus-visible {
+  color: rgba(88, 75, 63, 0.8);
+  transform: translateY(-2px) scale(1.02);
+}
+
+.journey-milestone-menu-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 146px;
+  padding: 7px;
+  border-radius: 14px;
+}
+
+.journey-milestone-delete {
+  width: 100%;
+  min-height: 30px;
+  padding: 0 11px;
+  border: 0;
+  background: transparent;
+  color: rgba(127, 64, 59, 0.82);
+  font-family: "Libre Baskerville", "Georgia", serif;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 12px;
+  transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.journey-milestone-delete:hover,
+.journey-milestone-delete:focus-visible {
+  color: rgba(121, 56, 50, 0.92);
+  background: rgba(193, 121, 110, 0.08);
+  transform: translateX(1px);
+  outline: none;
+}
+
+.journey-popover-field span {
+  padding-left: 2px;
+  color: rgba(129, 108, 80, 0.74);
+  font-family: "Instrument Sans", "Helvetica Neue", sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  line-height: 1.35;
+  text-transform: uppercase;
+}
+
+.journey-popover-field {
+  min-width: 0;
+}
+
+.journey-popover-field input,
+.journey-popover-field textarea {
+  border-radius: 16px;
+  border-color: rgba(166, 139, 95, 0.16);
+  background:
+    linear-gradient(180deg, rgba(255, 253, 248, 0.92), rgba(250, 244, 233, 0.8));
+  color: rgba(70, 60, 46, 0.92);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    0 1px 0 rgba(214, 191, 149, 0.08),
+    0 10px 20px rgba(220, 198, 159, 0.04);
+  font-family: "Libre Baskerville", "Georgia", serif;
+  font-size: 13px;
+  min-width: 0;
+  width: 100%;
+}
+
+.journey-popover-field input {
+  min-height: 40px;
+  padding: 0 13px;
+  font-size: 12.5px;
+}
+
+.journey-popover-field textarea {
+  min-height: 80px;
+  padding: 9px 11px;
+  line-height: 1.48;
+  font-size: 12px;
+}
+
+.journey-popover-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 10px;
+  align-items: start;
+}
+
+.journey-popover-meta-grid > * {
+  min-width: 0;
+}
+
+.journey-canvas-shell {
+  position: relative;
+  min-height: 304px;
+  padding: 28px 20px 12px 16px;
+  border-radius: 30px;
+  border: 1px solid rgba(194, 170, 126, 0.1);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 252, 244, 0.3), transparent 44%),
+    linear-gradient(180deg, rgba(255, 250, 239, 0.18), rgba(255, 250, 239, 0.04));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.44),
+    0 12px 22px rgba(214, 191, 149, 0.03);
+  transition: padding-top 320ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.journey-canvas-shell.has-active-editor {
+  padding-top: 282px;
+}
+
+.journey-timeline {
+  display: block;
+  width: 100%;
+  height: 260px;
+  overflow: visible;
+  user-select: none;
+  transition: transform 260ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.journey-timeline.is-dragging {
+  cursor: grabbing;
+}
+
+.journey-add-milestone {
+  position: absolute;
+  top: 216px;
+  right: 26px;
+  border: 0;
+  color: rgba(47, 55, 70, 0.72);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 2;
+  transition:
+    transform 260ms cubic-bezier(0.32, 0.72, 0, 1),
+    color 260ms cubic-bezier(0.32, 0.72, 0, 1),
+    box-shadow 260ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.journey-add-milestone:hover,
+.journey-add-milestone:focus-visible {
+  color: rgba(47, 55, 70, 0.92);
+  transform: translateY(-2px) scale(1.02);
+}
+
+.journey-milestone-hit {
+  cursor: pointer;
+}
+
+.journey-milestone-hit.is-draggable {
+  cursor: grab;
+}
+
+.journey-timeline.is-dragging .journey-milestone-hit.is-draggable,
+.journey-timeline.is-dragging .journey-canvas-hit {
+  cursor: grabbing;
+}
+
+.journey-canvas-hit {
+  cursor: crosshair;
+}
+
+.journey-selection-box {
+  fill: rgba(202, 220, 237, 0.12);
+  stroke: rgba(140, 166, 193, 0.62);
+  stroke-width: 1.1;
+  stroke-dasharray: 3 8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 10px rgba(135, 159, 183, 0.14));
+}
+
+.journey-selection-halo {
+  fill: rgba(236, 220, 186, 0.2);
+  stroke: rgba(188, 153, 98, 0.34);
+  stroke-width: 0.95;
+  filter: drop-shadow(0 0 14px rgba(223, 190, 120, 0.16));
+  opacity: 0.96;
+}
+
+.journey-marker.is-selected .milestone-name,
+.journey-marker.is-selected .date-text {
+  fill: rgba(112, 87, 48, 0.96);
+}
+
+.journey-marker.is-selected .expected-marker {
+  fill: rgba(190, 152, 76, 0.94);
+}
+
+.journey-marker.is-selected line {
+  stroke: rgba(155, 128, 79, 0.34);
+}
+
+.journey-milestone-hit.is-selected.is-draggable {
+  cursor: grab;
+}
+
+.journey-drag-line {
+  stroke: rgba(78, 121, 199, 0.4);
+  stroke-width: 1.1;
+  stroke-dasharray: 3 6;
+}
+
+.journey-timeline .timeline-spine,
+.journey-timeline .timeline-spine-glow,
+.journey-timeline .month-ruler-line-glow,
+.journey-timeline .month-ruler-line,
+.journey-timeline .month-label,
+.journey-timeline .journey-marker text,
+.journey-timeline .journey-marker line,
+.journey-timeline .journey-marker polygon,
+.journey-selection-halo {
+  pointer-events: none;
+}
+
+.journey-marker.is-selected .journey-selection-halo {
+  animation: journey-selection-breathe 9.5s ease-in-out infinite;
+}
+
+@keyframes journey-selection-breathe {
+  0%, 100% {
+    opacity: 0.74;
+    transform: scale(0.985);
+  }
+
+  46% {
+    opacity: 1;
+    transform: scale(1.015);
+  }
+
+  68% {
+    opacity: 0.84;
+    transform: scale(0.996);
+  }
+}
+
+.journey-timeline .timeline-spine-glow {
+  fill: none;
+  stroke: rgba(226, 205, 166, 0.3);
+  stroke-width: 6.5px;
+  stroke-linecap: round;
+  filter: blur(5px);
+  opacity: 0.64;
+}
+
+.journey-timeline .timeline-spine {
+  stroke: rgba(96, 92, 84, 0.54);
+  stroke-width: 1.08;
+  filter:
+    drop-shadow(0 0 4px rgba(223, 201, 162, 0.1))
+    url(#journey-handdrawn);
+}
+
+.journey-timeline .journey-marker {
+  transition: transform 260ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.journey-timeline .journey-marker .milestone-name,
+.journey-timeline .journey-marker .date-text,
+.journey-timeline .journey-marker .journey-marker-stem,
+.journey-timeline .journey-marker .expected-marker {
+  transition:
+    fill 240ms cubic-bezier(0.32, 0.72, 0, 1),
+    stroke 240ms cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 240ms cubic-bezier(0.32, 0.72, 0, 1),
+    transform 240ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.journey-timeline .journey-marker:hover .milestone-name,
+.journey-timeline .journey-marker:hover .date-text {
+  fill: rgba(88, 73, 51, 0.96);
+}
+
+.journey-timeline .journey-marker.is-active-editor .milestone-name,
+.journey-timeline .journey-marker.is-active-editor .date-text {
+  fill: rgba(113, 85, 44, 0.98);
+}
+
+.journey-timeline .journey-marker.is-active-editor .expected-marker {
+  fill: rgba(193, 152, 70, 0.98);
+}
+
+.journey-timeline .journey-marker.is-active-editor .journey-marker-stem {
+  stroke: rgba(168, 136, 82, 0.38);
+}
+
+.journey-timeline .journey-marker.is-active-editor .milestone-name {
+  font-size: 11.8px;
+  fill: rgba(101, 77, 40, 0.98);
+}
+
+.journey-timeline .journey-marker.is-active-editor .date-text {
+  font-size: 8.4px;
+  fill: rgba(123, 103, 74, 0.78);
+  letter-spacing: 0.03em;
+}
+
+.journey-timeline .journey-marker:hover .expected-marker {
+  fill: rgba(90, 137, 217, 0.96);
+}
+
+.journey-timeline .journey-marker:hover .journey-marker-stem {
+  stroke: rgba(146, 122, 82, 0.34);
+}
+
+.journey-timeline .month-ruler-line-glow {
+  fill: none;
+  stroke: rgba(228, 209, 172, 0.22);
+  stroke-width: 5px;
+  stroke-linecap: round;
+  filter: blur(4.5px);
+  opacity: 0.62;
+}
+
+.journey-timeline .month-ruler-line {
+  stroke: rgba(125, 112, 96, 0.34);
+  stroke-width: 0.88;
+}
+
+.journey-timeline .month-label {
+  font-family: "Libre Baskerville", "Georgia", serif;
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  fill: rgba(128, 112, 92, 0.74);
+}
+
+.journey-timeline .milestone-name {
+  font-family: "Iowan Old Style", "Georgia", serif;
+  font-size: 11.2px;
+  font-style: italic;
+  fill: rgba(78, 75, 69, 0.84);
+  paint-order: stroke fill;
+  stroke: rgba(255, 249, 239, 0.9);
+  stroke-width: 1.2px;
+  stroke-linejoin: round;
+}
+
+.journey-timeline .date-text {
+  font-family: "Instrument Sans", "Helvetica Neue", sans-serif;
+  font-size: 8.1px;
+  font-weight: 700;
+  letter-spacing: 0.024em;
+  fill: rgba(92, 121, 175, 0.72);
+  paint-order: stroke fill;
+  stroke: rgba(255, 249, 239, 0.96);
+  stroke-width: 0.9px;
+  stroke-linejoin: round;
+}
+
+@media (max-width: 900px) {
+  .journey-dialog {
+    width: min(100vw - 18px, 980px);
+  }
+
+  .journey-identity-row {
+    max-width: none;
+  }
+
+  .journey-builder {
+    min-height: 500px;
+  }
+
+  .journey-milestone-popover {
+    width: min(320px, calc(100% - 26px));
+  }
+
+  .journey-canvas-shell {
+    min-height: 292px;
+    padding: 24px 12px 10px 10px;
+  }
+
+  .journey-canvas-shell.has-active-editor {
+    padding-top: 274px;
+  }
+
+  .journey-popover-meta-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .journey-dialog {
+    width: calc(100vw - 12px);
+  }
+
+  .journey-identity-row {
+    gap: 7px;
+    margin-top: 2px;
+  }
+
+  .journey-identity-field:first-child {
+    flex: 1 1 0;
+  }
+
+  .journey-identity-field-version {
+    flex: 0 0 68px;
+  }
+
+  .journey-builder {
+    min-height: 470px;
+  }
+
+  .journey-milestone-popover {
+    top: 6px;
+    width: calc(100% - 18px);
+    padding: 12px 13px 14px;
+  }
+
+  .journey-canvas-shell {
+    min-height: 270px;
+    padding: 20px 10px 10px 8px;
+  }
+
+  .journey-canvas-shell.has-active-editor {
+    padding-top: 266px;
+  }
+
+  .journey-add-milestone {
+    right: 18px;
+  }
+
+  .journey-popover-meta-grid {
+    grid-template-columns: 1fr;
+  }
+}

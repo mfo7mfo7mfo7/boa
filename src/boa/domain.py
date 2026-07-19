@@ -117,6 +117,7 @@ class MilestoneTimelineItem:
     acked_at: datetime | None
     ack_name: str | None
     ack_note: str | None
+    ack_trail: tuple[AckRecord, ...] = ()
 
 
 @dataclass(slots=True, frozen=True)

@@ -1,0 +1,6 @@
+services:
+  boa:
+    environment:
+      BOA_JOURNEY_FOLD_DAYS: 21
+    ports:
+      - "8080:8000"
