@@ -280,6 +280,7 @@
   padding: 18px 19px 19px;
   border-radius: 28px;
   min-height: 262px;
+  overflow: visible;
 }
 
 .ack-trail-list {
@@ -317,6 +318,47 @@
   border-bottom-color: var(--red);
 }
 
+.ack-trail-item.is-email-sent .ack-trail-marker,
+.ack-trail-item.is-email-failed .ack-trail-marker {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: rgba(124, 99, 61, 0.76);
+  font-family: "Libre Baskerville", "Georgia", serif;
+  line-height: 1;
+  box-shadow: none;
+  filter: drop-shadow(0 3px 7px rgba(173, 139, 83, 0.12));
+  transform: rotate(-4deg);
+}
+
+.ack-trail-email-icon {
+  display: block;
+  width: 18px;
+  height: 18px;
+  overflow: visible;
+}
+
+.ack-trail-item.is-email-failed .ack-trail-marker {
+  color: rgba(156, 89, 73, 0.78);
+}
+
+.ack-trail-event-chip {
+  max-width: min(34ch, 100%);
+  overflow: hidden;
+  color: rgba(112, 88, 52, 0.78);
+  background: rgba(249, 241, 225, 0.76);
+}
+
+.ack-trail-item.is-email-failed .ack-trail-event-chip {
+  color: rgba(145, 87, 74, 0.76);
+  background: rgba(247, 232, 224, 0.72);
+}
+
 .ack-trail-meta {
   display: grid;
   gap: 4px;
@@ -324,12 +366,20 @@
 }
 
 .ack-trail-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
   margin: 0;
   color: rgba(88, 72, 49, 0.9);
   font-family: "Libre Baskerville", "Georgia", serif;
   font-size: 13px;
   line-height: 1.5;
-  text-wrap: pretty;
+  white-space: nowrap;
+}
+
+.ack-trail-line-main {
+  flex: 0 0 auto;
 }
 
 .ack-trail-subline {
@@ -341,6 +391,10 @@
   letter-spacing: 0.02em;
 }
 
+.ack-trail-error {
+  color: rgba(145, 87, 74, 0.74);
+}
+
 .ack-trail-divider {
   color: rgba(174, 151, 112, 0.7);
 }
@@ -349,8 +403,10 @@
   position: relative;
   display: inline-flex;
   align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
   max-width: min(24ch, 100%);
-  margin-left: 7px;
+  margin-left: 0;
   padding: 2px 8px 3px;
   border-radius: 999px;
   background: rgba(248, 240, 225, 0.88);
@@ -361,10 +417,17 @@
   letter-spacing: 0.02em;
   line-height: 1.35;
   vertical-align: middle;
+  overflow: visible;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.ack-trail-chip-label {
+  display: block;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  cursor: default;
 }
 
 .ack-trail-note-chip.is-empty {
@@ -372,14 +435,14 @@
   color: rgba(139, 121, 98, 0.72);
 }
 
-.ack-trail-note-chip[data-note-full]:hover::after,
-.ack-trail-note-chip[data-note-full]:focus-visible::after {
+.ack-trail-note-chip[data-note-full]::after {
   content: attr(data-note-full);
   position: absolute;
-  left: 0;
-  top: calc(100% + 8px);
-  z-index: 3;
-  width: min(260px, 46vw);
+  left: 50%;
+  top: 50%;
+  z-index: 80;
+  width: max-content;
+  max-width: min(280px, 42vw);
   padding: 11px 12px 12px;
   border-radius: 16px;
   border: 1px solid rgba(176, 148, 103, 0.18);
@@ -397,6 +460,54 @@
   letter-spacing: 0.01em;
   white-space: normal;
   text-wrap: pretty;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, -46%) scale(0.98);
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+.ack-trail-note-chip[data-note-full]:hover::after,
+.ack-trail-note-chip[data-note-full]:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.ack-chip-tooltip {
+  position: fixed;
+  z-index: 88;
+  width: max-content;
+  max-width: min(280px, 42vw);
+  padding: 11px 12px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(176, 148, 103, 0.18);
+  background:
+    linear-gradient(180deg, rgba(255, 252, 246, 0.98), rgba(247, 239, 224, 0.92)),
+    radial-gradient(circle at 18% 16%, rgba(255, 255, 255, 0.48), transparent 38%);
+  box-shadow:
+    0 12px 24px rgba(111, 92, 67, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.62);
+  color: rgba(91, 74, 52, 0.92);
+  font-family: "Libre Baskerville", "Georgia", serif;
+  font-size: 11.5px;
+  font-weight: 400;
+  line-height: 1.52;
+  letter-spacing: 0.01em;
+  white-space: normal;
+  text-wrap: pretty;
+  pointer-events: auto;
+  user-select: text;
+  opacity: 0;
+  transform: translateY(4px) scale(0.98);
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+.ack-chip-tooltip.is-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
 }
 
 .ack-hint {

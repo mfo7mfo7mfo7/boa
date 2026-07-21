@@ -64,6 +64,7 @@ const state = {
   activeMenuReleaseId: null,
   expandedReleaseIds: new Set(),
   ackContext: null,
+  ackDeliveryByMilestone: {},
   ackSubmitPendingConfirmation: false,
   ackSubmitConfirmationArmedAt: 0,
   ackSubmitConfirmUnlockTimer: null,
@@ -379,12 +380,13 @@ function render(allowTimelineRealign = true) {
     const svg = fragment.querySelector(".release-canvas");
     const detailCard = fragment.querySelector(".starlight-detail-card");
     const milestoneCard = fragment.querySelector(".milestone-note-card");
+    const bugWaveCard = fragment.querySelector(".bugwave-detail-card");
     drawRelease(
       svg,
       { ...release, milestones: orderedMilestones },
       state.timeline,
       palette,
-      { detailCard, milestoneCard },
+      { detailCard, milestoneCard, bugWaveCard },
     );
 
     elements.board.appendChild(fragment);
@@ -1065,27 +1067,9 @@ function syncAckFormState() {
   elements.ackDate.textContent = milestone.acked_at
     ? `Last updated ${formatDateTime(milestone.acked_at)}`
     : "Last updated —";
-  const ackTrailState = getAckTrailState(milestone);
-  const ackTrailEntries = buildAckTrailEntries(milestone);
   elements.ackSubmitButton.textContent = "Acknowledge";
   elements.ackSubmitButton.classList.remove("paper-button-confirm");
-  if (milestone.acked_at) {
-    renderAckTrailEntries(ackTrailEntries);
-    elements.ackHint.textContent = ackTrailEntries.some((entry) => entry.note)
-      ? "Hover a note chip to read the quiet note."
-      : "";
-  } else {
-    renderAckTrailEntries([
-      {
-        stateClass: ackTrailState.stateClass,
-        line: ackTrailState.line,
-        subline: ackTrailState.subline,
-      },
-    ]);
-    elements.ackHint.textContent = ackTrailState.stateClass === "is-overdue"
-      ? "Overdue, waiting for a mark."
-      : "Ready for today's mark.";
-  }
+  renderSelectedAckTrail();
 }
 
 function syncAckSubmitButton() {
@@ -1178,31 +1162,81 @@ function getAckTrailState(milestone) {
   };
 }
 
+function renderSelectedAckTrail() {
+  const milestone = getSelectedAckMilestone();
+  if (!milestone) {
+    return;
+  }
+
+  const ackTrailState = getAckTrailState(milestone);
+  const ackTrailEntries = buildAckTrailEntries(milestone);
+  if (ackTrailEntries.length) {
+    renderAckTrailEntries(ackTrailEntries);
+    elements.ackHint.textContent = ackTrailEntries.some((entry) => entry.note)
+      ? "Hover a note chip to read the quiet note."
+      : "";
+    return;
+  }
+
+  renderAckTrailEntries([
+    {
+      stateClass: ackTrailState.stateClass,
+      line: ackTrailState.line,
+      subline: ackTrailState.subline,
+    },
+  ]);
+  elements.ackHint.textContent = ackTrailState.stateClass === "is-overdue"
+    ? "Overdue, waiting for a mark."
+    : "Ready for today's mark.";
+}
+
 function buildAckTrailEntries(milestone) {
   const trail = Array.isArray(milestone?.ack_trail) ? milestone.ack_trail : [];
-  if (trail.length) {
-    return trail.map((entry) => {
+  const entries = trail.length
+    ? trail.map((entry) => {
       const entryState = getAckEventTrailState(milestone, entry);
       return {
+        sortAt: dateishTime(entry.acked_at),
         stateClass: entryState.stateClass,
         line: formatDateTime(entry.acked_at),
         keeper: entry.ack_name || "Unknown keeper",
         note: getBoaNoteContent(entry.note),
       };
+    })
+    : [];
+
+  if (!entries.length && milestone?.acked_at) {
+    const fallbackState = getAckTrailState(milestone);
+    entries.push({
+      sortAt: dateishTime(milestone.acked_at),
+      stateClass: fallbackState.stateClass,
+      line: formatDateTime(milestone.acked_at),
+      keeper: milestone.ack_name || "Unknown keeper",
+      note: getBoaNoteContent(milestone.ack_note),
     });
   }
 
-  if (!milestone?.acked_at) {
-    return [];
-  }
+  entries.push(...buildAckEmailTrailEntries(milestone));
+  return entries
+    .sort((left, right) => right.sortAt - left.sortAt)
+    .map(({ sortAt: _sortAt, ...entry }) => entry);
+}
 
-  const fallbackState = getAckTrailState(milestone);
-  return [{
-    stateClass: fallbackState.stateClass,
-    line: formatDateTime(milestone.acked_at),
-    keeper: milestone.ack_name || "Unknown keeper",
-    note: getBoaNoteContent(milestone.ack_note),
-  }];
+function buildAckEmailTrailEntries(milestone) {
+  const deliveryState = state.ackDeliveryByMilestone[milestone?.id];
+  const emails = Array.isArray(deliveryState?.emails) ? deliveryState.emails : [];
+  return emails.map((email) => {
+    const isFailed = email.status && email.status !== "sent";
+    const sentAt = email.sent_at || new Date().toISOString();
+    return {
+      sortAt: dateishTime(sentAt),
+      stateClass: isFailed ? "is-email-failed" : "is-email-sent",
+      marker: "email",
+      line: formatDateTime(sentAt),
+      eventChip: `${isFailed ? "Email failed to" : "Email sent to"} ${email.recipient || "unknown recipient"}`,
+      errorLine: isFailed && email.error ? email.error : "",
+    };
+  });
 }
 
 function getAckEventTrailState(milestone, entry) {
@@ -1216,6 +1250,7 @@ function renderAckTrailEntries(entries) {
   if (!elements.ackTrail) {
     return;
   }
+  ensureAckTrailTooltipDelegation();
   elements.ackTrail.replaceChildren();
   entries.forEach((entry) => {
     const item = document.createElement("div");
@@ -1224,29 +1259,43 @@ function renderAckTrailEntries(entries) {
     const marker = document.createElement("span");
     marker.className = "ack-trail-marker";
     marker.setAttribute("aria-hidden", "true");
+    if (entry.marker === "email") {
+      marker.append(createAckEmailMarkerSvg());
+    }
 
     const meta = document.createElement("div");
     meta.className = "ack-trail-meta";
 
     const lineEl = document.createElement("p");
     lineEl.className = "ack-trail-line";
-    lineEl.append(entry.line);
+    const lineMain = document.createElement("span");
+    lineMain.className = "ack-trail-line-main";
+    lineMain.append(entry.line);
     if (entry.keeper) {
       const divider = document.createElement("span");
       divider.className = "ack-trail-divider";
       divider.textContent = " · ";
-      lineEl.append(divider, entry.keeper);
+      lineMain.append(divider, entry.keeper);
     }
+    lineEl.append(lineMain);
     if (entry.note) {
       const chip = document.createElement("span");
       chip.className = "ack-trail-note-chip";
+      chip.tabIndex = 0;
       chip.dataset.noteFull = entry.note;
-      chip.textContent = truncateText(entry.note, 52);
+      chip.append(createAckTrailChipLabel(truncateText(entry.note, 26)));
+      lineEl.append(chip);
+    } else if (entry.eventChip) {
+      const chip = document.createElement("span");
+      chip.className = "ack-trail-note-chip ack-trail-event-chip";
+      chip.tabIndex = 0;
+      chip.dataset.noteFull = entry.eventChip;
+      chip.append(createAckTrailChipLabel(entry.eventChip));
       lineEl.append(chip);
     } else if (entry.stateClass === "is-acknowledged" || entry.stateClass === "is-overdue") {
       const chip = document.createElement("span");
       chip.className = "ack-trail-note-chip is-empty";
-      chip.textContent = "No quiet note";
+      chip.append(createAckTrailChipLabel("No quiet note"));
       lineEl.append(chip);
     }
 
@@ -1257,9 +1306,157 @@ function renderAckTrailEntries(entries) {
       sublineEl.textContent = entry.subline;
       meta.append(sublineEl);
     }
+    if (entry.errorLine) {
+      const errorEl = document.createElement("p");
+      errorEl.className = "ack-trail-subline ack-trail-error";
+      errorEl.textContent = entry.errorLine;
+      meta.append(errorEl);
+    }
     item.append(marker, meta);
     elements.ackTrail.append(item);
   });
+}
+
+function createAckTrailChipLabel(text) {
+  const label = document.createElement("span");
+  label.className = "ack-trail-chip-label";
+  label.textContent = text;
+  return label;
+}
+
+function ensureAckTrailTooltipDelegation() {
+  if (document.body.dataset.ackTrailTooltipBound === "true") {
+    return;
+  }
+  document.body.dataset.ackTrailTooltipBound = "true";
+  const show = (event) => {
+    const chip = event.target.closest?.(".ack-trail-note-chip[data-note-full]");
+    if (chip) {
+      showAckTrailChipTooltip(chip);
+    }
+  };
+  document.addEventListener("mouseover", show);
+  document.addEventListener("mousemove", show);
+  document.addEventListener("focusin", show);
+  document.addEventListener("mouseout", (event) => {
+    const chip = event.target.closest?.(".ack-trail-note-chip[data-note-full]");
+    const tooltip = document.querySelector(".ack-chip-tooltip");
+    if (!chip || (event.relatedTarget && (chip.contains(event.relatedTarget) || tooltip?.contains(event.relatedTarget)))) {
+      return;
+    }
+    scheduleAckTrailChipTooltipHide();
+  });
+  document.addEventListener("focusout", (event) => {
+    if (event.target.closest?.(".ack-trail-note-chip[data-note-full]")) {
+      hideAckTrailChipTooltip();
+    }
+  });
+}
+
+function ensureAckTrailChipTooltip() {
+  let tooltip = document.querySelector(".ack-chip-tooltip");
+  if (tooltip) {
+    return tooltip;
+  }
+  tooltip = document.createElement("div");
+  tooltip.className = "ack-chip-tooltip hidden";
+  tooltip.setAttribute("role", "tooltip");
+  tooltip.addEventListener("mouseenter", () => {
+    tooltip.dataset.hovering = "true";
+    window.clearTimeout(tooltip._hideTimer);
+    tooltip.classList.remove("hidden");
+    tooltip.classList.add("is-visible");
+  });
+  tooltip.addEventListener("mouseleave", () => {
+    tooltip.dataset.hovering = "false";
+    scheduleAckTrailChipTooltipHide();
+  });
+  document.body.append(tooltip);
+  return tooltip;
+}
+
+function showAckTrailChipTooltip(chip) {
+  const tooltip = ensureAckTrailChipTooltip();
+  window.clearTimeout(tooltip._hideTimer);
+  tooltip.dataset.hovering = "false";
+  tooltip.textContent = chip.dataset.noteFull || chip.textContent || "";
+  tooltip.classList.remove("hidden");
+  tooltip.classList.remove("is-visible");
+  const chipRect = chip.getBoundingClientRect();
+  const tooltipRect = tooltip.getBoundingClientRect();
+  const gap = 12;
+  const centerX = chipRect.left + chipRect.width / 2;
+  const centerY = chipRect.top + chipRect.height / 2;
+  tooltip.style.left = `${Math.min(Math.max(centerX - tooltipRect.width / 2, gap), window.innerWidth - tooltipRect.width - gap)}px`;
+  tooltip.style.top = `${Math.min(Math.max(centerY - tooltipRect.height / 2, gap), window.innerHeight - tooltipRect.height - gap)}px`;
+  window.requestAnimationFrame(() => {
+    tooltip.classList.add("is-visible");
+  });
+}
+
+function scheduleAckTrailChipTooltipHide() {
+  const tooltip = document.querySelector(".ack-chip-tooltip");
+  if (!tooltip) {
+    return;
+  }
+  window.clearTimeout(tooltip._hideTimer);
+  tooltip._hideTimer = window.setTimeout(() => {
+    if (tooltip.dataset.hovering === "true") {
+      return;
+    }
+    hideAckTrailChipTooltip();
+  }, 140);
+}
+
+function hideAckTrailChipTooltip() {
+  const tooltip = document.querySelector(".ack-chip-tooltip");
+  if (!tooltip) {
+    return;
+  }
+  tooltip.classList.remove("is-visible");
+  window.clearTimeout(tooltip._finalHideTimer);
+  tooltip._finalHideTimer = window.setTimeout(() => {
+    if (!tooltip.classList.contains("is-visible")) {
+      tooltip.classList.add("hidden");
+    }
+  }, 160);
+}
+
+function createAckEmailMarkerSvg() {
+  const svg = svgNode("svg", {
+    class: "ack-trail-email-icon",
+    viewBox: "0 0 24 24",
+    focusable: "false",
+    "aria-hidden": "true",
+  });
+  svg.append(
+    svgNode("path", {
+      d: "M4.8 8.7 C8.2 7.8, 15.4 7.9, 19.1 8.8 C19.1 11.2, 18.8 14.1, 18.1 16.2 C14.6 16.7, 8.6 16.6, 5.1 16 C4.7 13.5, 4.6 10.7, 4.8 8.7 Z",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "1.15",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round",
+    }),
+    svgNode("path", {
+      d: "M5.7 9.4 C7.9 11, 10.1 12.4, 12 13.1 C13.9 12.4, 16.2 11, 18.4 9.4",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "1.05",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round",
+    }),
+    svgNode("path", {
+      d: "M6.3 15.2 C8 14, 9.1 13.2, 10.5 12.5 M17.7 15.2 C16 14, 14.9 13.2, 13.5 12.5",
+      fill: "none",
+      stroke: "currentColor",
+      "stroke-width": "0.95",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round",
+      opacity: "0.76",
+    }),
+  );
+  return svg;
 }
 
 function getSelectedAckRelease() {
@@ -1281,6 +1478,7 @@ function drawRelease(svg, release, timeline, palette, options = {}) {
   svg.innerHTML = "";
   const detailCard = options.detailCard || null;
   const milestoneCard = options.milestoneCard || null;
+  const bugWaveCard = options.bugWaveCard || null;
 
   const { width, height, baselineY, leftPad, rightPad } = RELEASE_VIEWBOX;
 
@@ -1377,11 +1575,9 @@ function drawRelease(svg, release, timeline, palette, options = {}) {
     const sourceX = xForDate(latestSnapshot.observed_at);
     const sourceY = wavePointY(latestSnapshot, bugWaveMetrics, observedBugSnapshots.length - 1, baselineY);
     const source = svgNode("g", { class: "wave-source", cursor: "help" });
-    source.appendChild(svgTitle([
-      `${latestSnapshot.open_bug_count} open bugs`,
-      `risk ${Math.round(getBugRisk(latestSnapshot))}`,
-      `observed ${formatDateTime(latestSnapshot.observed_at)}`,
-    ]));
+    source.setAttribute("tabindex", "0");
+    source.setAttribute("role", "button");
+    source.setAttribute("aria-label", `Storm reading: ${latestSnapshot.open_bug_count} known troubles`);
     source.appendChild(svgNode("circle", {
       cx: String(sourceX),
       cy: String(sourceY),
@@ -1397,6 +1593,7 @@ function drawRelease(svg, release, timeline, palette, options = {}) {
       class: "wave-source-core",
     });
     source.appendChild(core);
+    bindBugWaveDetail(source, svg, bugWaveCard, { x: sourceX, y: sourceY }, latestSnapshot);
     svg.appendChild(source);
   }
 
@@ -1410,11 +1607,10 @@ function drawRelease(svg, release, timeline, palette, options = {}) {
 
   release.milestones.forEach((milestone) => {
     const x = xForDate(milestone.expected);
-    const notePoint = { x, y: baselineY - 24 };
+    const notePoint = { x, y: baselineY - 9 };
     const isLateAck = isAckAfterExpectedDay(milestone.acked_at, milestone.expected);
     const isActionablePending = !milestone.acked_at && milestone.id === actionablePendingId;
     const shouldRenderAckMarker = milestone.acked_at || isActionablePending;
-    const hasMilestoneContext = hasBoaNote(milestone.note) || hasBoaNote(milestone.ack_note);
     const markerColor = milestone.acked_at
       ? (isLateAck ? "#c75b4a" : "#6f9f7a")
       : "#9c9c9c";
@@ -1436,16 +1632,10 @@ function drawRelease(svg, release, timeline, palette, options = {}) {
       fill: palette.stroke,
       class: "expected-marker",
     });
-    expectedIcon.appendChild(svgTitle([
-      milestone.name,
-      formatDate(milestone.expected),
-    ]));
-    if (hasMilestoneContext) {
-      expectedIcon.setAttribute("tabindex", "0");
-      expectedIcon.setAttribute("role", "button");
-      expectedIcon.setAttribute("aria-label", `${milestone.name} note`);
-      bindMilestoneNoteTrigger(expectedIcon, milestoneCard, svg, notePoint, milestone);
-    }
+    expectedIcon.setAttribute("tabindex", "0");
+    expectedIcon.setAttribute("role", "button");
+    expectedIcon.setAttribute("aria-label", `${milestone.name} milestone note`);
+    bindMilestoneNoteTrigger(expectedIcon, milestoneCard, svg, notePoint, milestone);
     milestoneGroup.appendChild(expectedIcon);
     milestoneGroup.appendChild(labelTextNode(milestone.name, x, baselineY - 22, "rgba(47, 55, 70, 0.88)", 12, "middle", "marker-label milestone-name milestone-expected-label"));
     milestoneGroup.appendChild(labelTextNode(formatShortDate(milestone.expected), x + 12, baselineY - 9, "var(--muted)", 10, "start", "marker-date date-text milestone-date milestone-expected"));
@@ -1692,26 +1882,77 @@ function buildStarlightTailPath(length) {
   return `M 0 0 C ${(-length * 0.28).toFixed(2)} ${(-1.8).toFixed(2)}, ${(-length * 0.72).toFixed(2)} ${(1.6).toFixed(2)}, ${(-length).toFixed(2)} 0`;
 }
 
+function initializeTimelineNoteCard(card, hideCallback) {
+  if (!card || card.dataset.ready === "true") {
+    return;
+  }
+  card.dataset.ready = "true";
+  card.dataset.hovering = "false";
+  card.dataset.markerHover = "false";
+  card.addEventListener("mouseenter", () => {
+    card.dataset.hovering = "true";
+    window.clearTimeout(card._hideTimer);
+    window.clearTimeout(card._fadeTimer);
+    card.classList.remove("hidden");
+    card.classList.add("is-revealed");
+  });
+  card.addEventListener("mouseleave", () => {
+    card.dataset.hovering = "false";
+    hideCallback(card);
+  });
+}
+
+function revealTimelineNoteCard(card, svg, point, { verticalGap = 20, preferred = "center" } = {}) {
+  if (!card) {
+    return;
+  }
+  card.classList.remove("hidden");
+  card.classList.remove("is-revealed");
+  window.clearTimeout(card._hideTimer);
+  window.clearTimeout(card._fadeTimer);
+  positionStoryCard(card, svg, point, { verticalGap, preferred });
+  window.requestAnimationFrame(() => {
+    card.classList.add("is-revealed");
+  });
+}
+
+function hideTimelineNoteCard(card, fadeDelay = 160, hideDelay = 220) {
+  if (!card || card.dataset.hovering === "true" || card.dataset.markerHover === "true") {
+    return;
+  }
+  window.clearTimeout(card._showTimer);
+  window.clearTimeout(card._hideTimer);
+  window.clearTimeout(card._fadeTimer);
+  card._fadeTimer = window.setTimeout(() => {
+    if (card.dataset.hovering === "true" || card.dataset.markerHover === "true") {
+      return;
+    }
+    card.classList.remove("is-revealed");
+    card._hideTimer = window.setTimeout(() => {
+      if (card.dataset.hovering === "true" || card.dataset.markerHover === "true") {
+        return;
+      }
+      card.classList.add("hidden");
+    }, hideDelay);
+  }, fadeDelay);
+}
+
+function scheduleTimelineNoteShow(card, show, delay = 120) {
+  if (!card) {
+    return;
+  }
+  window.clearTimeout(card._showTimer);
+  window.clearTimeout(card._hideTimer);
+  window.clearTimeout(card._fadeTimer);
+  card._showTimer = window.setTimeout(show, delay);
+}
+
 function bindStarlightDetail(marker, svg, detailCard, point, event) {
   if (!detailCard) {
     return;
   }
 
-  if (!detailCard.dataset.hoverBound) {
-    detailCard.dataset.hoverBound = "true";
-    detailCard.addEventListener("mouseenter", () => {
-      detailCard.dataset.hovering = "true";
-      window.clearTimeout(detailCard._hideTimer);
-      window.clearTimeout(detailCard._fadeTimer);
-      detailCard.classList.remove("hidden");
-      detailCard.classList.add("is-revealed");
-    });
-    detailCard.addEventListener("mouseleave", () => {
-      detailCard.dataset.hovering = "false";
-      hideStarlightDetail(detailCard);
-    });
-  }
-
+  initializeTimelineNoteCard(detailCard, hideStarlightDetail);
   const show = () => showStarlightDetail(detailCard, svg, point, event);
   const hide = () => {
     detailCard.dataset.markerHover = "false";
@@ -1720,8 +1961,29 @@ function bindStarlightDetail(marker, svg, detailCard, point, event) {
 
   marker.addEventListener("mouseenter", () => {
     detailCard.dataset.markerHover = "true";
-    show();
+    scheduleTimelineNoteShow(detailCard, show);
   });
+  marker.addEventListener("focus", show);
+  marker.addEventListener("mouseleave", hide);
+  marker.addEventListener("blur", hide);
+}
+
+function bindBugWaveDetail(marker, svg, detailCard, point, snapshot) {
+  if (!detailCard) {
+    return;
+  }
+
+  initializeTimelineNoteCard(detailCard, hideBugWaveDetail);
+  const show = () => {
+    detailCard.dataset.markerHover = "true";
+    showBugWaveDetail(detailCard, svg, point, snapshot);
+  };
+  const hide = () => {
+    detailCard.dataset.markerHover = "false";
+    hideBugWaveDetail(detailCard);
+  };
+
+  marker.addEventListener("mouseenter", () => scheduleTimelineNoteShow(detailCard, show));
   marker.addEventListener("focus", show);
   marker.addEventListener("mouseleave", hide);
   marker.addEventListener("blur", hide);
@@ -1745,52 +2007,36 @@ function showStarlightDetail(detailCard, svg, point, event) {
   }
 
   detailCard.dataset.hovering = detailCard.dataset.hovering || "false";
-  detailCard.classList.remove("hidden");
-  detailCard.classList.remove("is-revealed");
-  window.clearTimeout(detailCard._hideTimer);
-  window.clearTimeout(detailCard._fadeTimer);
-  positionStoryCard(detailCard, svg, point, { verticalGap: 22, preferred: "above" });
-  window.requestAnimationFrame(() => {
-    detailCard.classList.add("is-revealed");
-  });
+  revealTimelineNoteCard(detailCard, svg, point, { preferred: "center" });
 }
 
 function hideStarlightDetail(detailCard) {
-  if (detailCard.dataset.hovering === "true" || detailCard.dataset.markerHover === "true") {
-    return;
-  }
-  window.clearTimeout(detailCard._hideTimer);
-  window.clearTimeout(detailCard._fadeTimer);
-  detailCard._fadeTimer = window.setTimeout(() => {
-    if (detailCard.dataset.hovering === "true" || detailCard.dataset.markerHover === "true") {
-      return;
-    }
-    detailCard.classList.remove("is-revealed");
-    detailCard._hideTimer = window.setTimeout(() => {
-      if (detailCard.dataset.hovering === "true" || detailCard.dataset.markerHover === "true") {
-        return;
-      }
-      detailCard.classList.add("hidden");
-    }, 1080);
-  }, 220);
+  hideTimelineNoteCard(detailCard);
+}
+
+function showBugWaveDetail(detailCard, svg, point, snapshot) {
+  const count = Math.max(Number(snapshot.open_bug_count) || 0, 0);
+  const troubleLabel = count === 1 ? "known trouble" : "known troubles";
+  detailCard.querySelector(".bugwave-detail-value").textContent = `${count} ${troubleLabel}`;
+  detailCard.querySelector(".bugwave-detail-date").textContent = formatDateTime(snapshot.observed_at);
+  detailCard.querySelector(".bugwave-detail-line").textContent = count === 0
+    ? "The weather is calm near this journey."
+    : count === 1
+      ? "One known trouble is still in view."
+      : "The weather is still moving through this journey.";
+  detailCard.dataset.hovering = detailCard.dataset.hovering || "false";
+  revealTimelineNoteCard(detailCard, svg, point, { preferred: "center" });
+}
+
+function hideBugWaveDetail(detailCard) {
+  hideTimelineNoteCard(detailCard);
 }
 
 function initializeMilestoneNoteCard(card) {
   if (!card || card.dataset.ready === "true") {
     return;
   }
-  card.dataset.ready = "true";
-  card.dataset.hovering = "false";
-  card.dataset.markerHover = "false";
-  card.addEventListener("mouseenter", () => {
-    card.dataset.hovering = "true";
-    card.classList.remove("hidden");
-    card.classList.add("is-revealed");
-  });
-  card.addEventListener("mouseleave", () => {
-    card.dataset.hovering = "false";
-    hideMilestoneNoteCard(card);
-  });
+  initializeTimelineNoteCard(card, hideMilestoneNoteCard);
 }
 
 function positionStoryCard(card, svg, point, { verticalGap = 18, preferred = "above" } = {}) {
@@ -1810,10 +2056,13 @@ function positionStoryCard(card, svg, point, { verticalGap = 18, preferred = "ab
   const minLeft = 14;
   const maxLeft = Math.max(minLeft, trackRect.width - cardWidth - 14);
   const left = Math.min(Math.max(pointLeft - (cardWidth / 2), minLeft), maxLeft);
+  const centerTop = pointTop - (cardHeight / 2);
   const aboveTop = pointTop - cardHeight - verticalGap;
   const belowTop = pointTop + verticalGap;
   const maxTop = Math.max(14, trackRect.height - cardHeight - 14);
-  const top = preferred === "above"
+  const top = preferred === "center"
+    ? centerTop
+    : preferred === "above"
     ? (aboveTop >= 14 ? aboveTop : Math.min(belowTop, maxTop))
     : Math.min(Math.max(belowTop, 14), maxTop);
   card.style.left = `${left}px`;
@@ -1827,6 +2076,10 @@ function showMilestoneNoteCard(card, svg, point, milestone) {
   initializeMilestoneNoteCard(card);
   card.querySelector(".milestone-note-title").textContent = milestone.name;
   card.querySelector(".milestone-note-date").textContent = formatDate(milestone.expected);
+  const keeperLine = card.querySelector(".milestone-note-keeper");
+  if (keeperLine) {
+    keeperLine.textContent = milestone.owner ? `Keeper: ${milestone.owner}` : "Keeper not set";
+  }
   const noteBody = card.querySelector(".milestone-note-body");
   renderBoaNote(noteBody, getBoaNoteContent(milestone.note));
   noteBody.classList.toggle("hidden", !hasBoaNote(milestone.note));
@@ -1844,34 +2097,11 @@ function showMilestoneNoteCard(card, svg, point, milestone) {
     card.querySelector(".milestone-ack-body").replaceChildren();
   }
 
-  card.classList.remove("hidden");
-  card.classList.remove("is-revealed");
-  window.clearTimeout(card._hideTimer);
-  window.clearTimeout(card._fadeTimer);
-  positionStoryCard(card, svg, point, { verticalGap: 18, preferred: "above" });
-  window.requestAnimationFrame(() => {
-    card.classList.add("is-revealed");
-  });
+  revealTimelineNoteCard(card, svg, point, { preferred: "center" });
 }
 
 function hideMilestoneNoteCard(card) {
-  if (!card || card.dataset.hovering === "true" || card.dataset.markerHover === "true") {
-    return;
-  }
-  window.clearTimeout(card._hideTimer);
-  window.clearTimeout(card._fadeTimer);
-  card._fadeTimer = window.setTimeout(() => {
-    if (card.dataset.hovering === "true" || card.dataset.markerHover === "true") {
-      return;
-    }
-    card.classList.remove("is-revealed");
-    card._hideTimer = window.setTimeout(() => {
-      if (card.dataset.hovering === "true" || card.dataset.markerHover === "true") {
-        return;
-      }
-      card.classList.add("hidden");
-    }, 300);
-  }, 120);
+  hideTimelineNoteCard(card);
 }
 
 function bindMilestoneNoteTrigger(target, card, svg, point, milestone) {
@@ -1886,7 +2116,7 @@ function bindMilestoneNoteTrigger(target, card, svg, point, milestone) {
     card.dataset.markerHover = "false";
     hideMilestoneNoteCard(card);
   };
-  target.addEventListener("mouseenter", show);
+  target.addEventListener("mouseenter", () => scheduleTimelineNoteShow(card, show));
   target.addEventListener("focus", show);
   target.addEventListener("mouseleave", hide);
   target.addEventListener("blur", hide);
@@ -3269,12 +3499,28 @@ function openAckDialog(releaseId, milestoneId) {
   elements.ackSecret.value = "";
   ensureAckActionsBound();
   syncAckFormState();
+  loadAckDeliveryState(milestoneId);
   if (elements.ackDialog.open) {
     elements.ackNote.focus();
     return;
   }
   elements.ackDialog.showModal();
   elements.ackNote.focus();
+}
+
+async function loadAckDeliveryState(milestoneId) {
+  if (!milestoneId) {
+    return;
+  }
+  try {
+    const payload = await request(`/api/milestones/${milestoneId}/notifications`);
+    state.ackDeliveryByMilestone[milestoneId] = payload;
+    if (state.ackContext?.milestoneId === milestoneId && elements.ackDialog.open) {
+      renderSelectedAckTrail();
+    }
+  } catch (error) {
+    console.warn("Ack delivery trail could not be loaded.", error);
+  }
 }
 
 async function openObservationDialog(releaseId) {

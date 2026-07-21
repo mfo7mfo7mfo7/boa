@@ -422,7 +422,9 @@ def test_plugin_manual_payload_and_bug_wave_filters(page: Page) -> None:
 
     page.reload()
     expect(page.locator(".wave-source")).to_have_count(1)
-    expect(page.locator(".wave-source title")).to_contain_text("15 open bugs")
+    page.locator(".wave-source").dispatch_event("mouseenter")
+    expect(page.locator(".bugwave-detail-card")).to_contain_text("Storm Reading")
+    expect(page.locator(".bugwave-detail-card")).to_contain_text("15 known troubles")
 
 
 def test_download_delete_fold_hover_and_ack_date_states(page: Page) -> None:
