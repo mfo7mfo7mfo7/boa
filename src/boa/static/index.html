@@ -15,7 +15,7 @@
     <meta name="twitter:description" content="Read journey readiness through starlight, bug wave, and milestone horizon." />
     <meta name="twitter:image" content="/static/empty-galaxy-prince.png" />
     <link rel="icon" type="image/png" href="/static/boa-logo.png">
-    <link rel="stylesheet" href="/static/app.css?v=starlight-172">
+    <link rel="stylesheet" href="/static/app.css?v=starlight-188">
   </head>
   <body>
     <a class="skip-link" href="#timeline-board">Skip to the journey board</a>
@@ -492,10 +492,11 @@
         </div>
         <div class="release-track">
           <svg class="release-canvas" viewBox="0 0 1120 280" preserveAspectRatio="xMidYMid meet"></svg>
-          <aside class="milestone-note-card paper-card paper-floating-card hidden" aria-live="polite">
+          <aside class="milestone-note-card timeline-note-card paper-card paper-floating-card hidden" aria-live="polite">
             <p class="milestone-note-kicker">Milestone Note</p>
             <p class="milestone-note-title"></p>
             <p class="milestone-note-date"></p>
+            <p class="milestone-note-keeper"></p>
             <div class="milestone-note-body boa-note-body"></div>
             <div class="milestone-ack-shell hidden">
               <p class="milestone-ack-kicker">Acknowledged</p>
@@ -503,7 +504,7 @@
               <div class="milestone-ack-body boa-note-body"></div>
             </div>
           </aside>
-          <aside class="starlight-detail-card paper-card paper-floating-card hidden" aria-live="polite">
+          <aside class="starlight-detail-card timeline-note-card paper-card paper-floating-card hidden" aria-live="polite">
             <p class="starlight-detail-kicker">Night Log</p>
             <p class="starlight-detail-value"></p>
             <p class="starlight-detail-date"></p>
@@ -515,11 +516,17 @@
               <div><dt>Blocked</dt><dd class="starlight-detail-blocked"></dd></div>
             </dl>
           </aside>
+          <aside class="bugwave-detail-card timeline-note-card paper-card paper-floating-card hidden" aria-live="polite">
+            <p class="bugwave-detail-kicker">Storm Reading</p>
+            <p class="bugwave-detail-value"></p>
+            <p class="bugwave-detail-date"></p>
+            <p class="bugwave-detail-line"></p>
+          </aside>
         </div>
       </article>
     </template>
 
-    <script src="/static/app.js?v=starlight-173" defer></script>
+    <script src="/static/app.js?v=starlight-188" defer></script>
 
     <dialog id="engine-dialog" class="engine-dialog paper-dialog">
       <div class="engine-surface paper-surface dialog-surface">
