@@ -158,7 +158,78 @@ def test_send_ack_email_succeeds_when_smtp_ready(
         "BOA_SMTP_ENABLED": "true",
         "BOA_SMTP_HOST": "smtp.example.com",
         "BOA_SMTP_FROM": "boa@example.com",
-        "BOA_BASE_URL": "http://localhost:8000",
+        "PUBLIC_BASE_URL": "http://gitlab.qa:4001/",
+    }
+    monkeypatch.setattr("os.environ", env)
+
+    app = create_app(BoaStorage(tmp_path / "boa.db"))
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/releases",
+            json={"product": "FortiSASE", "version": "26.2", "secret": "boa-262"},
+        ).json()
+        milestone_id = created["milestones"][0]["id"]
+
+        client.put(
+            f"/api/milestones/{milestone_id}",
+            json={
+                "name": "Kickoff",
+                "expected": "2026-08-01",
+                "owner": "qa",
+                "email": "qa@example.com",
+            },
+        )
+        client.post(
+            f"/api/releases/{created['id']}/starlight",
+            json={
+                "starlight": 73,
+                "whisper": "The sky is steady.",
+                "detail": {"type": "markdown", "content": ""},
+            },
+        )
+        client.post(
+            f"/api/releases/{created['id']}/bug-snapshots",
+            json={"open_bug_count": 15, "signal_type": "total"},
+        )
+
+        sent_emails: list[dict] = []
+
+        def fake_send_email(config, *, to, subject, body_text, body_html=None):
+            sent_emails.append({"to": to, "subject": subject, "body_text": body_text, "body_html": body_html})
+
+        monkeypatch.setattr("boa.reminder_service.send_email", fake_send_email)
+
+        response = client.post(f"/api/milestones/{milestone_id}/ack-email")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["sent"] is True
+        assert payload["recipient"] == "qa@example.com"
+        assert len(sent_emails) == 1
+        assert sent_emails[0]["to"] == "qa@example.com"
+        assert "Kickoff" in sent_emails[0]["subject"]
+        assert "http://gitlab.qa:4001/ack/" in sent_emails[0]["body_text"]
+        assert "localhost:8000" not in sent_emails[0]["body_text"]
+        assert "Starlight ✦73 · Storms 15" in sent_emails[0]["body_text"]
+        assert sent_emails[0]["body_html"] is not None
+        assert "http://gitlab.qa:4001/ack/" in sent_emails[0]["body_html"]
+        assert "localhost:8000" not in sent_emails[0]["body_html"]
+        assert "Starlight ✦73 · Storms 15" in sent_emails[0]["body_html"]
+
+    storage = BoaStorage(tmp_path / "boa.db")
+    logs = storage.list_email_logs(milestone_id=milestone_id)
+    assert len(logs) == 1
+    assert logs[0].recipient == "qa@example.com"
+    assert logs[0].template_name == "ack_request"
+
+
+def test_send_ack_email_requires_public_base_url(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    env = {
+        "BOA_SMTP_ENABLED": "true",
+        "BOA_SMTP_HOST": "smtp.example.com",
+        "BOA_SMTP_FROM": "boa@example.com",
     }
     monkeypatch.setattr("os.environ", env)
 
@@ -183,25 +254,16 @@ def test_send_ack_email_succeeds_when_smtp_ready(
         sent_emails: list[dict] = []
 
         def fake_send_email(config, *, to, subject, body_text, body_html=None):
-            sent_emails.append({"to": to, "subject": subject, "body_text": body_text})
+            sent_emails.append({"to": to, "subject": subject})
 
         monkeypatch.setattr("boa.reminder_service.send_email", fake_send_email)
 
         response = client.post(f"/api/milestones/{milestone_id}/ack-email")
         assert response.status_code == 200
         payload = response.json()
-        assert payload["sent"] is True
-        assert payload["recipient"] == "qa@example.com"
-        assert len(sent_emails) == 1
-        assert sent_emails[0]["to"] == "qa@example.com"
-        assert "Kickoff" in sent_emails[0]["subject"]
-        assert "/ack/" in sent_emails[0]["body_text"]
-
-    storage = BoaStorage(tmp_path / "boa.db")
-    logs = storage.list_email_logs(milestone_id=milestone_id)
-    assert len(logs) == 1
-    assert logs[0].recipient == "qa@example.com"
-    assert logs[0].template_name == "ack_request"
+        assert payload["sent"] is False
+        assert "PUBLIC_BASE_URL" in payload["message"]
+        assert sent_emails == []
 
 
 def test_send_ack_email_fails_without_valid_email(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -235,7 +297,7 @@ def test_ack_by_token_sends_confirmation_email_when_smtp_ready(
         "BOA_SMTP_ENABLED": "true",
         "BOA_SMTP_HOST": "smtp.example.com",
         "BOA_SMTP_FROM": "boa@example.com",
-        "BOA_BASE_URL": "http://localhost:8000",
+        "PUBLIC_BASE_URL": "http://gitlab.qa:4001",
     }
     monkeypatch.setattr("os.environ", env)
 
@@ -295,7 +357,7 @@ def test_direct_ack_sends_confirmation_email_when_smtp_ready(
         "BOA_SMTP_ENABLED": "true",
         "BOA_SMTP_HOST": "smtp.example.com",
         "BOA_SMTP_FROM": "boa@example.com",
-        "BOA_BASE_URL": "http://localhost:8000",
+        "PUBLIC_BASE_URL": "http://gitlab.qa:4001",
     }
     monkeypatch.setattr("os.environ", env)
 

@@ -21,8 +21,17 @@ from boa.storage import BoaStorage
 SendEmailFunc = Callable[[str, str, str, str | None], None]
 
 
-def _base_url() -> str:
-    return os.environ.get("BOA_BASE_URL", "http://localhost:8000").rstrip("/")
+class PublicBaseUrlConfigurationError(ValueError):
+    """Raised when acknowledgement links cannot be made public."""
+
+
+def _public_base_url() -> str:
+    raw = os.environ.get("PUBLIC_BASE_URL")
+    if not raw or not raw.strip():
+        raise PublicBaseUrlConfigurationError(
+            "PUBLIC_BASE_URL must be set before sending acknowledgement email links."
+        )
+    return raw.strip().rstrip("/")
 
 
 def _token_ttl_hours() -> int:
@@ -46,6 +55,22 @@ def _recipient_for_milestone(milestone) -> str | None:
     if is_valid_email(owner):
         return owner
     return None
+
+
+def _journey_reading(storage: BoaStorage, release_id: int) -> str:
+    starlight = storage.get_release_starlight(release_id)
+    if starlight is None:
+        starlight_part = "Starlight unwritten"
+    else:
+        starlight_part = f"Starlight ✦{starlight.current.starlight}"
+
+    bug_snapshots = storage.list_bug_snapshots(release_id)
+    if not bug_snapshots:
+        storms_part = "Storms unknown"
+    else:
+        storms_part = f"Storms {bug_snapshots[-1].open_bug_count}"
+
+    return f"{starlight_part} · {storms_part}"
 
 
 class ReminderSendResult:
@@ -83,8 +108,6 @@ def send_due_reminder_emails(
     then renders and sends an email for each generated notification.
     """
     effective_as_of = as_of or date.today()
-    effective_base_url = base_url or _base_url()
-
     notifications = storage.generate_due_notifications(as_of=effective_as_of)
     results: list[ReminderSendResult] = []
 
@@ -102,7 +125,7 @@ def send_due_reminder_emails(
             storage,
             notification,
             sender,
-            effective_base_url,
+            base_url,
         )
         results.append(result)
 
@@ -113,7 +136,7 @@ def _send_notification_email(
     storage: BoaStorage,
     notification: NotificationRecord,
     sender: SendEmailFunc,
-    base_url: str,
+    base_url: str | None,
 ) -> ReminderSendResult:
     milestone = storage.get_milestone(notification.milestone_id)
     release = storage.get_release(milestone.release_id)
@@ -128,6 +151,17 @@ def _send_notification_email(
             error="Milestone owner is not a valid email address.",
         )
 
+    try:
+        effective_base_url = base_url or _public_base_url()
+    except PublicBaseUrlConfigurationError as exc:
+        return ReminderSendResult(
+            milestone_id=milestone.id,
+            notification_type=notification.type,
+            recipient=recipient,
+            sent=False,
+            error=str(exc),
+        )
+
     plain_token = generate_ack_token(milestone.id, ttl_hours=_token_ttl_hours())
     token_record = storage.create_or_replace_ack_token(
         release_id=release.id,
@@ -140,7 +174,8 @@ def _send_notification_email(
         release,
         milestone,
         token=plain_token.token,
-        base_url=base_url,
+        base_url=effective_base_url,
+        journey_reading=_journey_reading(storage, release.id),
     )
 
     try:
@@ -251,8 +286,6 @@ def send_ack_request_email(
     base_url: str | None = None,
 ) -> ReminderSendResult:
     """Send an on-demand acknowledgement request for a single milestone."""
-    effective_base_url = base_url or _base_url()
-
     milestone = storage.get_milestone(milestone_id)
     release = storage.get_release(milestone.release_id)
 
@@ -264,6 +297,17 @@ def send_ack_request_email(
             recipient=None,
             sent=False,
             error="Milestone owner is not a valid email address.",
+        )
+
+    try:
+        effective_base_url = base_url or _public_base_url()
+    except PublicBaseUrlConfigurationError as exc:
+        return ReminderSendResult(
+            milestone_id=milestone.id,
+            notification_type="ack_request",
+            recipient=recipient,
+            sent=False,
+            error=str(exc),
         )
 
     plain_token = generate_ack_token(milestone.id, ttl_hours=_token_ttl_hours())
@@ -279,6 +323,7 @@ def send_ack_request_email(
         milestone,
         token=plain_token.token,
         base_url=effective_base_url,
+        journey_reading=_journey_reading(storage, release.id),
     )
 
     sender = send_email_func or (

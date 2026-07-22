@@ -78,7 +78,7 @@ The reminder scheduler runs hourly in the background. If SMTP is ready, it also 
 | `BOA_SMTP_ENABLED` | `false` | Set `true` to enable outbound email |
 | `BOA_SMTP_HOST` | — | SMTP server host |
 | `BOA_SMTP_FROM` | — | Required sender address when enabled |
-| `BOA_BASE_URL` | `http://localhost:8000` | Base URL for acknowledgement links in reminder emails |
+| `PUBLIC_BASE_URL` | required for outbound ack email | Public base URL for acknowledgement links in reminder emails, for example `http://127.0.0.1:8000` locally or `http://gitlab.qa:4001` behind nginx |
 
 ## Recipient Resolution
 

@@ -419,6 +419,38 @@
   animation: journey-selection-breathe 9.5s ease-in-out infinite;
 }
 
+.journey-label-measurement-layer {
+  pointer-events: none;
+}
+
+.journey-label-debug-box {
+  fill: rgba(116, 152, 190, 0.08);
+  stroke: rgba(73, 109, 150, 0.5);
+  stroke-width: 0.9;
+  stroke-dasharray: 4 5;
+  pointer-events: none;
+}
+
+.journey-label-debug-unresolved {
+  fill: rgba(205, 89, 72, 0.12);
+  stroke: rgba(190, 62, 48, 0.72);
+  stroke-width: 1.1;
+  stroke-dasharray: 3 4;
+  pointer-events: none;
+}
+
+.journey-label-debug-reserved {
+  fill: rgba(190, 144, 78, 0.08);
+  stroke: rgba(158, 116, 63, 0.42);
+  stroke-width: 0.7;
+  pointer-events: none;
+}
+
+.journey-label-debug-anchor {
+  fill: rgba(53, 99, 145, 0.72);
+  pointer-events: none;
+}
+
 @keyframes journey-selection-breathe {
   0%, 100% {
     opacity: 0.74;
@@ -455,6 +487,14 @@
 
 .journey-timeline .journey-marker {
   transition: transform 260ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.journey-timeline.is-dragging .journey-marker,
+.journey-timeline.is-dragging .journey-marker .milestone-name,
+.journey-timeline.is-dragging .journey-marker .date-text,
+.journey-timeline.is-dragging .journey-marker .journey-marker-stem,
+.journey-timeline.is-dragging .journey-marker .expected-marker {
+  transition: none;
 }
 
 .journey-timeline .journey-marker .milestone-name,
