@@ -70,7 +70,7 @@ No manual refresh is required.
 
 | Variable | Default | Notes |
 |---|---|---|
-| `BOA_BASE_URL` | `http://localhost:8000` | Base URL for acknowledgement links |
+| `PUBLIC_BASE_URL` | required for outbound ack email | Public base URL for acknowledgement links |
 | `BOA_ACK_TOKEN_TTL_HOURS` | `168` | Hours until acknowledgement links expire |
 | `BOA_REMINDER_DAYS_BEFORE` | `7,3,1` | Comma-separated days before milestone to email |
 

@@ -71,7 +71,7 @@ curl -X POST http://127.0.0.1:8000/api/milestones/1/ack-email
 
 | Variable | Default | Notes |
 |---|---|---|
-| `BOA_BASE_URL` | `http://localhost:8000` | Base URL for acknowledgement links |
+| `PUBLIC_BASE_URL` | required for outbound ack email | Public base URL for acknowledgement links, for example `http://127.0.0.1:8000` locally or `http://gitlab.qa:4001` behind nginx |
 | `BOA_ACK_TOKEN_TTL_HOURS` | `168` | Hours until acknowledgement links expire |
 
 ## Confirmation Email

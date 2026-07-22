@@ -36,7 +36,39 @@ const JOURNEY_INTERACTION_CONFIG = {
   dragFallbackRangeDays: 3650,
   selectionStartThresholdPx: 8,
 };
+const JOURNEY_LABEL_LAYOUT_CONFIG = {
+  maxLanes: 7,
+  laneHeight: 24,
+  titleDateGap: 13,
+  collisionPadding: 2,
+  boundaryPadding: 8,
+  topSafeMargin: 20,
+  candidateOffsets: [0, -12, 12, -24, 24, -40, 40, -60, 60, -84, 84, -120, 120, -156, 156, -192, 192, -240, 240],
+  repairCandidateOffsets: [0, -12, 12, -24, 24, -40, 40, -60, 60, -84, 84, -120, 120, -156, 156, -192, 192, -240, 240],
+  laneWeight: 96,
+  horizontalWeight: 1.35,
+  anchorChangePenalty: 18,
+  edgeWeight: 0.4,
+  stabilityWeight: 0.26,
+  previousPlacementBenefit: 300,
+  clusterTightGap: 2,
+  clusterBeamWidth: 192,
+  denseClusterBeamWidth: 1536,
+  maxDisplacementWeight: 0.58,
+  compoundDisplacementWeight: 0.16,
+  spacingConsistencyWeight: 0.08,
+  clusterExpansionWeight: 0.32,
+  pairExpansionWeight: 0.7,
+  maxRepairPasses: 1,
+};
+const JOURNEY_LABEL_DEBUG = new URLSearchParams(window.location.search).has("journeyLabelDebug");
+const HORIZON_STORAGE_KEY = "boa.horizonMonths";
+const PERSPECTIVE_STORAGE_KEY = "boa.perspective";
 const DATE_FORMAT_STORAGE_KEY = "boa.dateFormat";
+const DEFAULT_HORIZON_MONTHS = 2;
+const HORIZON_MONTH_OPTIONS = new Set([2, 4, 6, 8]);
+const DEFAULT_PERSPECTIVE = "due-soon";
+const PERSPECTIVE_OPTIONS = new Set(["due-soon", "destination"]);
 const DATE_FORMAT_OPTIONS = {
   storybook: {
     label: "Jun 29, 2026",
@@ -52,13 +84,20 @@ const DATE_FORMAT_OPTIONS = {
   },
 };
 
+const journeyLabelMeasurementCache = new Map();
+const journeyLabelPlacementCache = new Map();
+const boardMilestoneLabelPlacementCache = new Map();
+const BOARD_MILESTONE_AVOID_GAP = 2;
+let journeyTimelineResizeObserver = null;
+let journeyTimelineResizeFrame = null;
+
 const state = {
   releases: [],
   timeline: null,
   pageScope: getPageScope(),
   journeyFoldDays: 15,
-  horizonMonths: 3,
-  perspective: "due-soon",
+  horizonMonths: getHorizonPreference(),
+  perspective: getPerspectivePreference(),
   dateFormat: getDateFormatPreference(),
   journeyDraft: null,
   activeMenuReleaseId: null,
@@ -1474,6 +1513,276 @@ function getSelectedAckMilestone() {
   return release.milestones.find((item) => item.id === state.ackContext?.milestoneId) || null;
 }
 
+function measureBoardMilestoneNames(svg, milestones) {
+  const measurementLayer = svgNode("g", {
+    class: "journey-label-measurement-layer",
+    opacity: "0",
+    "pointer-events": "none",
+    transform: "translate(-10000 -10000)",
+    "aria-hidden": "true",
+  });
+  svg.appendChild(measurementLayer);
+
+  const measurements = {};
+  milestones.forEach((milestone) => {
+    const titleNode = labelTextNode(
+      milestone.name,
+      0,
+      0,
+      "rgba(47, 55, 70, 0.88)",
+      12,
+      "middle",
+      "marker-label milestone-name milestone-expected-label",
+    );
+    measurementLayer.appendChild(titleNode);
+
+    let titleBox;
+    try {
+      titleBox = titleNode.getBBox();
+    } catch {
+      titleBox = {
+        width: Math.max(72, Math.min((milestone.name?.length || 0) * 7.4, 132)),
+        height: 14,
+      };
+    }
+
+    const estimatedTitleWidth = Math.max(72, Math.min((milestone.name?.length || 0) * 7.4, 132));
+    const titleWidth = Math.max(titleBox.width, estimatedTitleWidth, 1);
+    measurements[milestone.id] = {
+      titleWidth,
+      titleHeight: Math.max(titleBox.height, 12),
+      dateWidth: 0,
+      dateHeight: 1,
+      combinedWidth: titleWidth,
+      combinedHeight: Math.max(titleBox.height, 12),
+    };
+  });
+
+  measurementLayer.remove();
+  return measurements;
+}
+
+function solveBoardMilestoneNameLanes(labels, width, idealTitleY, leftPad, rightPad) {
+  const laneHeight = 23;
+  const padding = BOARD_MILESTONE_AVOID_GAP;
+  const lanes = [];
+  const boundsLeft = leftPad;
+  const boundsRight = width - rightPad;
+
+  return [...labels]
+    .sort((left, right) => left.markerX - right.markerX || String(left.milestoneId).localeCompare(String(right.milestoneId)))
+    .map((label) => {
+      const titleWidth = Math.max(label.titleWidth || 72, 1);
+      const halfWidth = titleWidth / 2;
+      const minCenter = boundsLeft + halfWidth;
+      const maxCenter = boundsRight - halfWidth;
+      const clampedCenter = Math.min(Math.max(label.markerX, minCenter), maxCenter);
+      const labelX = Math.abs(clampedCenter - label.markerX) <= 48 ? clampedCenter : label.markerX;
+      const interval = {
+        left: labelX - halfWidth - padding,
+        right: labelX + halfWidth + padding,
+      };
+      let lane = 0;
+      for (; lane < 5; lane += 1) {
+        const occupied = lanes[lane] || [];
+        const collides = occupied.some((box) => interval.left < box.right && interval.right > box.left);
+        if (!collides) {
+          break;
+        }
+      }
+      if (!lanes[lane]) {
+        lanes[lane] = [];
+      }
+      lanes[lane].push(interval);
+
+      return {
+        milestoneId: label.milestoneId,
+        markerX: label.markerX,
+        labelX,
+        titleY: idealTitleY - (lane * laneHeight),
+        lane,
+        anchor: "middle",
+        status: "board-lane-fallback",
+        bbox: {
+          left: labelX - halfWidth,
+          right: labelX + halfWidth,
+          top: idealTitleY - (lane * laneHeight) - ((label.titleHeight || 12) / 2),
+          bottom: idealTitleY - (lane * laneHeight) + ((label.titleHeight || 12) / 2),
+        },
+      };
+    });
+}
+
+function solveBoardAckDateLanes(labels, dateLiftMilestoneIds) {
+  const lanes = [];
+  const laneMap = new Map();
+  [...labels]
+    .filter((label) => dateLiftMilestoneIds.has(label.milestoneId))
+    .sort((left, right) => left.markerX - right.markerX || String(left.milestoneId).localeCompare(String(right.milestoneId)))
+    .forEach((label) => {
+      const halfWidth = Math.max(label.ackDateWidth || 44, 1) / 2;
+      const interval = {
+        left: label.markerX - halfWidth - BOARD_MILESTONE_AVOID_GAP,
+        right: label.markerX + halfWidth + BOARD_MILESTONE_AVOID_GAP,
+      };
+      let lane = 0;
+      for (; lane < 4; lane += 1) {
+        const occupied = lanes[lane] || [];
+        const collides = occupied.some((box) => interval.left < box.right && interval.right > box.left);
+        if (!collides) {
+          break;
+        }
+      }
+      if (!lanes[lane]) {
+        lanes[lane] = [];
+      }
+      lanes[lane].push(interval);
+      laneMap.set(label.milestoneId, lane);
+    });
+  return laneMap;
+}
+
+function solveBoardMilestoneNameLayout(svg, milestones, xForDate, width, baselineY, leftPad, rightPad) {
+  const solver = getJourneyLabelLayoutApi();
+  const measurements = measureBoardMilestoneNames(svg, milestones);
+  const boardMarkerY = baselineY + 15;
+  const idealTitleY = baselineY - 22;
+  const stablePreviousPlacements = {};
+  const layoutVisibilityMargin = 96;
+  const layoutLeft = leftPad - layoutVisibilityMargin;
+  const layoutRight = width - rightPad + layoutVisibilityMargin;
+  const labels = milestones.map((milestone) => {
+    const markerX = xForDate(milestone.expected);
+    const isVisibleForLayout = markerX >= layoutLeft && markerX <= layoutRight;
+    const previousPlacement = boardMilestoneLabelPlacementCache.get(milestone.id);
+    const stablePreviousPlacement = isVisibleForLayout && previousPlacement && Math.abs(previousPlacement.markerX - markerX) <= 2
+      ? previousPlacement
+      : null;
+    if (stablePreviousPlacement) {
+      stablePreviousPlacements[milestone.id] = stablePreviousPlacement;
+    } else {
+      boardMilestoneLabelPlacementCache.delete(milestone.id);
+    }
+    return {
+      milestoneId: milestone.id,
+      markerX,
+      markerY: boardMarkerY,
+      ...(measurements[milestone.id] || {
+      titleWidth: Math.max(72, Math.min((milestone.name?.length || 0) * 7.4, 132)),
+      titleHeight: 14,
+      dateWidth: 0,
+      dateHeight: 1,
+      combinedWidth: Math.max(72, Math.min((milestone.name?.length || 0) * 7.4, 132)),
+      combinedHeight: 14,
+      }),
+      ackDateWidth: Math.max(36, Math.min((milestone.acked_at ? formatShortDate(milestone.acked_at) : "Pending").length * 6.4, 58)),
+      priority: getJourneyMilestonePriority(milestone),
+      previousPlacement: stablePreviousPlacement,
+      isVisibleForLayout,
+    };
+  }).filter((label) => label.isVisibleForLayout);
+
+  if (!solver) {
+    return new Map(labels.map((label) => [label.milestoneId, {
+      labelX: label.markerX,
+      titleY: idealTitleY,
+      anchor: "middle",
+    }]));
+  }
+
+  const idealBoxes = labels
+    .map((label) => ({
+      milestoneId: label.milestoneId,
+      left: label.markerX - (label.titleWidth / 2),
+      right: label.markerX + (label.titleWidth / 2),
+      top: idealTitleY - (label.titleHeight / 2),
+      bottom: idealTitleY + (label.titleHeight / 2),
+    }))
+    .sort((left, right) => left.left - right.left);
+  const dateLiftMilestoneIds = new Set();
+  let needsAvoidance = false;
+  idealBoxes.forEach((box, index) => {
+    const next = idealBoxes[index + 1];
+    if (!next) {
+      return;
+    }
+    const horizontalGap = next.left - box.right;
+    const verticalOverlap = box.top < next.bottom && box.bottom > next.top;
+    const collides = verticalOverlap && horizontalGap < BOARD_MILESTONE_AVOID_GAP;
+    if (collides) {
+      dateLiftMilestoneIds.add(box.milestoneId);
+      dateLiftMilestoneIds.add(next.milestoneId);
+      needsAvoidance = true;
+    }
+  });
+  if (!needsAvoidance) {
+    return new Map(labels.map((label) => [label.milestoneId, {
+      labelX: label.markerX,
+      titleY: idealTitleY,
+      anchor: "middle",
+    }]));
+  }
+
+  const result = solver.solveJourneyLabelLayout({
+    labels,
+    bounds: {
+      left: leftPad,
+      right: width - rightPad,
+      top: 0,
+      bottom: RELEASE_VIEWBOX.height,
+      maxLabelBottom: baselineY - 10,
+    },
+    reservedRegions: [
+      {
+        left: leftPad - 8,
+        right: width - rightPad + 8,
+        top: baselineY - 8,
+        bottom: baselineY + 32,
+        padding: 0,
+        kind: "board-timeline-band",
+      },
+    ],
+    previousPlacements: stablePreviousPlacements,
+    config: {
+      ...JOURNEY_LABEL_LAYOUT_CONFIG,
+      titleDateGap: 0,
+      laneHeight: 23,
+      maxLanes: 5,
+      collisionPadding: BOARD_MILESTONE_AVOID_GAP,
+      clusterTightGap: BOARD_MILESTONE_AVOID_GAP,
+      topSafeMargin: 8,
+      candidateOffsets: [0, -8, 8, -16, 16, -28, 28, -44, 44, -64, 64, -88, 88, -120, 120, -156, 156, -192, 192, -240, 240, -300, 300, -360, 360, -440, 440, -540, 540],
+      repairCandidateOffsets: [0, -8, 8, -16, 16, -28, 28, -44, 44, -64, 64, -88, 88, -120, 120, -156, 156, -192, 192, -240, 240, -300, 300, -360, 360, -440, 440, -540, 540],
+      laneWeight: 220,
+      horizontalWeight: 0.45,
+      anchorChangePenalty: 12,
+      maxVisualOffset: 48,
+      stabilityWeight: JOURNEY_LABEL_LAYOUT_CONFIG.stabilityWeight,
+      previousPlacementBenefit: JOURNEY_LABEL_LAYOUT_CONFIG.previousPlacementBenefit,
+    },
+  });
+
+  const shouldUseStableLaneFallback = result.status !== "ok"
+    || result.metrics?.verificationCollisions
+    || result.placements?.some((placement) => placement.status === "unresolved");
+  const placements = shouldUseStableLaneFallback
+    ? solveBoardMilestoneNameLanes(labels, width, idealTitleY, leftPad, rightPad)
+    : (result.placements || []);
+  const ackDateLanes = solveBoardAckDateLanes(labels, dateLiftMilestoneIds);
+
+  placements.forEach((placement) => {
+    if (placement.status !== "unresolved") {
+      boardMilestoneLabelPlacementCache.set(placement.milestoneId, placement);
+    }
+  });
+
+  return new Map(placements.map((placement) => [placement.milestoneId, {
+    ...placement,
+    shouldLiftDate: dateLiftMilestoneIds.has(placement.milestoneId),
+    ackDateLane: ackDateLanes.get(placement.milestoneId) || 0,
+  }]));
+}
+
 function drawRelease(svg, release, timeline, palette, options = {}) {
   svg.innerHTML = "";
   const detailCard = options.detailCard || null;
@@ -1604,9 +1913,15 @@ function drawRelease(svg, release, timeline, palette, options = {}) {
   svg.appendChild(spine);
 
   const actionablePendingId = release.milestones.find((item) => !item.acked_at)?.id ?? null;
+  const milestoneNameLayouts = solveBoardMilestoneNameLayout(svg, release.milestones, xForDate, width, baselineY, leftPad, rightPad);
 
   release.milestones.forEach((milestone) => {
     const x = xForDate(milestone.expected);
+    const nameLayout = milestoneNameLayouts.get(milestone.id) || {
+      labelX: x,
+      titleY: baselineY - 22,
+      anchor: "middle",
+    };
     const notePoint = { x, y: baselineY - 9 };
     const isLateAck = isAckAfterExpectedDay(milestone.acked_at, milestone.expected);
     const isActionablePending = !milestone.acked_at && milestone.id === actionablePendingId;
@@ -1637,8 +1952,24 @@ function drawRelease(svg, release, timeline, palette, options = {}) {
     expectedIcon.setAttribute("aria-label", `${milestone.name} milestone note`);
     bindMilestoneNoteTrigger(expectedIcon, milestoneCard, svg, notePoint, milestone);
     milestoneGroup.appendChild(expectedIcon);
-    milestoneGroup.appendChild(labelTextNode(milestone.name, x, baselineY - 22, "rgba(47, 55, 70, 0.88)", 12, "middle", "marker-label milestone-name milestone-expected-label"));
-    milestoneGroup.appendChild(labelTextNode(formatShortDate(milestone.expected), x + 12, baselineY - 9, "var(--muted)", 10, "start", "marker-date date-text milestone-date milestone-expected"));
+    milestoneGroup.appendChild(labelTextNode(
+      milestone.name,
+      nameLayout.labelX,
+      nameLayout.titleY,
+      "rgba(47, 55, 70, 0.88)",
+      12,
+      nameLayout.anchor,
+      "marker-label milestone-name milestone-expected-label",
+    ));
+    milestoneGroup.appendChild(labelTextNode(
+      formatShortDate(milestone.expected),
+      nameLayout.shouldLiftDate ? nameLayout.labelX : x + 12,
+      nameLayout.shouldLiftDate ? nameLayout.titleY - 13 : baselineY - 9,
+      "var(--muted)",
+      10,
+      nameLayout.shouldLiftDate ? nameLayout.anchor : "start",
+      `marker-date date-text milestone-date milestone-expected${nameLayout.shouldLiftDate ? " milestone-date-lifted" : ""}`,
+    ));
 
     const lowerAnchor = {
       y: baselineY + 15,
@@ -1689,12 +2020,12 @@ function drawRelease(svg, release, timeline, palette, options = {}) {
     if (shouldRenderAckMarker) {
       milestoneGroup.appendChild(labelTextNode(
         lowerAnchor.label,
-        x + 12,
-        baselineY + 9,
+        nameLayout.shouldLiftDate ? x : x + 12,
+        nameLayout.shouldLiftDate ? lowerAnchor.y + 12 + ((nameLayout.ackDateLane || 0) * 12) : baselineY + 9,
         lowerAnchor.fill,
         10,
-        "start",
-        "marker-date owner-text milestone-date milestone-ackdate",
+        nameLayout.shouldLiftDate ? "middle" : "start",
+        `marker-date owner-text milestone-date milestone-ackdate${nameLayout.shouldLiftDate ? " milestone-ackdate-dropped" : ""}`,
       ));
     }
     svg.appendChild(milestoneGroup);
@@ -2830,18 +3161,21 @@ function openJourneyDialogFromDraft(draft) {
 
 function showJourneyDialog() {
   syncJourneyForm();
-  renderJourneyDraft();
+  observeJourneyTimelineResize();
   elements.journeyMessage.textContent = "";
-  if (elements.journeyDialog.open) {
-    return;
+  if (!elements.journeyDialog.open) {
+    elements.journeyDialog.showModal();
   }
-  elements.journeyDialog.showModal();
+  elements.journeyDialog.getBoundingClientRect();
+  renderJourneyDraft();
+  scheduleJourneyLabelRelayout({ placements: true });
 }
 
 function closeJourneyDialog() {
   if (elements.journeyDialog.open) {
     elements.journeyDialog.close();
   }
+  unobserveJourneyTimelineResize();
   state.journeyDraft = null;
 }
 
@@ -2967,6 +3301,274 @@ function getJourneySelectedMilestoneIds() {
 
 function isJourneyMilestoneSelected(milestoneId) {
   return getJourneySelectedMilestoneIds().includes(milestoneId);
+}
+
+function invalidateJourneyLabelLayout({ measurements = false, placements = false } = {}) {
+  if (measurements) {
+    journeyLabelMeasurementCache.clear();
+  }
+  if (placements) {
+    journeyLabelPlacementCache.clear();
+  }
+}
+
+function getJourneyLabelLayoutApi() {
+  return window.BoaJourneyLabelLayout || null;
+}
+
+function getJourneyLabelMeasurementKey(milestone) {
+  return [
+    milestone.name || "",
+    formatShortDate(milestone.expected),
+    "journey-marker-label-v1",
+    state.dateFormat,
+  ].join("::");
+}
+
+function measureJourneyMilestoneLabels(svg, milestones) {
+  const measurementLayer = svgNode("g", {
+    class: "journey-label-measurement-layer",
+    opacity: "0",
+    "pointer-events": "none",
+    transform: "translate(-10000 -10000)",
+    "aria-hidden": "true",
+  });
+  svg.appendChild(measurementLayer);
+
+  const measurements = {};
+  milestones.forEach((milestone) => {
+    const key = getJourneyLabelMeasurementKey(milestone);
+    if (journeyLabelMeasurementCache.has(key)) {
+      measurements[milestone.id] = journeyLabelMeasurementCache.get(key);
+      return;
+    }
+
+    const group = svgNode("g", {});
+    const titleNode = labelTextNode(milestone.name, 0, 0, "rgba(47, 55, 70, 0.88)", 12, "middle", "marker-label milestone-name");
+    const dateNode = labelTextNode(formatShortDate(milestone.expected), 0, 13, "var(--muted)", 10, "middle", "marker-date date-text");
+    group.appendChild(titleNode);
+    group.appendChild(dateNode);
+    measurementLayer.appendChild(group);
+
+    let titleBox;
+    let dateBox;
+    let combinedBox;
+    try {
+      titleBox = titleNode.getBBox();
+      dateBox = dateNode.getBBox();
+      combinedBox = group.getBBox();
+    } catch {
+      const titleWidth = Math.max(80, Math.min((milestone.name?.length || 0) * 7.4, 132));
+      const dateWidth = Math.max(52, formatShortDate(milestone.expected).length * 6);
+      titleBox = { width: titleWidth, height: 14 };
+      dateBox = { width: dateWidth, height: 12 };
+      combinedBox = { width: Math.max(titleWidth, dateWidth), height: 28 };
+    }
+    const measurement = {
+      titleWidth: Math.max(titleBox.width, 1),
+      titleHeight: Math.max(titleBox.height, 12),
+      dateWidth: Math.max(dateBox.width, 1),
+      dateHeight: Math.max(dateBox.height, 10),
+      combinedWidth: Math.max(combinedBox.width, titleBox.width, dateBox.width, 1),
+      combinedHeight: Math.max(combinedBox.height, titleBox.height + dateBox.height, 1),
+      key,
+    };
+    journeyLabelMeasurementCache.set(key, measurement);
+    measurements[milestone.id] = measurement;
+  });
+
+  measurementLayer.remove();
+  return measurements;
+}
+
+function buildJourneyReservedRegions(width, baselineY, leftPad, rightPad) {
+  // Permanent regions only: transient hover/editor/selection overlays stay overlay-only
+  // so unrelated labels do not jump while the user explores the page.
+  return [
+    {
+      left: leftPad - 8,
+      right: width - rightPad + 8,
+      top: baselineY - 8,
+      bottom: baselineY + 76,
+      padding: 0,
+      kind: "timeline-and-ack-band",
+    },
+    {
+      left: leftPad - 8,
+      right: width - rightPad + 8,
+      top: baselineY + 22,
+      bottom: baselineY + 56,
+      padding: 0,
+      kind: "month-ruler",
+    },
+  ];
+}
+
+function getJourneyMilestonePriority(milestone) {
+  if (milestone.type === "kickoff" || milestone.type === "ga") {
+    return 3;
+  }
+  return 1;
+}
+
+function buildJourneyLabelInputs(orderedMilestones, xForDate, baselineY, measurements) {
+  const selectedIds = new Set(getJourneySelectedMilestoneIds());
+  return orderedMilestones.map((milestone) => {
+    const markerX = xForDate(milestone.expected);
+    return {
+      milestoneId: milestone.id,
+      markerX,
+      markerY: baselineY,
+      ...(measurements[milestone.id] || {
+        titleWidth: Math.max(80, Math.min((milestone.name?.length || 0) * 7.4, 132)),
+        titleHeight: 14,
+        dateWidth: Math.max(52, formatShortDate(milestone.expected).length * 6),
+        dateHeight: 12,
+        combinedWidth: Math.max(80, Math.min((milestone.name?.length || 0) * 7.4, 132)),
+        combinedHeight: 28,
+      }),
+      priority: getJourneyMilestonePriority(milestone),
+      isActiveDrag: state.journeyDraft?.dragMilestoneId === milestone.id,
+      isSelectedDrag: Boolean(state.journeyDraft?.dragMilestoneId && selectedIds.has(milestone.id)),
+      previousPlacement: journeyLabelPlacementCache.get(milestone.id) || null,
+    };
+  });
+}
+
+function solveJourneyDraftLabelLayout(svg, orderedMilestones, xForDate, width, baselineY, leftPad, rightPad) {
+  const solver = getJourneyLabelLayoutApi();
+  const measurements = measureJourneyMilestoneLabels(svg, orderedMilestones);
+  const labels = buildJourneyLabelInputs(orderedMilestones, xForDate, baselineY, measurements);
+  const isLiveDragLayout = Boolean(state.journeyDraft?.dragMilestoneId && state.journeyDraft?.dragMoved);
+  const bounds = {
+    left: leftPad,
+    right: width - rightPad,
+    top: 0,
+    bottom: 260,
+      maxLabelBottom: baselineY - 8,
+  };
+  const reservedRegions = buildJourneyReservedRegions(width, baselineY, leftPad, rightPad);
+
+  if (!solver) {
+    return {
+      placements: labels.map((label) => ({
+        milestoneId: label.milestoneId,
+        markerX: label.markerX,
+        labelX: label.markerX,
+        titleY: baselineY - 37,
+        dateY: baselineY - 24,
+        lane: 0,
+        anchor: "middle",
+        horizontalOffset: 0,
+        bbox: {
+          left: label.markerX - (label.combinedWidth / 2),
+          right: label.markerX + (label.combinedWidth / 2),
+          top: baselineY - 30,
+          bottom: baselineY - 2,
+        },
+        status: "fallback",
+      })),
+      status: "constrained",
+      metrics: { candidateCount: 0, collisionChecks: 0, durationMs: 0 },
+      unresolvedCollisions: [],
+      reservedRegions,
+    };
+  }
+
+  const result = solver.solveJourneyLabelLayout({
+    labels,
+    bounds,
+    reservedRegions,
+    previousPlacements: Object.fromEntries(journeyLabelPlacementCache.entries()),
+    config: {
+      ...JOURNEY_LABEL_LAYOUT_CONFIG,
+      stabilityWeight: isLiveDragLayout ? 0 : JOURNEY_LABEL_LAYOUT_CONFIG.stabilityWeight,
+      previousPlacementBenefit: isLiveDragLayout ? 0 : JOURNEY_LABEL_LAYOUT_CONFIG.previousPlacementBenefit,
+    },
+  });
+
+  result.placements.forEach((placement) => {
+    if (placement.status !== "unresolved") {
+      journeyLabelPlacementCache.set(placement.milestoneId, placement);
+    }
+  });
+
+  return {
+    ...result,
+    reservedRegions,
+  };
+}
+
+function renderJourneyLabelDebug(svg, layoutResult) {
+  if (!JOURNEY_LABEL_DEBUG || !layoutResult) {
+    return;
+  }
+  const debugLayer = svgNode("g", { class: "journey-label-debug-layer" });
+  (layoutResult.reservedRegions || []).forEach((region) => {
+    debugLayer.appendChild(svgNode("rect", {
+      x: String(region.left),
+      y: String(region.top),
+      width: String(region.right - region.left),
+      height: String(region.bottom - region.top),
+      class: "journey-label-debug-reserved",
+    }));
+  });
+  (layoutResult.placements || []).forEach((placement) => {
+    const { bbox } = placement;
+    debugLayer.appendChild(svgNode("rect", {
+      x: String(bbox.left),
+      y: String(bbox.top),
+      width: String(bbox.right - bbox.left),
+      height: String(bbox.bottom - bbox.top),
+      class: placement.status === "unresolved" ? "journey-label-debug-unresolved" : "journey-label-debug-box",
+    }));
+    debugLayer.appendChild(svgNode("circle", {
+      cx: String(placement.markerX),
+      cy: String(placement.dateY),
+      r: "2",
+      class: "journey-label-debug-anchor",
+    }));
+  });
+  svg.appendChild(debugLayer);
+}
+
+function scheduleJourneyLabelRelayout({ measurements = false, placements = false } = {}) {
+  invalidateJourneyLabelLayout({ measurements, placements });
+  if (!state.journeyDraft || !elements.journeyDialog.open) {
+    return;
+  }
+  if (journeyTimelineResizeFrame !== null) {
+    window.cancelAnimationFrame(journeyTimelineResizeFrame);
+  }
+  journeyTimelineResizeFrame = window.requestAnimationFrame(() => {
+    journeyTimelineResizeFrame = null;
+    renderJourneyDraft();
+  });
+}
+
+function observeJourneyTimelineResize() {
+  const shell = elements.journeyTimeline?.closest(".journey-canvas-shell");
+  if (!shell || typeof ResizeObserver === "undefined") {
+    return;
+  }
+  if (journeyTimelineResizeObserver) {
+    return;
+  }
+  journeyTimelineResizeObserver = new ResizeObserver(() => {
+    scheduleJourneyLabelRelayout({ placements: true });
+  });
+  journeyTimelineResizeObserver.observe(shell);
+}
+
+function unobserveJourneyTimelineResize() {
+  if (journeyTimelineResizeObserver) {
+    journeyTimelineResizeObserver.disconnect();
+    journeyTimelineResizeObserver = null;
+  }
+  if (journeyTimelineResizeFrame !== null) {
+    window.cancelAnimationFrame(journeyTimelineResizeFrame);
+    journeyTimelineResizeFrame = null;
+  }
 }
 
 function getJourneySvgPoint(clientX, clientY) {
@@ -3142,62 +3744,34 @@ function renderJourneyDraft() {
     .sort((left, right) => dateishTime(left.expected) - dateishTime(right.expected));
   let activeMilestoneRatio = null;
   const selectionBounds = [];
-
-  const labelLayouts = [];
-  const laneLastRight = [];
-  const laneThreshold = 52;
-  const maxLanes = 6;
-  let clusterIndex = 0;
-  let previousX = null;
-  orderedMilestones.forEach((milestone) => {
-    const x = xForDate(milestone.expected);
-    clusterIndex = previousX !== null && x - previousX < 136 ? clusterIndex + 1 : 0;
-    previousX = x;
-    const crowdAnchor = clusterIndex === 0
-      ? "middle"
-      : clusterIndex % 2 === 1
-        ? "start"
-        : "end";
-    const horizontalOffsetBase = crowdAnchor === "start" ? 28 : crowdAnchor === "end" ? -28 : 0;
-    const horizontalOffset = horizontalOffsetBase + (crowdAnchor === "middle" ? 0 : Math.min(clusterIndex, 4) * (crowdAnchor === "start" ? 7 : -7));
-    const estimatedWidth = Math.max(80, Math.min((milestone.name?.length || 0) * 7.4, 132));
-    const leftBound = x + horizontalOffset - (crowdAnchor === "end" ? estimatedWidth : crowdAnchor === "middle" ? estimatedWidth / 2 : 0);
-    const rightBound = x + horizontalOffset + (crowdAnchor === "start" ? estimatedWidth : crowdAnchor === "middle" ? estimatedWidth / 2 : 0);
-    let level = 0;
-    for (let lane = 0; lane < maxLanes; lane += 1) {
-      const lastRight = laneLastRight[lane];
-      if (typeof lastRight !== "number" || leftBound - lastRight >= laneThreshold) {
-        level = lane;
-        laneLastRight[lane] = rightBound;
-        break;
-      }
-      if (lane === maxLanes - 1) {
-        level = lane;
-        laneLastRight[lane] = rightBound;
-      }
-    }
-    labelLayouts.push({
-      id: milestone.id,
-      x,
-      level,
-      anchor: crowdAnchor,
-      horizontalOffset,
-    });
-  });
+  const layoutResult = solveJourneyDraftLabelLayout(svg, orderedMilestones, xForDate, width, baselineY, leftPad, rightPad);
+  const labelLayouts = new Map((layoutResult.placements || []).map((placement) => [placement.milestoneId, placement]));
 
   orderedMilestones.forEach((milestone) => {
     const x = xForDate(milestone.expected);
     if (state.journeyDraft.activeMilestoneId === milestone.id) {
       activeMilestoneRatio = x / width;
     }
-    const layout = labelLayouts.find((item) => item.id === milestone.id) || { level: 0, anchor: "middle", horizontalOffset: 0 };
-    const level = layout.level ?? 0;
-    const verticalOffset = level * 24;
+    const layout = labelLayouts.get(milestone.id) || {
+      markerX: x,
+      labelX: x,
+      titleY: baselineY - 37,
+      dateY: baselineY - 24,
+      lane: 0,
+      anchor: "middle",
+      horizontalOffset: 0,
+      bbox: {
+        left: x - 56,
+        right: x + 56,
+        top: baselineY - 32,
+        bottom: baselineY - 2,
+      },
+    };
     const arrowTipY = baselineY;
     const arrowTopY = baselineY - 15;
-    const labelX = x + (layout.horizontalOffset ?? 0);
-    const nameY = arrowTopY - 19 - verticalOffset;
-    const dateY = nameY + 12;
+    const labelX = layout.labelX;
+    const nameY = layout.titleY;
+    const dateY = layout.dateY;
     const isSelected = isJourneyMilestoneSelected(milestone.id);
     const isActiveEditor = state.journeyDraft.activeMilestoneId === milestone.id;
     const isDraggable = state.journeyDraft.mode === "edit"
@@ -3206,10 +3780,10 @@ function renderJourneyDraft() {
     const marker = svgNode("g", { class: `journey-marker ${isSelected ? "is-selected" : ""} ${isActiveEditor ? "is-active-editor" : ""}` });
     if (isSelected) {
       marker.appendChild(svgNode("rect", {
-        x: String(labelX - 56),
-        y: String(nameY - 34),
-        width: "112",
-        height: "80",
+        x: String(layout.bbox.left - 10),
+        y: String(layout.bbox.top - 12),
+        width: String((layout.bbox.right - layout.bbox.left) + 20),
+        height: String((layout.bbox.bottom - layout.bbox.top) + 28),
         rx: "24",
         class: "journey-selection-halo",
       }));
@@ -3259,7 +3833,10 @@ function renderJourneyDraft() {
     svg.appendChild(marker);
     selectionBounds.push({
       id: milestone.id,
-      ...getJourneyMilestoneSelectionBounds(milestone, labelX, x, nameY, dateY, baselineY, layout.anchor),
+      left: Math.min(layout.bbox.left - 10, x - 18),
+      right: Math.max(layout.bbox.right + 10, x + 18),
+      top: Math.min(layout.bbox.top - 12, baselineY - 38),
+      bottom: baselineY + 16,
     });
   });
 
@@ -3298,6 +3875,9 @@ function renderJourneyDraft() {
   }
 
   state.journeyDraft.selectionBounds = selectionBounds;
+  state.journeyDraft.labelLayoutStatus = layoutResult.status;
+  state.journeyDraft.labelLayoutMetrics = layoutResult.metrics;
+  renderJourneyLabelDebug(svg, layoutResult);
 
   renderJourneyPopover(activeMilestoneRatio);
 }
@@ -3307,6 +3887,7 @@ function addJourneyMilestone() {
     return;
   }
   clearJourneySelection();
+  invalidateJourneyLabelLayout({ placements: true });
   const ordered = [...state.journeyDraft.milestones].sort((left, right) => dateishTime(left.expected) - dateishTime(right.expected));
   const gaMilestone = ordered.find((item) => item.type === "ga");
   const beforeGa = gaMilestone
@@ -3331,6 +3912,12 @@ function updateJourneyActiveMilestone(field, value) {
     return;
   }
   clearJourneySelection();
+  if (field === "name") {
+    invalidateJourneyLabelLayout({ measurements: true });
+  }
+  if (field === "expected") {
+    invalidateJourneyLabelLayout({ placements: true });
+  }
   active[field] = value;
   renderJourneyDraft();
 }
@@ -3341,6 +3928,7 @@ function deleteJourneyMilestone() {
     return;
   }
   clearJourneySelection();
+  invalidateJourneyLabelLayout({ placements: true });
   state.journeyDraft.milestones = state.journeyDraft.milestones.filter((item) => item.id !== active.id);
   state.journeyDraft.activeMilestoneId = null;
   elements.journeyMilestoneMenuPanel.classList.add("hidden");
@@ -3415,6 +4003,9 @@ function finishJourneyDrag() {
     if (state.journeyDraft.dragRenderFrame !== null) {
       cancelAnimationFrame(state.journeyDraft.dragRenderFrame);
       state.journeyDraft.dragRenderFrame = null;
+    }
+    if (state.journeyDraft.dragMoved) {
+      invalidateJourneyLabelLayout({ placements: true });
     }
     renderJourneyDraft();
     setTimeout(() => {
@@ -4939,6 +5530,7 @@ function selectHorizon(months) {
     return;
   }
   state.horizonMonths = months;
+  setHorizonPreference(months);
   applyBoardControls();
 }
 
@@ -4947,6 +5539,7 @@ function selectPerspective(perspective) {
     return;
   }
   state.perspective = perspective;
+  setPerspectivePreference(perspective);
   applyBoardControls();
 }
 
@@ -5064,6 +5657,52 @@ function getDateFormatPreference() {
   return "storybook";
 }
 
+function getHorizonPreference() {
+  try {
+    const saved = Number(window.localStorage.getItem(HORIZON_STORAGE_KEY));
+    if (HORIZON_MONTH_OPTIONS.has(saved)) {
+      return saved;
+    }
+  } catch (error) {
+    console.warn("Horizon preference could not be read.", error);
+  }
+  return DEFAULT_HORIZON_MONTHS;
+}
+
+function setHorizonPreference(months) {
+  if (!HORIZON_MONTH_OPTIONS.has(months)) {
+    return;
+  }
+  try {
+    window.localStorage.setItem(HORIZON_STORAGE_KEY, String(months));
+  } catch (error) {
+    console.warn("Horizon preference could not be saved.", error);
+  }
+}
+
+function getPerspectivePreference() {
+  try {
+    const saved = window.localStorage.getItem(PERSPECTIVE_STORAGE_KEY);
+    if (PERSPECTIVE_OPTIONS.has(saved)) {
+      return saved;
+    }
+  } catch (error) {
+    console.warn("Perspective preference could not be read.", error);
+  }
+  return DEFAULT_PERSPECTIVE;
+}
+
+function setPerspectivePreference(perspective) {
+  if (!PERSPECTIVE_OPTIONS.has(perspective)) {
+    return;
+  }
+  try {
+    window.localStorage.setItem(PERSPECTIVE_STORAGE_KEY, perspective);
+  } catch (error) {
+    console.warn("Perspective preference could not be saved.", error);
+  }
+}
+
 function setDateFormatPreference(format) {
   if (!Object.hasOwn(DATE_FORMAT_OPTIONS, format)) {
     return;
@@ -5095,6 +5734,7 @@ function setEngineDateFormatMenuOpen(isOpen) {
 
 function applyDateFormatPreference(format) {
   setDateFormatPreference(format);
+  invalidateJourneyLabelLayout({ measurements: true, placements: true });
   syncEngineDateFormat();
   render(false);
   if (state.journeyDraft) {
@@ -5390,10 +6030,14 @@ window.addEventListener("resize", () => {
     state.timeline = buildTimelineScale(state.releases);
     render();
   }
+  scheduleJourneyLabelRelayout({ placements: true });
 });
 window.addEventListener("scroll", positionStoryGuides, { passive: true });
 const visualViewportRef = window.visualViewport;
-const handleVisualViewportChange = () => positionStoryGuides();
+const handleVisualViewportChange = () => {
+  positionStoryGuides();
+  scheduleJourneyLabelRelayout({ placements: true });
+};
 if (visualViewportRef) {
   visualViewportRef.addEventListener("resize", handleVisualViewportChange, { passive: true });
   visualViewportRef.addEventListener("scroll", handleVisualViewportChange, { passive: true });
@@ -5401,6 +6045,11 @@ if (visualViewportRef) {
     visualViewportRef.removeEventListener("resize", handleVisualViewportChange);
     visualViewportRef.removeEventListener("scroll", handleVisualViewportChange);
   }, { once: true });
+}
+if (document.fonts?.ready) {
+  document.fonts.ready.then(() => {
+    scheduleJourneyLabelRelayout({ measurements: true, placements: true });
+  }).catch(() => {});
 }
 async function init() {
   await loadAppConfig();

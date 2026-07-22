@@ -142,7 +142,7 @@ System APIs:
 | `BOA_PORT` | `8000` | Host port for Compose |
 | `BOA_IMAGE` | `boa:local` | Compose image tag |
 | `BOA_JOURNEY_FOLD_DAYS` | `15` | Days around NOW before distant journeys fold |
-| `BOA_BASE_URL` | `http://localhost:8000` | Base URL for emailed mark links |
+| `PUBLIC_BASE_URL` | required for outbound ack email | Public base URL for emailed mark links |
 | `BOA_ACK_TOKEN_TTL_HOURS` | `168` | Hours until secret mark links expire |
 | `BOA_REMINDER_DAYS_BEFORE` | `7,3,1` | Reminder cadence before milestones |
 | `BOA_SMTP_ENABLED` | `false` | Enables outbound email |

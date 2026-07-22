@@ -365,6 +365,12 @@ dd {
   min-width: 244px;
 }
 
+.segmented-selector-horizon {
+  --segment-count: 4;
+  width: 232px;
+  min-width: 232px;
+}
+
 .segmented-selector::after {
   content: "";
   position: absolute;

@@ -212,6 +212,8 @@ Boa listens to observations from other instruments. These guides show how to wri
 - [Boa 1.7](docs/release-notes-1.7.md)
 - [Boa 1.8](docs/release-notes-1.8.md)
 - [Boa 2.0](docs/release-notes-2.0.md)
+- [Boa 2.1](docs/release-notes-2.1.md)
+- [Boa 2.2](docs/release-notes-2.2.md)
 
 ## First Trace: Send Data to Boa in 5 Minutes
 
@@ -394,6 +396,8 @@ Available variables today:
   Host port mapped to container port `8000`
 - `BOA_JOURNEY_FOLD_DAYS`
   Controls how many days ended / not-started journeys stay folded around the NOW line
+- `PUBLIC_BASE_URL`
+  Public entry point used in emailed mark links, for example `http://127.0.0.1:8000` locally or `http://gitlab.qa:4001` behind nginx
 - `BOA_STALE_KICKOFF_DAYS`
   Legacy fallback name still supported by the API code; `BOA_JOURNEY_FOLD_DAYS` takes precedence
 
@@ -490,7 +494,7 @@ Required environment variables:
 - `BOA_SMTP_ENABLED=true`
 - `BOA_SMTP_HOST`
 - `BOA_SMTP_FROM`
-- `BOA_BASE_URL` — used to build mark links
+- `PUBLIC_BASE_URL` — public entry point used to build mark links
 
 Optional tuning:
 
@@ -502,7 +506,16 @@ Optional tuning:
 Use a different host port:
 
 ```bash
-docker run --rm -p 8080:8000 -v boa-data:/data boa:local
+docker run --rm -p 8080:8000 \
+  -e PUBLIC_BASE_URL=http://127.0.0.1:8080 \
+  -v boa-data:/data \
+  boa:local
+```
+
+Run behind Docker + nginx:
+
+```bash
+PUBLIC_BASE_URL=http://gitlab.qa:4001 docker compose up -d
 ```
 
 Use a published GHCR image:

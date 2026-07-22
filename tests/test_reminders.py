@@ -21,7 +21,7 @@ def test_send_due_reminder_emails_generates_notifications_and_sends_emails(
         "BOA_SMTP_ENABLED": "true",
         "BOA_SMTP_HOST": "smtp.example.com",
         "BOA_SMTP_FROM": "boa@example.com",
-        "BOA_BASE_URL": "http://localhost:8000",
+        "PUBLIC_BASE_URL": "http://gitlab.qa:4001",
     }
     monkeypatch.setattr("os.environ", env)
 
@@ -81,6 +81,7 @@ def test_send_due_reminder_emails_stops_after_acknowledgement(
         "BOA_SMTP_ENABLED": "true",
         "BOA_SMTP_HOST": "smtp.example.com",
         "BOA_SMTP_FROM": "boa@example.com",
+        "PUBLIC_BASE_URL": "http://gitlab.qa:4001",
     }
     monkeypatch.setattr("os.environ", env)
 
@@ -130,6 +131,7 @@ def test_send_due_reminder_emails_avoids_duplicates(
         "BOA_SMTP_ENABLED": "true",
         "BOA_SMTP_HOST": "smtp.example.com",
         "BOA_SMTP_FROM": "boa@example.com",
+        "PUBLIC_BASE_URL": "http://gitlab.qa:4001",
     }
     monkeypatch.setattr("os.environ", env)
 
@@ -220,6 +222,7 @@ def test_reminder_state_includes_email_logs(tmp_path: Path, monkeypatch: pytest.
         "BOA_SMTP_ENABLED": "true",
         "BOA_SMTP_HOST": "smtp.example.com",
         "BOA_SMTP_FROM": "boa@example.com",
+        "PUBLIC_BASE_URL": "http://gitlab.qa:4001",
     }
     monkeypatch.setattr("os.environ", env)
 
@@ -287,7 +290,7 @@ def test_scheduled_reminder_cycle_sends_emails_when_smtp_ready(
         "BOA_SMTP_ENABLED": "true",
         "BOA_SMTP_HOST": "smtp.example.com",
         "BOA_SMTP_FROM": "boa@example.com",
-        "BOA_BASE_URL": "http://localhost:8000",
+        "PUBLIC_BASE_URL": "http://gitlab.qa:4001",
     }
     monkeypatch.setattr("os.environ", env)
 

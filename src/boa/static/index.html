@@ -43,11 +43,12 @@
           <div class="masthead-controls" aria-label="Board controls">
             <div class="selector-field">
               <span class="selector-label">Horizon</span>
-              <div id="horizon-selector" class="segmented-selector" role="radiogroup" aria-label="Horizon">
+              <div id="horizon-selector" class="segmented-selector segmented-selector-horizon" role="radiogroup" aria-label="Horizon">
                 <span class="segment-highlight" aria-hidden="true"></span>
-                <button class="segment-option is-active" type="button" role="radio" aria-checked="true" data-horizon-months="3">3m</button>
+                <button class="segment-option is-active" type="button" role="radio" aria-checked="true" data-horizon-months="2">2m</button>
+                <button class="segment-option" type="button" role="radio" aria-checked="false" data-horizon-months="4">4m</button>
                 <button class="segment-option" type="button" role="radio" aria-checked="false" data-horizon-months="6">6m</button>
-                <button class="segment-option" type="button" role="radio" aria-checked="false" data-horizon-months="9">9m</button>
+                <button class="segment-option" type="button" role="radio" aria-checked="false" data-horizon-months="8">8m</button>
               </div>
             </div>
             <div class="selector-field">
@@ -526,7 +527,8 @@
       </article>
     </template>
 
-    <script src="/static/app.js?v=starlight-188" defer></script>
+    <script src="/static/journey-label-layout.js?v=starlight-215" defer></script>
+    <script src="/static/app.js?v=starlight-215" defer></script>
 
     <dialog id="engine-dialog" class="engine-dialog paper-dialog">
       <div class="engine-surface paper-surface dialog-surface">

@@ -225,6 +225,20 @@ def test_galaxy_routes_scope_the_board_and_unknown_galaxies_show_story_empty_sta
     expect(page).to_have_url(f"{boa_url}/")
 
 
+def test_horizon_and_perspective_preferences_persist_in_local_storage(page: Page) -> None:
+    page.locator('#horizon-selector [data-horizon-months="8"]').click()
+    page.locator('#perspective-selector [data-perspective="destination"]').click()
+
+    expect(page.locator('#horizon-selector [data-horizon-months="8"]')).to_have_attribute("aria-checked", "true")
+    expect(page.locator('#perspective-selector [data-perspective="destination"]')).to_have_attribute("aria-checked", "true")
+
+    page.reload()
+    expect(page.locator("#status-pill")).to_contain_text("Waiting")
+
+    expect(page.locator('#horizon-selector [data-horizon-months="8"]')).to_have_attribute("aria-checked", "true")
+    expect(page.locator('#perspective-selector [data-perspective="destination"]')).to_have_attribute("aria-checked", "true")
+
+
 def test_observation_notebook_records_starlight_storms_markdown_and_trail(page: Page) -> None:
     release = create_release_via_api(page, product="Lantern Vale", version="1.6", secret="lantern-key")
     release_id = release["id"]

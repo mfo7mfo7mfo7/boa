@@ -18,6 +18,7 @@ services:
       BOA_SMTP_SSL: ${BOA_SMTP_SSL:-false}
       BOA_SMTP_TIMEOUT: ${BOA_SMTP_TIMEOUT:-15}
       BOA_SMTP_TEST_TO: ${BOA_SMTP_TEST_TO:-}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
     ports:
       - "${BOA_PORT:-8000}:8000"
     volumes:
