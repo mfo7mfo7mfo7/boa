@@ -271,7 +271,7 @@ SQLite records the journey.
 
 ## Status
 
-Boa 2.0 is release-ready.
+Boa 2.2 is release-ready.
 
 The universe view, galaxy routes, Observation Notebook, Starlight Trail, Bug Wave, Mark Trail, Engine Room, and paper dialog system now form one coherent journey language.
 
@@ -290,7 +290,7 @@ This clears all local journeys plus cascading milestone, mark, bug snapshot, and
 Boa publishes container images to GitHub Container Registry.
 
 ```bash
-docker run --rm -p 8000:8000 -v boa-data:/data ghcr.io/chengenzo/boa:2.0.0
+docker run --rm -p 8000:8000 -v boa-data:/data ghcr.io/chengenzo/boa:2.2.0
 ```
 
 Then open <http://localhost:8000>.
@@ -521,7 +521,7 @@ PUBLIC_BASE_URL=http://gitlab.qa:4001 docker compose up -d
 Use a published GHCR image:
 
 ```bash
-docker run --rm -p 8000:8000 -v boa-data:/data ghcr.io/chengenzo/boa:2.0.0
+docker run --rm -p 8000:8000 -v boa-data:/data ghcr.io/chengenzo/boa:2.2.0
 ```
 
 Set folded-journey days:
@@ -530,7 +530,7 @@ Set folded-journey days:
 docker run --rm -p 8000:8000 \
   -v boa-data:/data \
   -e BOA_JOURNEY_FOLD_DAYS=21 \
-  ghcr.io/chengenzo/boa:2.0.0
+  ghcr.io/chengenzo/boa:2.2.0
 ```
 
 Same idea with Compose:
@@ -544,7 +544,7 @@ Use a host-mounted database file instead of a Docker volume:
 ```bash
 docker run --rm -p 8000:8000 \
   -v "$(pwd)/data:/data" \
-  ghcr.io/chengenzo/boa:2.0.0
+  ghcr.io/chengenzo/boa:2.2.0
 ```
 
 ### Reset Docker Data

@@ -306,3 +306,33 @@ class EmailLogRecord:
     sent_at: datetime
     status: str
     error: str | None
+
+
+@dataclass(slots=True, frozen=True)
+class ReadingPostSubscription:
+    """Journey-level subscription for sending the latest observation reading."""
+
+    release_id: int
+    enabled: bool
+    recipients: tuple[str, ...]
+    rhythm: str
+    schedule: str
+    send_time: str
+    deliver_until_days: int
+    created_at: datetime
+    updated_at: datetime
+    last_sent_at: datetime | None
+    milestone_sent_dates: tuple[str, ...]
+
+
+@dataclass(slots=True, frozen=True)
+class ReadingPostLogRecord:
+    """A durable log entry for a sent journey reading post."""
+
+    id: int
+    release_id: int
+    recipients: tuple[str, ...]
+    subject: str
+    sent_at: datetime
+    status: str
+    error: str | None

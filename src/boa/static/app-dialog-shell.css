@@ -404,10 +404,13 @@ textarea {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: start;
+  align-self: stretch;
   column-gap: 18px;
+  box-sizing: border-box;
   margin-bottom: 14px;
   padding-bottom: 10px;
   min-height: 0;
+  width: 100%;
 }
 
 .paper-dialog-head::after {
@@ -523,6 +526,47 @@ textarea {
   align-self: flex-start;
   justify-self: end;
   margin-top: 1px;
+}
+
+.dialog-notice {
+  width: min(380px, calc(100vw - 32px));
+}
+
+.dialog-notice::backdrop {
+  background: rgba(58, 43, 31, 0.1);
+  backdrop-filter: blur(3px);
+}
+
+.dialog-notice-surface.paper-surface {
+  gap: 8px;
+  padding: 22px 24px 18px;
+  border-radius: 26px;
+  box-shadow:
+    0 22px 48px rgba(72, 54, 39, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.dialog-notice-title {
+  margin: 0;
+  color: rgba(61, 52, 40, 0.96);
+  font-size: 22px;
+  font-weight: 400;
+  letter-spacing: 0.005em;
+  line-height: 1.12;
+}
+
+.dialog-notice-message {
+  margin: 0;
+  color: rgba(132, 113, 87, 0.8);
+  font-family: "Instrument Sans", "Helvetica Neue", sans-serif;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.dialog-notice-footer {
+  margin-top: 6px;
+  min-height: 42px;
 }
 
 .paper-note {

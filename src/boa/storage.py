@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 from contextlib import contextmanager
@@ -22,6 +23,8 @@ from boa.domain import (
     MilestoneTimelineItem,
     NotificationRecord,
     PluginDescriptor,
+    ReadingPostLogRecord,
+    ReadingPostSubscription,
     ReleaseBlueprint,
     ReleaseRecord,
     ReleaseStarlight,
@@ -178,6 +181,32 @@ class BoaStorage:
                     created_at TEXT NOT NULL,
                     FOREIGN KEY (release_id) REFERENCES releases(id) ON DELETE CASCADE
                 );
+
+                CREATE TABLE IF NOT EXISTS reading_post_subscription (
+                    release_id INTEGER PRIMARY KEY,
+                    enabled INTEGER NOT NULL DEFAULT 0,
+                    recipients TEXT NOT NULL DEFAULT '[]',
+                    rhythm TEXT NOT NULL DEFAULT 'weekly',
+                    schedule TEXT NOT NULL DEFAULT '',
+                    send_time TEXT NOT NULL DEFAULT '08:00',
+                    deliver_until_days INTEGER NOT NULL DEFAULT 7,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    last_sent_at TEXT,
+                    milestone_sent_dates TEXT NOT NULL DEFAULT '[]',
+                    FOREIGN KEY (release_id) REFERENCES releases(id) ON DELETE CASCADE
+                );
+
+                CREATE TABLE IF NOT EXISTS reading_post_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    release_id INTEGER NOT NULL,
+                    recipients TEXT NOT NULL DEFAULT '[]',
+                    subject TEXT NOT NULL,
+                    sent_at TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'sent',
+                    error TEXT,
+                    FOREIGN KEY (release_id) REFERENCES releases(id) ON DELETE CASCADE
+                );
                 """
             )
             ack_columns = {
@@ -223,6 +252,20 @@ class BoaStorage:
                 connection.execute("ALTER TABLE bug_snapshot ADD COLUMN quality TEXT NOT NULL DEFAULT 'normal'")
             if "quality_reason" not in bug_snapshot_columns:
                 connection.execute("ALTER TABLE bug_snapshot ADD COLUMN quality_reason TEXT")
+            reading_post_columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(reading_post_subscription)").fetchall()
+            }
+            if "schedule" not in reading_post_columns:
+                connection.execute("ALTER TABLE reading_post_subscription ADD COLUMN schedule TEXT NOT NULL DEFAULT ''")
+            if "deliver_until_days" not in reading_post_columns:
+                connection.execute(
+                    "ALTER TABLE reading_post_subscription ADD COLUMN deliver_until_days INTEGER NOT NULL DEFAULT 7"
+                )
+            if "milestone_sent_dates" not in reading_post_columns:
+                connection.execute(
+                    "ALTER TABLE reading_post_subscription ADD COLUMN milestone_sent_dates TEXT NOT NULL DEFAULT '[]'"
+                )
             connection.execute(
                 """
                 UPDATE bug_snapshot
@@ -1098,6 +1141,198 @@ class BoaStorage:
             )
             for row in rows
         ]
+
+    def get_reading_post_subscription(self, release_id: int) -> ReadingPostSubscription | None:
+        self.get_release(release_id)
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT release_id, enabled, recipients, rhythm, schedule, send_time,
+                       deliver_until_days, created_at, updated_at, last_sent_at,
+                       milestone_sent_dates
+                FROM reading_post_subscription
+                WHERE release_id = ?
+                """,
+                (release_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return self._reading_post_subscription_from_row(row)
+
+    def upsert_reading_post_subscription(
+        self,
+        release_id: int,
+        *,
+        enabled: bool,
+        recipients: tuple[str, ...],
+        rhythm: str,
+        send_time: str,
+        schedule: str | None = None,
+        deliver_until_days: int = 7,
+        milestone_sent_dates: tuple[str, ...] | None = None,
+    ) -> ReadingPostSubscription:
+        self.get_release(release_id)
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        recipients_json = json.dumps(list(recipients))
+        sent_dates_json = json.dumps(list(milestone_sent_dates or ()))
+        effective_schedule = schedule or ""
+        with self.connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO reading_post_subscription (
+                    release_id, enabled, recipients, rhythm, schedule, send_time,
+                    deliver_until_days, created_at, updated_at, last_sent_at,
+                    milestone_sent_dates
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+                ON CONFLICT(release_id) DO UPDATE SET
+                    enabled = excluded.enabled,
+                    recipients = excluded.recipients,
+                    rhythm = excluded.rhythm,
+                    schedule = excluded.schedule,
+                    send_time = excluded.send_time,
+                    deliver_until_days = excluded.deliver_until_days,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    release_id,
+                    1 if enabled else 0,
+                    recipients_json,
+                    rhythm,
+                    effective_schedule,
+                    send_time,
+                    deliver_until_days,
+                    now.isoformat(),
+                    now.isoformat(),
+                    sent_dates_json,
+                ),
+            )
+        result = self.get_reading_post_subscription(release_id)
+        if result is None:
+            raise KeyError(f"Reading Post subscription for release {release_id} was not found.")
+        return result
+
+    def list_enabled_reading_post_subscriptions(self) -> list[ReadingPostSubscription]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT release_id, enabled, recipients, rhythm, schedule, send_time,
+                       deliver_until_days, created_at, updated_at, last_sent_at,
+                       milestone_sent_dates
+                FROM reading_post_subscription
+                WHERE enabled = 1
+                ORDER BY release_id ASC
+                """
+            ).fetchall()
+        return [self._reading_post_subscription_from_row(row) for row in rows]
+
+    def mark_reading_post_sent(self, release_id: int, sent_at: datetime) -> None:
+        with self.connect() as connection:
+            connection.execute(
+                """
+                UPDATE reading_post_subscription
+                SET last_sent_at = ?, updated_at = ?
+                WHERE release_id = ?
+                """,
+                (sent_at.isoformat(), sent_at.isoformat(), release_id),
+            )
+
+    def mark_reading_post_milestones_sent(
+        self,
+        release_id: int,
+        milestone_dates: tuple[str, ...],
+        sent_at: datetime,
+    ) -> None:
+        subscription = self.get_reading_post_subscription(release_id)
+        if subscription is None:
+            return
+        merged = tuple(sorted(set(subscription.milestone_sent_dates).union(milestone_dates)))
+        with self.connect() as connection:
+            connection.execute(
+                """
+                UPDATE reading_post_subscription
+                SET milestone_sent_dates = ?, last_sent_at = ?, updated_at = ?
+                WHERE release_id = ?
+                """,
+                (json.dumps(list(merged)), sent_at.isoformat(), sent_at.isoformat(), release_id),
+            )
+
+    def log_reading_post_email(
+        self,
+        *,
+        release_id: int,
+        recipients: tuple[str, ...],
+        subject: str,
+        sent_at: datetime,
+        status: str,
+        error: str | None = None,
+    ) -> ReadingPostLogRecord:
+        self.get_release(release_id)
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO reading_post_log (release_id, recipients, subject, sent_at, status, error)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (release_id, json.dumps(list(recipients)), subject, sent_at.isoformat(), status, error),
+            )
+            log_id = int(cursor.lastrowid)
+        return self.get_reading_post_log(log_id)
+
+    def get_reading_post_log(self, log_id: int) -> ReadingPostLogRecord:
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT id, release_id, recipients, subject, sent_at, status, error
+                FROM reading_post_log
+                WHERE id = ?
+                """,
+                (log_id,),
+            ).fetchone()
+        if row is None:
+            raise KeyError(f"Reading Post log {log_id} was not found.")
+        return ReadingPostLogRecord(
+            id=int(row["id"]),
+            release_id=int(row["release_id"]),
+            recipients=self._read_recipients(str(row["recipients"])),
+            subject=str(row["subject"]),
+            sent_at=datetime.fromisoformat(str(row["sent_at"])),
+            status=str(row["status"]),
+            error=str(row["error"]) if row["error"] else None,
+        )
+
+    def _reading_post_subscription_from_row(self, row: sqlite3.Row) -> ReadingPostSubscription:
+        rhythm = str(row["rhythm"])
+        schedule = str(row["schedule"]) if "schedule" in row.keys() and row["schedule"] else rhythm
+        return ReadingPostSubscription(
+            release_id=int(row["release_id"]),
+            enabled=bool(int(row["enabled"])),
+            recipients=self._read_recipients(str(row["recipients"])),
+            rhythm=rhythm,
+            schedule=schedule,
+            send_time=str(row["send_time"]),
+            deliver_until_days=max(0, int(row["deliver_until_days"])) if "deliver_until_days" in row.keys() else 7,
+            created_at=datetime.fromisoformat(str(row["created_at"])),
+            updated_at=datetime.fromisoformat(str(row["updated_at"])),
+            last_sent_at=datetime.fromisoformat(str(row["last_sent_at"])) if row["last_sent_at"] else None,
+            milestone_sent_dates=self._read_string_list(str(row["milestone_sent_dates"]))
+            if "milestone_sent_dates" in row.keys()
+            else (),
+        )
+
+    @staticmethod
+    def _read_recipients(raw: str) -> tuple[str, ...]:
+        return BoaStorage._read_string_list(raw)
+
+    @staticmethod
+    def _read_string_list(raw: str) -> tuple[str, ...]:
+        try:
+            values = json.loads(raw)
+        except json.JSONDecodeError:
+            return ()
+        if not isinstance(values, list):
+            return ()
+        return tuple(str(value).strip() for value in values if str(value).strip())
 
     def list_notifications(
         self,

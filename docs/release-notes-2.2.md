@@ -47,6 +47,26 @@ Starlight ✦73 · Storms 15
 
 - Sent email events can appear in the Mark Trail alongside human marks.
 
+### Reading Post
+
+Reading Post has grown into a journey-level delivery policy without becoming a new room.
+
+- Reading Post now lives in Tend Journey, on the same header line as the journey identity.
+- The post opens inline from that control; no extra dialog is introduced.
+- Existing daily and weekly Reading Post settings migrate into the new schedule model.
+- The post is saved with Save Journey, so the journey key protects the whole change together.
+- The schedule summary is calculated from the current journey draft, including unsaved milestone changes:
+
+```text
+Starts Jun 14, 2026. Ends Aug 13, 2026.
+```
+
+- When the rhythm is Never, Boa hides the schedule fields and simply says:
+
+```text
+No notes will be sent.
+```
+
 ### Public Links
 
 Outbound acknowledgement links now use the public entry point.
@@ -98,6 +118,8 @@ node --check src/boa/static/app.js
 uv run pytest
 git diff --check
 ```
+
+This release was prepared with the full Python and browser-facing test suite passing.
 
 ## Suggested Tag
 

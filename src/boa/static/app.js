@@ -104,12 +104,15 @@ const state = {
   expandedReleaseIds: new Set(),
   ackContext: null,
   ackDeliveryByMilestone: {},
+  ackEmailSending: false,
   ackSubmitPendingConfirmation: false,
   ackSubmitConfirmationArmedAt: 0,
   ackSubmitConfirmUnlockTimer: null,
   observationContext: null,
   observationDetailPreview: false,
   observationByRelease: {},
+  readingPostByRelease: {},
+  systemSmtp: null,
   drag: null,
   nowToggleExpanded: {
     top: false,
@@ -189,6 +192,7 @@ const elements = {
   ackName: document.querySelector("#ack-name"),
   ackKeeperDisplay: document.querySelector("#ack-keeper-display"),
   ackKeeperChangeButton: document.querySelector("#ack-keeper-change-button"),
+  ackSendEmailButton: document.querySelector("#ack-send-email-button"),
   ackNote: document.querySelector("#ack-note"),
   ackHint: document.querySelector("#ack-hint"),
   ackSubmitButton: document.querySelector("#ack-submit-button"),
@@ -215,6 +219,15 @@ const elements = {
   observationTrailSummary: document.querySelector("#observation-trail-summary"),
   observationSaveButton: document.querySelector("#observation-save-button"),
   observationMessage: document.querySelector("#observation-message"),
+  readingPostPanel: document.querySelector("#reading-post-panel"),
+  readingPostLamp: document.querySelector("#reading-post-lamp"),
+  readingPostRecipients: document.querySelector("#reading-post-recipients"),
+  readingPostScheduleOptions: Array.from(document.querySelectorAll("input[name='reading-post-schedule']")),
+  readingPostTime: document.querySelector("#reading-post-time"),
+  readingPostDeliverDays: document.querySelector("#reading-post-deliver-days"),
+  readingPostWindow: document.querySelector("#reading-post-window"),
+  readingPostSleepButton: document.querySelector("#reading-post-sleep-button"),
+  readingPostMessage: document.querySelector("#reading-post-message"),
   engineButton: document.querySelector("#engine-button"),
   engineDialog: document.querySelector("#engine-dialog"),
   closeEngineDialogButton: document.querySelector("#close-engine-dialog-button"),
@@ -232,6 +245,11 @@ const elements = {
   engineSmtpTestTo: document.querySelector("#engine-smtp-test-to"),
   engineSmtpSendButton: document.querySelector("#engine-smtp-send-button"),
   engineSmtpTestMessage: document.querySelector("#engine-smtp-test-message"),
+  dialogNotice: document.querySelector("#dialog-notice"),
+  dialogNoticeKicker: document.querySelector("#dialog-notice-kicker"),
+  dialogNoticeTitle: document.querySelector("#dialog-notice-title"),
+  dialogNoticeMessage: document.querySelector("#dialog-notice-message"),
+  dialogNoticeOkButton: document.querySelector("#dialog-notice-ok-button"),
   editMessage: document.querySelector("#journey-message"),
   releaseTemplate: document.querySelector("#release-template"),
 };
@@ -453,15 +471,36 @@ function renderReleaseStarlight(fragment, release) {
 
   panel.classList.remove("hidden");
   const whisperNode = fragment.querySelector(".starlight-whisper");
+  const readingCard = fragment.querySelector(".release-reading-card");
+  const readingText = fragment.querySelector(".release-reading-text");
+  const readingMeta = fragment.querySelector(".release-reading-meta");
   if (!starlight) {
     whisperNode.textContent = "The sky has not been written yet.";
-    panel.title = "Open the observation workspace to record where the journey is now.";
+    if (readingText) {
+      readingText.textContent = "Open Today’s Reading to write where this journey is now.";
+    }
+    if (readingMeta) {
+      readingMeta.textContent = "";
+    }
+    if (readingCard) {
+      readingCard.classList.toggle("has-meta", false);
+    }
+    panel.removeAttribute("title");
     return;
   }
 
   whisperNode.textContent = starlight.whisper;
   const metricBits = summarizeStarlightMetrics(starlight.metrics);
-  panel.title = metricBits ? `${starlight.whisper} • ${metricBits}` : starlight.whisper;
+  if (readingText) {
+    readingText.textContent = starlight.whisper || "No reading has been written yet.";
+  }
+  if (readingMeta) {
+    readingMeta.textContent = metricBits || "";
+  }
+  if (readingCard) {
+    readingCard.classList.toggle("has-meta", Boolean(metricBits));
+  }
+  panel.removeAttribute("title");
 }
 
 function describeStarlightState(value) {
@@ -889,6 +928,10 @@ function getObservationRelease() {
   return state.observationContext ? getReleaseById(state.observationContext.releaseId) : null;
 }
 
+function getReadingPostRelease() {
+  return state.journeyDraft?.releaseId ? getReleaseById(state.journeyDraft.releaseId) : null;
+}
+
 function buildObservationContext(release, workspace = buildObservationWorkspaceFromRelease(release)) {
   const current = workspace.current;
   const metrics = current?.metrics || null;
@@ -996,6 +1039,341 @@ function renderObservationWorkspace() {
   elements.observationTrailSummary.textContent = formatObservationTrail(context.trail);
 }
 
+function getDefaultReadingPost(releaseId) {
+  return {
+    release_id: releaseId,
+    enabled: false,
+    recipients: [],
+    rhythm: "weekly",
+    schedule: "never",
+    send_time: "08:00",
+    deliver_until_days: 7,
+    delivery_window: {
+      starts_at: null,
+      ends_at: null,
+      deliver_until_days: 7,
+    },
+    last_sent_at: null,
+    smtp_ready: Boolean(state.systemSmtp?.ready),
+  };
+}
+
+function cloneReadingPostForDraft(readingPost, releaseId = null) {
+  const source = readingPost || getDefaultReadingPost(releaseId);
+  const schedule = normalizeReadingPostSchedule(source);
+  return {
+    release_id: source.release_id || releaseId,
+    enabled: schedule !== "never" && Boolean(source.enabled),
+    recipients: Array.isArray(source.recipients) ? [...source.recipients] : [],
+    rhythm: formatReadingPostRhythm(source.rhythm),
+    schedule,
+    send_time: source.send_time || "08:00",
+    deliver_until_days: source.deliver_until_days ?? 7,
+    last_sent_at: source.last_sent_at || null,
+    smtp_ready: Boolean(source.smtp_ready),
+  };
+}
+
+function getCurrentReadingPost() {
+  const release = getReadingPostRelease();
+  if (!release) {
+    return null;
+  }
+  return state.readingPostByRelease[release.id] || getDefaultReadingPost(release.id);
+}
+
+function getReadingPostDraft() {
+  const release = getReadingPostRelease();
+  if (!release || !state.journeyDraft) {
+    return null;
+  }
+  if (!state.journeyDraft.readingPost) {
+    state.journeyDraft.readingPost = cloneReadingPostForDraft(getCurrentReadingPost(), release.id);
+  }
+  return state.journeyDraft.readingPost;
+}
+
+function parseReadingPostRecipients(value) {
+  const seen = new Set();
+  return String(value || "")
+    .split(/[\n,;]+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .filter((item) => {
+      const key = item.toLowerCase();
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+}
+
+function formatReadingPostRhythm(value) {
+  return value === "daily" ? "daily" : "weekly";
+}
+
+function normalizeReadingPostSchedule(readingPost) {
+  const schedule = readingPost?.schedule || readingPost?.rhythm || "never";
+  if (schedule === "daily" || schedule === "weekdays" || schedule === "milestones" || schedule === "never" || schedule === "weekly") {
+    return schedule;
+  }
+  return "never";
+}
+
+function getSelectedReadingPostSchedule() {
+  return elements.readingPostScheduleOptions.find((option) => option.checked)?.value || "never";
+}
+
+function setSelectedReadingPostSchedule(value) {
+  const schedule = value || "never";
+  elements.readingPostScheduleOptions.forEach((option) => {
+    option.checked = option.value === schedule;
+  });
+}
+
+function parseReadingPostDeliverDays(value) {
+  const days = Number.parseInt(String(value ?? "7"), 10);
+  return Number.isFinite(days) ? days : null;
+}
+
+function parseJourneyCalendarDate(value) {
+  if (!value) {
+    return null;
+  }
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return new Date(value.getFullYear(), value.getMonth(), value.getDate(), 12, 0, 0, 0);
+  }
+  const text = String(value);
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    const [, year, month, day] = match;
+    return new Date(Number(year), Number(month) - 1, Number(day), 12, 0, 0, 0);
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate(), 12, 0, 0, 0);
+}
+
+function addJourneyCalendarDays(date, days) {
+  if (!date || !Number.isFinite(days)) {
+    return null;
+  }
+  const next = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0, 0);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function getJourneyDraftCalendarDates() {
+  return (state.journeyDraft?.milestones || [])
+    .map((milestone) => parseJourneyCalendarDate(milestone.expected))
+    .filter(Boolean)
+    .sort((left, right) => left.getTime() - right.getTime());
+}
+
+function getReadingPostScheduleSummary(readingPost = getReadingPostDraft()) {
+  const schedule = normalizeReadingPostSchedule(readingPost);
+  if (schedule === "never") {
+    return {
+      state: "sleeping",
+      text: "No notes will be sent.",
+    };
+  }
+  const dates = getJourneyDraftCalendarDates();
+  const deliverUntilDays = parseReadingPostDeliverDays(readingPost?.deliver_until_days);
+  if (!dates.length || deliverUntilDays === null || deliverUntilDays < 0 || deliverUntilDays > 365) {
+    return {
+      state: "missing",
+      text: "Add the journey dates to see when the post will travel.",
+    };
+  }
+  const startDate = dates[0];
+  const endDate = addJourneyCalendarDays(dates.at(-1), deliverUntilDays);
+  if (!startDate || !endDate) {
+    return {
+      state: "missing",
+      text: "Add the journey dates to see when the post will travel.",
+    };
+  }
+  return {
+    state: "active",
+    text: `Starts ${formatDate(startDate)}. Ends ${formatDate(endDate)}.`,
+    startsAt: formatCalendarDate(startDate),
+    endsAt: formatCalendarDate(endDate),
+  };
+}
+
+function syncReadingPostScheduleControls(readingPost = getReadingPostDraft()) {
+  if (!elements.readingPostTime) {
+    return;
+  }
+  const schedule = normalizeReadingPostSchedule(readingPost);
+  const usesClock = schedule === "daily" || schedule === "weekdays" || schedule === "weekly";
+  const isNever = schedule === "never";
+  elements.readingPostTime.closest(".reading-post-field")?.classList.toggle("is-muted", !usesClock);
+  elements.readingPostTime.closest(".reading-post-field")?.classList.toggle("hidden", isNever);
+  elements.readingPostDeliverDays.closest(".reading-post-field")?.classList.toggle("hidden", isNever);
+  elements.readingPostWindow.hidden = isNever;
+  elements.readingPostMessage.hidden = !isNever;
+  elements.readingPostMessage.textContent = isNever ? "No notes will be sent." : "";
+  const summary = getReadingPostScheduleSummary(readingPost);
+  elements.readingPostWindow.textContent = summary.state === "active" || summary.state === "missing" ? summary.text : "";
+}
+
+function applyReadingPostControlsToDraft() {
+  const readingPost = getReadingPostDraft();
+  if (!readingPost) {
+    return null;
+  }
+  state.journeyDraft.readingPostTouched = true;
+  readingPost.recipients = parseReadingPostRecipients(elements.readingPostRecipients?.value || "");
+  readingPost.schedule = getSelectedReadingPostSchedule();
+  readingPost.enabled = readingPost.schedule !== "never";
+  readingPost.rhythm = formatReadingPostRhythm(readingPost.schedule);
+  readingPost.send_time = elements.readingPostTime?.value || "08:00";
+  readingPost.deliver_until_days = elements.readingPostDeliverDays?.value ?? 7;
+  syncReadingPostScheduleControls(readingPost);
+  renderReadingPostLamp(readingPost);
+  return readingPost;
+}
+
+function renderReadingPostLamp(readingPost = getReadingPostDraft()) {
+  const smtpReady = Boolean(state.systemSmtp?.ready || readingPost?.smtp_ready);
+  const isConfigured = Boolean(readingPost?.enabled && readingPost.recipients.length);
+  elements.readingPostLamp?.classList.remove("is-ready", "is-warning", "is-empty");
+  if (isConfigured && smtpReady) {
+    elements.readingPostLamp?.classList.add("is-ready");
+  } else if (isConfigured && !smtpReady) {
+    elements.readingPostLamp?.classList.add("is-warning");
+  } else {
+    elements.readingPostLamp?.classList.add("is-empty");
+  }
+}
+
+function renderReadingPostPanel({ preserveControlValues = false } = {}) {
+  if (!elements.readingPostPanel) {
+    return;
+  }
+
+  const release = getReadingPostRelease();
+  const readingPost = getReadingPostDraft();
+  elements.readingPostPanel.classList.remove("is-disabled");
+  elements.readingPostPanel.hidden = !release;
+
+  if (!release || !readingPost) {
+    elements.readingPostPanel.open = false;
+    elements.readingPostRecipients.value = "";
+    setSelectedReadingPostSchedule("never");
+    elements.readingPostTime.value = "08:00";
+    elements.readingPostDeliverDays.value = "7";
+    elements.readingPostSleepButton.hidden = true;
+    elements.readingPostLamp?.classList.add("is-empty");
+    elements.readingPostPanel.title = "Open a journey before sending a page.";
+    delete elements.readingPostPanel.dataset.tooltip;
+    elements.readingPostMessage.textContent = "";
+    elements.readingPostWindow.textContent = "";
+    return;
+  }
+
+  const schedule = normalizeReadingPostSchedule(readingPost);
+  if (!preserveControlValues) {
+    elements.readingPostRecipients.value = readingPost.recipients.join("\n");
+    setSelectedReadingPostSchedule(schedule);
+    elements.readingPostTime.value = readingPost.send_time || "08:00";
+    elements.readingPostDeliverDays.value = String(readingPost.deliver_until_days ?? 7);
+  }
+  syncReadingPostScheduleControls(readingPost);
+  elements.readingPostRecipients.disabled = false;
+  elements.readingPostScheduleOptions.forEach((option) => {
+    option.disabled = false;
+  });
+  elements.readingPostTime.disabled = false;
+  elements.readingPostDeliverDays.disabled = false;
+  elements.readingPostSleepButton.hidden = schedule === "never";
+  elements.readingPostPanel.title = "Reading Post";
+  delete elements.readingPostPanel.dataset.tooltip;
+  renderReadingPostLamp(readingPost);
+}
+
+async function loadReadingPost(releaseId) {
+  if (!releaseId) {
+    return null;
+  }
+  const response = await requestOptional(`/api/releases/${releaseId}/reading-post`);
+  if (!response.ok) {
+    if (state.journeyDraft?.releaseId === releaseId) {
+      elements.readingPostMessage.textContent = extractOptionalError(response);
+      renderReadingPostPanel();
+    }
+    return null;
+  }
+  state.readingPostByRelease[releaseId] = response.payload;
+  if (state.journeyDraft?.releaseId === releaseId) {
+    if (!state.journeyDraft.readingPostTouched) {
+      state.journeyDraft.readingPost = cloneReadingPostForDraft(response.payload, releaseId);
+    }
+    renderReadingPostPanel();
+  }
+  return response.payload;
+}
+
+function sleepReadingPostDraft() {
+  const readingPost = getReadingPostDraft();
+  if (!readingPost) {
+    return;
+  }
+  state.journeyDraft.readingPostTouched = true;
+  readingPost.schedule = "never";
+  readingPost.enabled = false;
+  setSelectedReadingPostSchedule("never");
+  renderReadingPostPanel();
+}
+
+function buildReadingPostPayloadFromDraft(secret) {
+  const readingPost = getReadingPostDraft();
+  if (!readingPost) {
+    return null;
+  }
+  const schedule = normalizeReadingPostSchedule(readingPost);
+  const deliverUntilDays = parseReadingPostDeliverDays(readingPost.deliver_until_days);
+  const recipients = Array.isArray(readingPost.recipients) ? readingPost.recipients : [];
+  if (schedule !== "never" && !recipients.length) {
+    throw new Error("Write at least one friend on the horizon.");
+  }
+  if (schedule !== "never" && (deliverUntilDays === null || deliverUntilDays < 0 || deliverUntilDays > 365)) {
+    throw new Error("Choose a deliver-until margin between 0 and 365 days.");
+  }
+  return {
+    secret,
+    enabled: schedule !== "never",
+    recipients,
+    rhythm: formatReadingPostRhythm(schedule),
+    schedule,
+    send_time: readingPost.send_time || "08:00",
+    deliver_until_days: deliverUntilDays === null ? 7 : Math.min(Math.max(deliverUntilDays, 0), 365),
+  };
+}
+
+async function saveReadingPostDraft(releaseId, secret, preparedPayload = null) {
+  const payload = preparedPayload || buildReadingPostPayloadFromDraft(secret);
+  if (!payload) {
+    return null;
+  }
+  const saved = await request(`/api/releases/${releaseId}/reading-post`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  state.readingPostByRelease[releaseId] = saved;
+  if (state.journeyDraft?.releaseId === releaseId) {
+    state.journeyDraft.readingPost = cloneReadingPostForDraft(saved, releaseId);
+    state.journeyDraft.readingPostTouched = false;
+  }
+  return saved;
+}
+
 function renderObservationDetailPreview() {
   if (!elements.observationDetailPreview) {
     return;
@@ -1070,6 +1448,7 @@ function syncAckFormState() {
     elements.ackSubmitButton.disabled = false;
     elements.ackSecret.closest(".ack-key-shell")?.classList.remove("hidden");
     elements.ackSubmitButton.classList.remove("hidden");
+    syncAckEmailButton();
     elements.ackReleaseName.textContent = "No journey selected";
     elements.ackReleaseVersion.textContent = "";
     elements.ackMilestoneName.textContent = "Quietly mark this milestone.";
@@ -1102,6 +1481,7 @@ function syncAckFormState() {
   elements.ackName.value = milestone.owner || "";
   elements.ackKeeperDisplay.textContent = milestone.owner || "No keeper set";
   elements.ackKeeperChangeButton.classList.toggle("hidden", !release);
+  syncAckEmailButton();
   elements.ackNote.value = "";
   elements.ackDate.textContent = milestone.acked_at
     ? `Last updated ${formatDateTime(milestone.acked_at)}`
@@ -1111,12 +1491,46 @@ function syncAckFormState() {
   renderSelectedAckTrail();
 }
 
+function syncAckEmailButton() {
+  if (!elements.ackSendEmailButton) {
+    return;
+  }
+  const milestone = getSelectedAckMilestone();
+  const hasKeeperEmail = Boolean(String(milestone?.email || "").trim());
+  elements.ackSendEmailButton.disabled = state.ackEmailSending || !hasKeeperEmail;
+  elements.ackSendEmailButton.textContent = state.ackEmailSending ? "Sending" : "Notify Keeper";
+  elements.ackSendEmailButton.classList.toggle("is-sending", state.ackEmailSending);
+  elements.ackSendEmailButton.classList.toggle("is-unavailable", !hasKeeperEmail);
+  elements.ackSendEmailButton.title = hasKeeperEmail
+    ? "Send the acknowledgement email to this keeper again."
+    : "Add a keeper email in Tend Journey before sending a notice.";
+}
+
 function syncAckSubmitButton() {
   if (!elements.ackSubmitButton) {
     return;
   }
   elements.ackSubmitButton.textContent = state.ackSubmitPendingConfirmation ? "Confirmed?" : "Acknowledge";
   elements.ackSubmitButton.classList.toggle("paper-button-confirm", state.ackSubmitPendingConfirmation);
+}
+
+function openDialogNotice({ kicker = "A small note", title = "The note was sent.", message = "" } = {}) {
+  if (!elements.dialogNotice) {
+    return;
+  }
+  elements.dialogNoticeKicker.textContent = kicker;
+  elements.dialogNoticeTitle.textContent = title;
+  elements.dialogNoticeMessage.textContent = message;
+  if (!elements.dialogNotice.open) {
+    elements.dialogNotice.showModal();
+  }
+  elements.dialogNoticeOkButton?.focus();
+}
+
+function closeDialogNotice() {
+  if (elements.dialogNotice?.open) {
+    elements.dialogNotice.close();
+  }
 }
 
 function ensureAckActionsBound() {
@@ -2036,10 +2450,28 @@ function drawRelease(svg, release, timeline, palette, options = {}) {
 
 function getMeaningfulStarlightEvents(release) {
   const events = Array.isArray(release.starlight_trail) ? release.starlight_trail : [];
-  return events
+  const meaningfulEvents = events
     .filter((event) => event && event.date)
     .sort((left, right) => dateishTime(left.date) - dateishTime(right.date))
     .filter((event, index, source) => index === 0 || event.starlight !== source[index - 1].starlight);
+
+  const current = release.starlight;
+  const latestMeaningful = meaningfulEvents.at(-1);
+  if (!current || !latestMeaningful || Number(current.starlight) !== Number(latestMeaningful.starlight)) {
+    return meaningfulEvents;
+  }
+
+  return [
+    ...meaningfulEvents.slice(0, -1),
+    {
+      ...latestMeaningful,
+      starlight: Number(current.starlight),
+      whisper: current.whisper,
+      detail: current.detail,
+      metrics: current.metrics,
+      display_date: current.observed_on || current.updated_at || latestMeaningful.date,
+    },
+  ];
 }
 
 function renderStarlightTrail(svg, events, xForDate, clampX, detailCard) {
@@ -2324,7 +2756,7 @@ function showStarlightDetail(detailCard, svg, point, event) {
   const body = detailCard.querySelector(".starlight-detail-body");
   const stats = detailCard.querySelector(".starlight-detail-stats");
   detailCard.querySelector(".starlight-detail-value").textContent = `✦ ${event.starlight} ${describeStarlightState(event.starlight)}`;
-  detailCard.querySelector(".starlight-detail-date").textContent = formatDate(event.date);
+  detailCard.querySelector(".starlight-detail-date").textContent = formatDate(event.display_date || event.date);
   detailCard.querySelector(".starlight-detail-whisper").textContent = event.whisper;
   renderBoaNote(body, event.detail?.content || "", { emptyFallback: "No night log recorded." });
 
@@ -2512,6 +2944,35 @@ function renderBoaNote(container, markdown, { emptyFallback = "" } = {}) {
       container.appendChild(pre);
       return;
     }
+    if (block.type === "table") {
+      const tableFrame = document.createElement("div");
+      tableFrame.className = "boa-note-table-frame";
+      const table = document.createElement("table");
+      const thead = document.createElement("thead");
+      const headRow = document.createElement("tr");
+      block.headers.forEach((header) => {
+        const th = document.createElement("th");
+        appendInlineMarkdown(th, header);
+        headRow.appendChild(th);
+      });
+      thead.appendChild(headRow);
+      table.appendChild(thead);
+
+      const tbody = document.createElement("tbody");
+      block.rows.forEach((row) => {
+        const tableRow = document.createElement("tr");
+        block.headers.forEach((_, index) => {
+          const td = document.createElement("td");
+          appendInlineMarkdown(td, row[index] || "");
+          tableRow.appendChild(td);
+        });
+        tbody.appendChild(tableRow);
+      });
+      table.appendChild(tbody);
+      tableFrame.appendChild(table);
+      container.appendChild(tableFrame);
+      return;
+    }
     const paragraph = document.createElement("p");
     appendInlineMarkdown(paragraph, block.text);
     container.appendChild(paragraph);
@@ -2549,7 +3010,13 @@ function safeMarkdownToBlocks(markdown) {
     codeLines = [];
   };
 
-  lines.forEach((line) => {
+  const isTableDivider = (line) => {
+    const cells = parseMarkdownTableRow(line);
+    return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell.replace(/\s+/g, "")));
+  };
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
     const trimmed = line.trim();
     if (trimmed.startsWith("```")) {
       flushParagraph();
@@ -2564,31 +3031,49 @@ function safeMarkdownToBlocks(markdown) {
     }
     if (inCodeBlock) {
       codeLines.push(line);
-      return;
+      continue;
     }
     if (!trimmed) {
       flushParagraph();
       flushList();
-      return;
+      continue;
     }
     const headingMatch = trimmed.match(/^(#{1,3})\s+(.*)$/);
     if (headingMatch) {
       flushParagraph();
       flushList();
       blocks.push({ type: "heading", level: headingMatch[1].length, text: headingMatch[2].trim() });
-      return;
+      continue;
+    }
+    const nextLine = lines[index + 1]?.trim() || "";
+    const tableHeaders = parseMarkdownTableRow(trimmed);
+    if (tableHeaders.length && isTableDivider(nextLine)) {
+      flushParagraph();
+      flushList();
+      index += 1;
+      const rows = [];
+      while (index + 1 < lines.length) {
+        const rowCells = parseMarkdownTableRow(lines[index + 1].trim());
+        if (!rowCells.length) {
+          break;
+        }
+        rows.push(rowCells);
+        index += 1;
+      }
+      blocks.push({ type: "table", headers: tableHeaders, rows });
+      continue;
     }
     const checkboxMatch = trimmed.match(/^[-*]\s+\[( |x|X)\]\s+(.*)$/);
     if (checkboxMatch) {
       flushParagraph();
       list.push({ checked: checkboxMatch[1].toLowerCase() === "x", text: checkboxMatch[2].trim() });
-      return;
+      continue;
     }
     const unorderedListMatch = trimmed.match(/^[-*]\s+(.*)$/);
     if (unorderedListMatch) {
       flushParagraph();
       list.push({ text: unorderedListMatch[1].trim() });
-      return;
+      continue;
     }
     const orderedListMatch = trimmed.match(/^\d+\.\s+(.*)$/);
     if (orderedListMatch) {
@@ -2598,11 +3083,11 @@ function safeMarkdownToBlocks(markdown) {
       }
       list.ordered = true;
       list.push({ text: orderedListMatch[1].trim() });
-      return;
+      continue;
     }
     flushList();
     paragraph.push(trimmed);
-  });
+  }
 
   flushParagraph();
   flushList();
@@ -2611,36 +3096,81 @@ function safeMarkdownToBlocks(markdown) {
     if (block.type === "list") {
       return block.items.length > 0;
     }
+    if (block.type === "table") {
+      return block.headers.length > 0;
+    }
     return Boolean(block.text);
   });
 }
 
+function parseMarkdownTableRow(line) {
+  const source = String(line || "").trim();
+  if (!source.includes("|")) {
+    return [];
+  }
+  const trimmed = source.replace(/^\|/, "").replace(/\|$/, "");
+  const cells = [];
+  let cell = "";
+  let escaped = false;
+  for (const char of trimmed) {
+    if (escaped) {
+      cell += char;
+      escaped = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (char === "|") {
+      cells.push(cell.trim());
+      cell = "";
+      continue;
+    }
+    cell += char;
+  }
+  cells.push(cell.trim());
+  return cells.some((value) => value) ? cells : [];
+}
+
 function appendInlineMarkdown(node, text) {
   const source = String(text || "");
-  const pattern = /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|`([^`]+)`/g;
+  const pattern = /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|`([^`]+)`|\*\*([^*\n]+)\*\*|__([^_\n]+)__|\*([^*\n]+)\*|_([^_\n]+)_/g;
   let lastIndex = 0;
   let match;
   while ((match = pattern.exec(source))) {
     if (match.index > lastIndex) {
-      node.appendChild(document.createTextNode(source.slice(lastIndex, match.index)));
+      node.appendChild(document.createTextNode(decodeMarkdownText(source.slice(lastIndex, match.index))));
     }
     if (match[1] && match[2]) {
       const anchor = document.createElement("a");
       anchor.href = match[2];
       anchor.target = "_blank";
       anchor.rel = "noopener noreferrer";
-      anchor.textContent = match[1];
+      anchor.textContent = decodeMarkdownText(match[1]);
       node.appendChild(anchor);
     } else if (match[3]) {
       const code = document.createElement("code");
       code.textContent = match[3];
       node.appendChild(code);
+    } else if (match[4] || match[5]) {
+      const strong = document.createElement("strong");
+      strong.textContent = decodeMarkdownText(match[4] || match[5]);
+      node.appendChild(strong);
+    } else if (match[6] || match[7]) {
+      const emphasis = document.createElement("em");
+      emphasis.textContent = decodeMarkdownText(match[6] || match[7]);
+      node.appendChild(emphasis);
     }
     lastIndex = pattern.lastIndex;
   }
   if (lastIndex < source.length) {
-    node.appendChild(document.createTextNode(source.slice(lastIndex)));
+    node.appendChild(document.createTextNode(decodeMarkdownText(source.slice(lastIndex))));
   }
+}
+
+function decodeMarkdownText(text) {
+  return String(text || "").replace(/\\([\\`*_{}\[\]()#+\-.!|])/g, "$1");
 }
 
 function createIrregularStarPath(points, outerRadius, innerRadius, irregularity = 0.18, seed = 0) {
@@ -3072,6 +3602,8 @@ function createInitialJourneyDraft() {
       createJourneyMilestone("Kickoff", kickoff, "pm", "", "kickoff"),
       createJourneyMilestone("GA Release", ga, "manager", "", "ga"),
     ],
+    readingPost: null,
+    readingPostTouched: false,
     activeMilestoneId: null,
     selectedMilestoneIds: [],
     dragMilestoneId: null,
@@ -3095,11 +3627,13 @@ function createJourneyDraftFromRelease(release) {
   draft.product = release.product;
   draft.version = release.version;
   draft.secret = "";
+  draft.readingPost = cloneReadingPostForDraft(state.readingPostByRelease[release.id] || getDefaultReadingPost(release.id), release.id);
+  draft.readingPostTouched = false;
   draft.milestones = [...release.milestones]
     .sort((left, right) => dateishTime(left.expected) - dateishTime(right.expected))
     .map((milestone) => createJourneyMilestone(
       milestone.name,
-      new Date(milestone.expected),
+      parseJourneyCalendarDate(milestone.expected) || parseDateish(milestone.expected),
       milestone.owner || "",
       milestone.email || "",
       milestone.name === "Kickoff" ? "kickoff" : milestone.name === "GA Release" ? "ga" : "custom",
@@ -3168,6 +3702,15 @@ function showJourneyDialog() {
   }
   elements.journeyDialog.getBoundingClientRect();
   renderJourneyDraft();
+  renderReadingPostPanel();
+  if (state.journeyDraft?.releaseId) {
+    Promise.allSettled([
+      loadSystemStatus(),
+      loadReadingPost(state.journeyDraft.releaseId),
+    ]);
+  } else {
+    renderReadingPostPanel();
+  }
   scheduleJourneyLabelRelayout({ placements: true });
 }
 
@@ -3177,6 +3720,7 @@ function closeJourneyDialog() {
   }
   unobserveJourneyTimelineResize();
   state.journeyDraft = null;
+  renderReadingPostPanel();
 }
 
 function syncJourneyForm() {
@@ -3880,6 +4424,7 @@ function renderJourneyDraft() {
   renderJourneyLabelDebug(svg, layoutResult);
 
   renderJourneyPopover(activeMilestoneRatio);
+  syncReadingPostScheduleControls();
 }
 
 function addJourneyMilestone() {
@@ -4126,7 +4671,10 @@ async function openObservationDialog(releaseId) {
   );
   state.observationDetailPreview = false;
   elements.observationMessage.textContent = "";
-  await loadObservationWorkspace(releaseId, { silent: true });
+  await Promise.allSettled([
+    loadSystemStatus(),
+    loadObservationWorkspace(releaseId, { silent: true }),
+  ]);
   renderObservationWorkspace();
   if (!elements.observationDialog.open) {
     elements.observationDialog.showModal();
@@ -4194,6 +4742,7 @@ function formatSmtpSecurity(status) {
 }
 
 function renderSystemSmtp(status) {
+  state.systemSmtp = status;
   if (!status) {
     elements.engineSmtpStatus.textContent = "Unavailable";
     elements.engineSmtpMessage.textContent = "The mail route could not be read right now.";
@@ -4202,6 +4751,7 @@ function renderSystemSmtp(status) {
     elements.engineSmtpSecurity.textContent = "None";
     elements.engineSmtpSendButton.disabled = true;
     elements.engineSmtpLamp.classList.remove("is-ready", "is-error");
+    renderReadingPostPanel();
     return;
   }
 
@@ -4232,6 +4782,7 @@ function renderSystemSmtp(status) {
 
   elements.engineSmtpTestTo.value = status.test_to || "";
   elements.engineSmtpSendButton.disabled = !status.ready;
+  renderReadingPostPanel();
 }
 
 async function loadSystemStatus() {
@@ -4987,8 +5538,16 @@ async function submitJourneyEdit() {
     elements.journeyMessage.textContent = "Journey could not be found.";
     return;
   }
-  if (state.journeyDraft.secret.trim() !== String(state.journeyDraft.expectedSecret || "").trim()) {
+  const secret = state.journeyDraft.secret.trim();
+  if (secret !== String(state.journeyDraft.expectedSecret || "").trim()) {
     elements.journeyMessage.textContent = "Enter the correct journey key to save changes.";
+    return;
+  }
+  let readingPostPayload = null;
+  try {
+    readingPostPayload = buildReadingPostPayloadFromDraft(secret);
+  } catch (error) {
+    elements.journeyMessage.textContent = error.message;
     return;
   }
 
@@ -5030,6 +5589,7 @@ async function submitJourneyEdit() {
       });
     }
 
+    await saveReadingPostDraft(release.id, secret, readingPostPayload);
     await loadTimeline();
     closeJourneyDialog();
     setStatus("Journey saved");
@@ -5185,6 +5745,70 @@ function handleAckSubmitButtonClick() {
     return;
   }
   submitAck();
+}
+
+function validateAckEmailRequest() {
+  const milestone = getSelectedAckMilestone();
+  const milestoneId = milestone?.id;
+  const secret = elements.ackSecret.value.trim();
+  setAckFieldState(elements.ackSecret);
+  if (!milestoneId || !secret || !milestone?.email) {
+    if (!secret) {
+      setAckFieldState(elements.ackSecret, "required");
+    }
+    elements.ackMessage.textContent = !secret
+      ? "Enter the journey key to notify the keeper."
+      : !milestone?.email
+        ? "Add a keeper email in Tend Journey before sending a notice."
+        : "No milestone selected.";
+    resetAckConfirmationState();
+    return null;
+  }
+  return { milestoneId, secret, recipient: milestone.email };
+}
+
+async function sendAckEmailNotice() {
+  const validation = validateAckEmailRequest();
+  if (!validation || state.ackEmailSending) {
+    return;
+  }
+  state.ackEmailSending = true;
+  syncAckEmailButton();
+  elements.ackMessage.textContent = "Sending a small note to the keeper.";
+  try {
+    const result = await request(`/api/milestones/${validation.milestoneId}/ack-email`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ secret: validation.secret }),
+    });
+    await loadAckDeliveryState(validation.milestoneId);
+    elements.ackMessage.textContent = result.sent
+      ? ""
+      : result.message || "The note could not be sent.";
+    if (result.sent) {
+      openDialogNotice({
+        kicker: "Keeper notified",
+        title: "A small note was sent.",
+        message: `${result.recipient || validation.recipient} can acknowledge this milestone from the email.`,
+      });
+      setStatus("Keeper notified");
+    } else {
+      setStatus("Keeper could not be notified");
+    }
+  } catch (error) {
+    console.error(error);
+    const message = error.message === "Invalid journey key."
+      ? "The journey key did not match."
+      : error.message;
+    if (message === "The journey key did not match.") {
+      setAckFieldState(elements.ackSecret, "mismatch");
+    }
+    elements.ackMessage.textContent = message;
+    setStatus("Keeper could not be notified");
+  } finally {
+    state.ackEmailSending = false;
+    syncAckEmailButton();
+  }
 }
 
 function normalizeObservationMetricsInput(doneRaw, totalRaw, blockedRaw) {
@@ -5829,6 +6453,7 @@ elements.journeyMilestoneOwner.addEventListener("input", () => updateJourneyActi
 elements.journeyMilestoneNote.addEventListener("input", () => updateJourneyActiveMilestone("note", elements.journeyMilestoneNote.value));
 elements.journeyMilestoneEmail.addEventListener("input", () => updateJourneyActiveMilestone("email", elements.journeyMilestoneEmail.value));
 elements.closeAckDialogButton.addEventListener("click", closeAckDialog);
+elements.dialogNoticeOkButton?.addEventListener("click", closeDialogNotice);
 elements.closeObservationDialogButton.addEventListener("click", closeObservationDialog);
 elements.ackKeeperChangeButton?.addEventListener("click", () => {
   const release = getSelectedAckRelease();
@@ -5836,6 +6461,7 @@ elements.ackKeeperChangeButton?.addEventListener("click", () => {
   closeAckDialog();
   openJourneyDialogForMilestone(release, milestone?.id, "keeper");
 });
+elements.ackSendEmailButton?.addEventListener("click", sendAckEmailNotice);
 elements.engineButton.addEventListener("click", openEngineDialog);
 elements.closeEngineDialogButton.addEventListener("click", closeEngineDialog);
 elements.engineDateFormatButton?.addEventListener("click", (event) => {
@@ -5853,6 +6479,21 @@ elements.engineDateFormatMenu?.querySelectorAll("[data-format]").forEach((item) 
 elements.engineSmtpTestForm.addEventListener("submit", submitEngineSmtpTest);
 elements.importForm.addEventListener("submit", submitImport);
 elements.observationForm.addEventListener("submit", submitObservation);
+elements.readingPostRecipients?.addEventListener("input", () => {
+  applyReadingPostControlsToDraft();
+});
+elements.readingPostTime?.addEventListener("input", () => {
+  applyReadingPostControlsToDraft();
+});
+elements.readingPostDeliverDays?.addEventListener("input", () => {
+  applyReadingPostControlsToDraft();
+});
+elements.readingPostSleepButton?.addEventListener("click", sleepReadingPostDraft);
+elements.readingPostScheduleOptions.forEach((option) => {
+  option.addEventListener("change", () => {
+    applyReadingPostControlsToDraft();
+  });
+});
 elements.observationDetailPreviewToggle?.addEventListener("click", () => {
   state.observationDetailPreview = !state.observationDetailPreview;
   syncObservationDetailPreview();
@@ -5956,6 +6597,9 @@ elements.journeyDialog.addEventListener("cancel", (event) => {
   closeJourneyDialog();
 });
 document.addEventListener("click", (event) => {
+  if (elements.readingPostPanel?.open && !event.target.closest("#reading-post-panel")) {
+    elements.readingPostPanel.open = false;
+  }
   if (!event.target.closest(".page-note-shell")) {
     setJourneyActionMenuOpen(false);
   }

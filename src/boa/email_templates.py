@@ -7,8 +7,9 @@ standard-library email module can send a multipart alternative message.
 from __future__ import annotations
 
 from datetime import date
+from html import escape
 
-from boa.domain import MilestoneRecord, ReleaseRecord
+from boa.domain import BugSnapshot, MilestoneRecord, ReleaseRecord, ReleaseStarlight
 
 
 _ACK_BASE_PATH = "/ack/"
@@ -57,6 +58,86 @@ def _reading_html(journey_reading: str | None) -> str:
             <br>
             <span style="font-size: 13px; opacity: 0.72;">{journey_reading}</span>
     """
+
+
+def _plain_reading_lines(starlight: ReleaseStarlight | None, storm: BugSnapshot | None) -> list[str]:
+    if starlight is None:
+        starlight_line = "Starlight: not written yet"
+        reading_line = "Today’s Reading: not written yet"
+        detail_line = ""
+    else:
+        starlight_line = f"Starlight: {starlight.current.starlight}/100"
+        reading_line = f"Today’s Reading: {starlight.current.whisper}"
+        detail_line = starlight.current.detail.content.strip()
+
+    storm_line = "Storms: unknown" if storm is None else f"Storms: {storm.open_bug_count}"
+    lines = [reading_line, starlight_line, storm_line]
+    if detail_line:
+        lines.extend(["", "Page Notes:", detail_line])
+    return lines
+
+
+def render_reading_post_email(
+    release: ReleaseRecord,
+    *,
+    starlight: ReleaseStarlight | None,
+    storm: BugSnapshot | None,
+) -> tuple[str, str, str]:
+    """Render a journey-level Observation Notebook reading post."""
+    subject = f"{_journey_subject_prefix(release)} · Today’s Reading"
+    lines = _plain_reading_lines(starlight, storm)
+    body_text = (
+        f"A quiet page from {release.blueprint.product} {release.blueprint.version}.\n\n"
+        + "\n".join(lines)
+        + _boa_signature()
+    )
+
+    if starlight is None:
+        reading_html = "This page has not been written yet."
+        starlight_html = "Not written"
+        detail_html = ""
+    else:
+        reading_html = escape(starlight.current.whisper)
+        starlight_html = f"{starlight.current.starlight}/100"
+        detail_content = starlight.current.detail.content.strip()
+        detail_html = (
+            f"""
+            <div style="margin-top: 18px; padding-top: 16px; border-top: 1px solid rgba(103,92,83,0.12);">
+              <p style="margin: 0 0 7px 0; font-family: 'Inter', 'SF Pro Text', system-ui, sans-serif; font-size: 11px; letter-spacing: 0.11em; text-transform: uppercase; color: rgba(74,59,42,0.62);">Page Notes</p>
+              <p style="white-space: pre-wrap; margin: 0; color: rgba(74,59,42,0.82);">{escape(detail_content)}</p>
+            </div>
+            """
+            if detail_content
+            else ""
+        )
+
+    storm_html = "Unknown" if storm is None else str(storm.open_bug_count)
+    body_html = f"""
+    <html>
+      <body style="font-family: Georgia, serif; color: #4a3b2a; background: #fbf6ea; padding: 24px; line-height: 1.55;">
+        <div style="max-width: 560px; margin: 0 auto; background: #fffdf7; border: 1px solid rgba(103,92,83,0.16); border-radius: 12px; padding: 32px;">
+          <p style="margin: 0 0 8px 0; font-family: 'Inter', 'SF Pro Text', system-ui, sans-serif; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(74,59,42,0.58);">Reading Post</p>
+          <h1 style="margin: 0 0 8px 0; font-size: 28px; line-height: 1.18; font-weight: 400;">Today’s Reading</h1>
+          <p style="margin: 0 0 22px 0; color: rgba(74,59,42,0.68);">A quiet page from <strong>{escape(release.blueprint.product)} {escape(release.blueprint.version)}</strong>.</p>
+          <p style="margin: 0 0 18px 0; font-size: 17px;">{reading_html}</p>
+          <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0 0 4px 0;">
+            <div style="padding: 12px 14px; border: 1px solid rgba(103,92,83,0.12); border-radius: 12px; background: rgba(251,246,234,0.46);">
+              <p style="margin: 0 0 4px 0; font-family: 'Inter', 'SF Pro Text', system-ui, sans-serif; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(74,59,42,0.58);">Starlight</p>
+              <p style="margin: 0;">{escape(starlight_html)}</p>
+            </div>
+            <div style="padding: 12px 14px; border: 1px solid rgba(103,92,83,0.12); border-radius: 12px; background: rgba(251,246,234,0.46);">
+              <p style="margin: 0 0 4px 0; font-family: 'Inter', 'SF Pro Text', system-ui, sans-serif; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(74,59,42,0.58);">Storms</p>
+              <p style="margin: 0;">{escape(storm_html)}</p>
+            </div>
+          </div>
+          {detail_html}
+          <hr style="border: none; border-top: 1px solid rgba(103,92,83,0.12); margin: 28px 0 16px 0;">
+          <p style="margin: 0; font-size: 13px; opacity: 0.6;">Boa — reveal the shape of a release.</p>
+        </div>
+      </body>
+    </html>
+    """
+    return subject, body_text, body_html
 
 
 def render_reminder_email(
