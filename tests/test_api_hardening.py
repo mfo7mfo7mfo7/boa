@@ -105,6 +105,35 @@ def test_release_special_characters_are_parameterized_not_executed(tmp_path) -> 
     assert [item["product"] for item in listed.json()] == [product, "FortiGate"]
 
 
+def test_reading_post_special_characters_are_parameterized_not_executed(tmp_path) -> None:
+    malicious_recipient = "rose');DROP--@example.com"
+
+    with make_client(tmp_path) as client:
+        release = create_release(client)
+        updated = client.put(
+            f"/api/releases/{release['id']}/reading-post",
+            json={
+                "secret": "boa-262",
+                "enabled": True,
+                "recipients": [malicious_recipient, "fox@example.com"],
+                "rhythm": "daily",
+                "schedule": "daily",
+                "send_time": "08:00",
+                "deliver_until_days": 7,
+            },
+        )
+        fetched = client.get(f"/api/releases/{release['id']}/reading-post")
+        normal = create_release(client, product="FortiGate", version="7.4", secret="fg-74")
+        listed = client.get("/api/releases")
+
+    assert updated.status_code == 200
+    assert fetched.status_code == 200
+    assert fetched.json()["recipients"] == [malicious_recipient, "fox@example.com"]
+    assert normal["id"] == release["id"] + 1
+    assert listed.status_code == 200
+    assert [item["product"] for item in listed.json()] == ["FortiSASE", "FortiGate"]
+
+
 def test_galaxy_filter_normalizes_case_spaces_and_symbols(tmp_path) -> None:
     with make_client(tmp_path) as client:
         create_release(client, product="Forti SASE++", version="26.2")

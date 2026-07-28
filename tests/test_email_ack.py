@@ -10,7 +10,9 @@ from fastapi.testclient import TestClient
 
 from boa.ack_token import generate_ack_token, hash_ack_token
 from boa.api import create_app
-from boa.domain import Milestone
+from boa.domain import Milestone, ReleaseBlueprint
+from boa.email import load_smtp_config
+from boa.reminder_service import send_ack_request_email
 from boa.storage import BoaStorage
 
 
@@ -220,6 +222,106 @@ def test_send_ack_email_succeeds_when_smtp_ready(
     assert len(logs) == 1
     assert logs[0].recipient == "qa@example.com"
     assert logs[0].template_name == "ack_request"
+
+
+def test_send_ack_email_can_notify_keeper_again(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    env = {
+        "BOA_SMTP_ENABLED": "true",
+        "BOA_SMTP_HOST": "smtp.example.com",
+        "BOA_SMTP_FROM": "boa@example.com",
+        "PUBLIC_BASE_URL": "http://gitlab.qa:4001/",
+    }
+    monkeypatch.setattr("os.environ", env)
+
+    sent_emails: list[dict] = []
+
+    def fake_send_email(config, *, to, subject, body_text, body_html=None):
+        sent_emails.append({"to": to, "subject": subject, "body_text": body_text, "body_html": body_html})
+
+    monkeypatch.setattr("boa.reminder_service.send_email", fake_send_email)
+
+    app = create_app(BoaStorage(tmp_path / "boa.db"))
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/releases",
+            json={"product": "FortiSASE", "version": "26.2", "secret": "boa-262"},
+        ).json()
+        milestone_id = created["milestones"][0]["id"]
+        client.put(
+            f"/api/milestones/{milestone_id}",
+            json={
+                "name": "Kickoff",
+                "expected": "2026-08-01",
+                "owner": "qa",
+                "email": "qa@example.com",
+            },
+        )
+
+        first = client.post(f"/api/milestones/{milestone_id}/ack-email", json={"secret": "boa-262"})
+        second = client.post(f"/api/milestones/{milestone_id}/ack-email", json={"secret": "boa-262"})
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["sent"] is True
+    assert second.json()["sent"] is True
+    assert len(sent_emails) == 2
+
+    storage = BoaStorage(tmp_path / "boa.db")
+    logs = storage.list_email_logs(milestone_id=milestone_id)
+    assert len(logs) == 2
+    assert {log.template_name for log in logs} == {"ack_request"}
+
+
+def test_send_ack_request_email_logs_without_smtp(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("os.environ", {})
+
+    storage = BoaStorage(tmp_path / "boa.db")
+    storage.initialize()
+    release = storage.create_release(
+        ReleaseBlueprint(
+            product="FortiSASE",
+            version="26.2",
+            secret="boa-262",
+            milestones=(
+                Milestone(
+                    name="Kickoff",
+                    expected=date(2026, 8, 1),
+                    owner="qa",
+                    email="qa@example.com",
+                ),
+            ),
+        )
+    )
+    milestone_id = storage.list_milestones(release.id)[0].id
+
+    sent_emails: list[dict] = []
+
+    def fake_send_email(to: str, subject: str, body_text: str, body_html: str | None) -> None:
+        sent_emails.append({"to": to, "subject": subject, "body_text": body_text, "body_html": body_html})
+
+    result = send_ack_request_email(
+        storage,
+        load_smtp_config(),
+        milestone_id=milestone_id,
+        send_email_func=fake_send_email,
+        base_url="http://gitlab.qa:4001",
+    )
+
+    assert result.sent is True
+    assert result.email_log_id is not None
+    assert len(sent_emails) == 1
+    assert sent_emails[0]["to"] == "qa@example.com"
+    assert "Kickoff" in sent_emails[0]["subject"]
+    logs = storage.list_email_logs(milestone_id=milestone_id)
+    assert len(logs) == 1
+    assert logs[0].template_name == "ack_request"
+    assert logs[0].recipient == "qa@example.com"
 
 
 def test_send_ack_email_requires_journey_key(

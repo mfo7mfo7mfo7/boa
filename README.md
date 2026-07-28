@@ -206,6 +206,7 @@ Boa listens to observations from other instruments. These guides show how to wri
 
 ## Release Notes
 
+- [Boa 2.7](docs/release-notes-2.7.md)
 - [Boa 1.0](docs/release-notes-1.0.md)
 - [Boa 1.5](docs/release-notes-1.5.md)
 - [Boa 1.6](docs/release-notes-1.6.md)
@@ -271,9 +272,9 @@ SQLite records the journey.
 
 ## Status
 
-Boa 2.5 is release-ready.
+Boa 2.7 is release-ready.
 
-The universe view, galaxy routes, Observation Notebook, Starlight Trail, Bug Wave, Mark Trail, Engine Room, and paper dialog system now form one coherent journey language.
+The universe view, galaxy routes, Observation Notebook, Starlight Trail, Bug Wave, Mark Trail, Engine Room, Reading Post, and paper dialog system now form one coherent journey language.
 
 ## Local QA Reset
 

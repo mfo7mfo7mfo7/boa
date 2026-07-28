@@ -83,6 +83,12 @@ const DATE_FORMAT_OPTIONS = {
     shortLabel: "29 Jun",
   },
 };
+const ENGINE_CLOCK_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: true,
+});
 
 const journeyLabelMeasurementCache = new Map();
 const journeyLabelPlacementCache = new Map();
@@ -90,6 +96,7 @@ const boardMilestoneLabelPlacementCache = new Map();
 const BOARD_MILESTONE_AVOID_GAP = 2;
 let journeyTimelineResizeObserver = null;
 let journeyTimelineResizeFrame = null;
+let engineClockTimer = null;
 
 const state = {
   releases: [],
@@ -226,7 +233,6 @@ const elements = {
   readingPostTime: document.querySelector("#reading-post-time"),
   readingPostDeliverDays: document.querySelector("#reading-post-deliver-days"),
   readingPostWindow: document.querySelector("#reading-post-window"),
-  readingPostSleepButton: document.querySelector("#reading-post-sleep-button"),
   readingPostMessage: document.querySelector("#reading-post-message"),
   engineButton: document.querySelector("#engine-button"),
   engineDialog: document.querySelector("#engine-dialog"),
@@ -241,6 +247,7 @@ const elements = {
   engineDateFormatButton: document.querySelector("#engine-date-format-button"),
   engineDateFormatLabel: document.querySelector("#engine-date-format-label"),
   engineDateFormatMenu: document.querySelector("#engine-date-format-menu"),
+  engineCurrentTime: document.querySelector("#engine-current-time"),
   engineSmtpTestForm: document.querySelector("#engine-smtp-test-form"),
   engineSmtpTestTo: document.querySelector("#engine-smtp-test-to"),
   engineSmtpSendButton: document.querySelector("#engine-smtp-send-button"),
@@ -1076,19 +1083,24 @@ function cloneReadingPostForDraft(readingPost, releaseId = null) {
 
 function getCurrentReadingPost() {
   const release = getReadingPostRelease();
-  if (!release) {
-    return null;
+  if (release) {
+    return state.readingPostByRelease[release.id] || getDefaultReadingPost(release.id);
   }
-  return state.readingPostByRelease[release.id] || getDefaultReadingPost(release.id);
+  if (state.journeyDraft) {
+    return state.journeyDraft.readingPost || getDefaultReadingPost(state.journeyDraft.releaseId);
+  }
+  return null;
 }
 
 function getReadingPostDraft() {
-  const release = getReadingPostRelease();
-  if (!release || !state.journeyDraft) {
+  if (!state.journeyDraft) {
     return null;
   }
   if (!state.journeyDraft.readingPost) {
-    state.journeyDraft.readingPost = cloneReadingPostForDraft(getCurrentReadingPost(), release.id);
+    state.journeyDraft.readingPost = cloneReadingPostForDraft(
+      getCurrentReadingPost() || getDefaultReadingPost(state.journeyDraft.releaseId),
+      state.journeyDraft.releaseId,
+    );
   }
   return state.journeyDraft.readingPost;
 }
@@ -1111,6 +1123,21 @@ function parseReadingPostRecipients(value) {
 
 function formatReadingPostRhythm(value) {
   return value === "daily" ? "daily" : "weekly";
+}
+
+function formatReadingPostScheduleLabel(schedule) {
+  switch (schedule) {
+    case "daily":
+      return "Daily";
+    case "weekdays":
+      return "Weekdays";
+    case "milestones":
+      return "Every milestone";
+    case "weekly":
+      return "Weekly";
+    default:
+      return "Schedule";
+  }
 }
 
 function normalizeReadingPostSchedule(readingPost) {
@@ -1199,7 +1226,7 @@ function getReadingPostScheduleSummary(readingPost = getReadingPostDraft()) {
   }
   return {
     state: "active",
-    text: `Starts ${formatDate(startDate)}. Ends ${formatDate(endDate)}.`,
+    text: `Starts ${formatDate(startDate)}. Ends ${formatDate(endDate)}. ${formatReadingPostScheduleLabel(schedule)}.`,
     startsAt: formatCalendarDate(startDate),
     endsAt: formatCalendarDate(endDate),
   };
@@ -1210,7 +1237,7 @@ function syncReadingPostScheduleControls(readingPost = getReadingPostDraft()) {
     return;
   }
   const schedule = normalizeReadingPostSchedule(readingPost);
-  const usesClock = schedule === "daily" || schedule === "weekdays" || schedule === "weekly";
+  const usesClock = schedule !== "never";
   const isNever = schedule === "never";
   elements.readingPostTime.closest(".reading-post-field")?.classList.toggle("is-muted", !usesClock);
   elements.readingPostTime.closest(".reading-post-field")?.classList.toggle("hidden", isNever);
@@ -1257,18 +1284,16 @@ function renderReadingPostPanel({ preserveControlValues = false } = {}) {
     return;
   }
 
-  const release = getReadingPostRelease();
   const readingPost = getReadingPostDraft();
   elements.readingPostPanel.classList.remove("is-disabled");
-  elements.readingPostPanel.hidden = !release;
+  elements.readingPostPanel.hidden = !state.journeyDraft;
 
-  if (!release || !readingPost) {
+  if (!state.journeyDraft || !readingPost) {
     elements.readingPostPanel.open = false;
     elements.readingPostRecipients.value = "";
     setSelectedReadingPostSchedule("never");
     elements.readingPostTime.value = "08:00";
     elements.readingPostDeliverDays.value = "7";
-    elements.readingPostSleepButton.hidden = true;
     elements.readingPostLamp?.classList.add("is-empty");
     elements.readingPostPanel.title = "Open a journey before sending a page.";
     delete elements.readingPostPanel.dataset.tooltip;
@@ -1291,7 +1316,6 @@ function renderReadingPostPanel({ preserveControlValues = false } = {}) {
   });
   elements.readingPostTime.disabled = false;
   elements.readingPostDeliverDays.disabled = false;
-  elements.readingPostSleepButton.hidden = schedule === "never";
   elements.readingPostPanel.title = "Reading Post";
   delete elements.readingPostPanel.dataset.tooltip;
   renderReadingPostLamp(readingPost);
@@ -1317,18 +1341,6 @@ async function loadReadingPost(releaseId) {
     renderReadingPostPanel();
   }
   return response.payload;
-}
-
-function sleepReadingPostDraft() {
-  const readingPost = getReadingPostDraft();
-  if (!readingPost) {
-    return;
-  }
-  state.journeyDraft.readingPostTouched = true;
-  readingPost.schedule = "never";
-  readingPost.enabled = false;
-  setSelectedReadingPostSchedule("never");
-  renderReadingPostPanel();
 }
 
 function buildReadingPostPayloadFromDraft(secret) {
@@ -2665,6 +2677,39 @@ function initializeTimelineNoteCard(card, hideCallback) {
   });
 }
 
+function initializeStarlightDetailCard(card) {
+  if (!card || card.dataset.starlightReady === "true") {
+    return;
+  }
+  card.dataset.starlightReady = "true";
+  const button = card.querySelector(".starlight-detail-expand-button");
+  if (!button) {
+    return;
+  }
+
+  const syncButtonState = (expanded) => {
+    button.setAttribute("aria-pressed", String(expanded));
+    button.setAttribute("aria-label", expanded ? "Collapse night log" : "Expand night log");
+    button.title = expanded ? "Collapse night log" : "Expand night log";
+    button.textContent = expanded ? "⤡" : "⤢";
+  };
+
+  syncButtonState(false);
+  card._syncStarlightExpandState = syncButtonState;
+  button.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const expanded = !card.classList.contains("is-expanded");
+    card.classList.toggle("is-expanded", expanded);
+    syncButtonState(expanded);
+    const point = card._starlightPoint;
+    const svg = card._starlightSvg;
+    if (point && svg) {
+      window.requestAnimationFrame(() => positionStoryCard(card, svg, point, { preferred: "center" }));
+    }
+  });
+}
+
 function revealTimelineNoteCard(card, svg, point, { verticalGap = 20, preferred = "center" } = {}) {
   if (!card) {
     return;
@@ -2716,6 +2761,7 @@ function bindStarlightDetail(marker, svg, detailCard, point, event) {
   }
 
   initializeTimelineNoteCard(detailCard, hideStarlightDetail);
+  initializeStarlightDetailCard(detailCard);
   const show = () => showStarlightDetail(detailCard, svg, point, event);
   const hide = () => {
     detailCard.dataset.markerHover = "false";
@@ -2755,6 +2801,8 @@ function bindBugWaveDetail(marker, svg, detailCard, point, snapshot) {
 function showStarlightDetail(detailCard, svg, point, event) {
   const body = detailCard.querySelector(".starlight-detail-body");
   const stats = detailCard.querySelector(".starlight-detail-stats");
+  detailCard._starlightPoint = point;
+  detailCard._starlightSvg = svg;
   detailCard.querySelector(".starlight-detail-value").textContent = `✦ ${event.starlight} ${describeStarlightState(event.starlight)}`;
   detailCard.querySelector(".starlight-detail-date").textContent = formatDate(event.display_date || event.date);
   detailCard.querySelector(".starlight-detail-whisper").textContent = event.whisper;
@@ -2769,11 +2817,18 @@ function showStarlightDetail(detailCard, svg, point, event) {
     stats.classList.add("hidden");
   }
 
+  if (typeof detailCard._syncStarlightExpandState === "function") {
+    detailCard._syncStarlightExpandState(detailCard.classList.contains("is-expanded"));
+  }
   detailCard.dataset.hovering = detailCard.dataset.hovering || "false";
   revealTimelineNoteCard(detailCard, svg, point, { preferred: "center" });
 }
 
 function hideStarlightDetail(detailCard) {
+  detailCard.classList.remove("is-expanded");
+  if (typeof detailCard._syncStarlightExpandState === "function") {
+    detailCard._syncStarlightExpandState(false);
+  }
   hideTimelineNoteCard(detailCard);
 }
 
@@ -3598,12 +3653,12 @@ function createInitialJourneyDraft() {
     product: "",
     version: "",
     secret: "",
+    readingPost: cloneReadingPostForDraft(getDefaultReadingPost(null), null),
+    readingPostTouched: false,
     milestones: [
       createJourneyMilestone("Kickoff", kickoff, "pm", "", "kickoff"),
       createJourneyMilestone("GA Release", ga, "manager", "", "ga"),
     ],
-    readingPost: null,
-    readingPostTouched: false,
     activeMilestoneId: null,
     selectedMilestoneIds: [],
     dragMilestoneId: null,
@@ -3648,6 +3703,11 @@ function createJourneyDraftFromBlueprint(blueprint) {
   draft.product = blueprint.product || "";
   draft.version = blueprint.version || "";
   draft.secret = blueprint.secret || "";
+  draft.readingPost = cloneReadingPostForDraft(
+    blueprint.reading_post || getDefaultReadingPost(null),
+    null,
+  );
+  draft.readingPostTouched = Boolean(blueprint.reading_post);
   draft.milestones = [...(blueprint.milestones || [])]
     .sort((left, right) => dateishTime(left.expected) - dateishTime(right.expected))
     .map((milestone, index, milestones) => createJourneyMilestone(
@@ -4711,6 +4771,7 @@ function closeObservationDialog() {
 function openEngineDialog() {
   elements.engineSmtpTestMessage.textContent = "";
   syncEngineDateFormat();
+  startEngineClock();
   if (!elements.engineDialog.open) {
     elements.engineDialog.showModal();
   }
@@ -4718,6 +4779,7 @@ function openEngineDialog() {
 }
 
 function closeEngineDialog() {
+  stopEngineClock();
   if (elements.engineDialog.open) {
     elements.engineDialog.close();
   }
@@ -5464,6 +5526,16 @@ async function submitJourneyCreate(event) {
     return;
   }
 
+  let readingPostPayload = null;
+  try {
+    if (state.journeyDraft.readingPostTouched) {
+      readingPostPayload = buildReadingPostPayloadFromDraft(secret);
+    }
+  } catch (error) {
+    elements.journeyMessage.textContent = error.message;
+    return;
+  }
+
   setStatus("Creating journey");
   try {
     const created = await request("/api/releases", {
@@ -5517,6 +5589,10 @@ async function submitJourneyCreate(event) {
           note: milestone.note?.trim() ? { content: milestone.note.trim() } : null,
         }),
       });
+    }
+
+    if (readingPostPayload) {
+      await saveReadingPostDraft(created.id, secret, readingPostPayload);
     }
 
     await loadTimeline();
@@ -6351,6 +6427,32 @@ function syncEngineDateFormat() {
   });
 }
 
+function syncEngineCurrentTime() {
+  if (!elements.engineCurrentTime) {
+    return;
+  }
+  elements.engineCurrentTime.textContent = ENGINE_CLOCK_TIME_FORMATTER.format(new Date());
+}
+
+function startEngineClock() {
+  if (!elements.engineCurrentTime) {
+    return;
+  }
+  syncEngineCurrentTime();
+  if (engineClockTimer) {
+    return;
+  }
+  engineClockTimer = window.setInterval(syncEngineCurrentTime, 1000);
+}
+
+function stopEngineClock() {
+  if (!engineClockTimer) {
+    return;
+  }
+  window.clearInterval(engineClockTimer);
+  engineClockTimer = null;
+}
+
 function setEngineDateFormatMenuOpen(isOpen) {
   elements.engineDateFormatMenu?.classList.toggle("hidden", !isOpen);
   elements.engineDateFormatButton?.setAttribute("aria-expanded", String(isOpen));
@@ -6488,7 +6590,6 @@ elements.readingPostTime?.addEventListener("input", () => {
 elements.readingPostDeliverDays?.addEventListener("input", () => {
   applyReadingPostControlsToDraft();
 });
-elements.readingPostSleepButton?.addEventListener("click", sleepReadingPostDraft);
 elements.readingPostScheduleOptions.forEach((option) => {
   option.addEventListener("change", () => {
     applyReadingPostControlsToDraft();
@@ -6596,10 +6697,12 @@ elements.journeyDialog.addEventListener("cancel", (event) => {
   event.preventDefault();
   closeJourneyDialog();
 });
-document.addEventListener("click", (event) => {
+document.addEventListener("pointerdown", (event) => {
   if (elements.readingPostPanel?.open && !event.target.closest("#reading-post-panel")) {
     elements.readingPostPanel.open = false;
   }
+}, true);
+document.addEventListener("click", (event) => {
   if (!event.target.closest(".page-note-shell")) {
     setJourneyActionMenuOpen(false);
   }

@@ -171,34 +171,32 @@
                   <span class="reading-post-summary-title">Reading Post</span>
                 </summary>
                 <div class="reading-post-body paper-menu">
-                  <label class="reading-post-field">
+                  <label class="reading-post-field reading-post-recipients-field">
                     <span class="dialog-title-2">Friends on the horizon</span>
                     <textarea id="reading-post-recipients" class="dialog-textarea reading-post-recipients" rows="3" placeholder="rose@example.com&#10;fox@example.com"></textarea>
                   </label>
-                  <fieldset class="reading-post-field reading-post-schedule">
-                    <legend class="dialog-title-2">Update schedule</legend>
+                  <fieldset class="reading-post-field reading-post-schedule reading-post-rhythm-field">
+                    <legend class="dialog-title-2">Rhythm</legend>
                     <label><input type="radio" name="reading-post-schedule" value="daily"> Daily</label>
                     <label><input type="radio" name="reading-post-schedule" value="weekdays"> Weekdays</label>
-                    <label><input type="radio" name="reading-post-schedule" value="milestones"> At milestones</label>
+                    <label><input type="radio" name="reading-post-schedule" value="milestones"> Milestone</label>
                     <label><input type="radio" name="reading-post-schedule" value="never"> Never</label>
                     <input type="radio" name="reading-post-schedule" value="weekly" hidden>
                   </fieldset>
-                  <div class="reading-post-grid">
-                    <label class="reading-post-field reading-post-clock-field">
+                  <div class="reading-post-grid reading-post-metrics-grid">
+                    <label class="reading-post-field reading-post-clock-field reading-post-time-field">
                       <span class="dialog-title-2">Time</span>
                       <input id="reading-post-time" class="dialog-input reading-post-time" type="time" value="08:00">
                     </label>
-                    <label class="reading-post-field reading-post-until-field">
-                      <span class="dialog-title-2">Deliver until</span>
+                    <label class="reading-post-field reading-post-until-field reading-post-until-group">
+                      <span class="dialog-title-2">Until</span>
                       <span class="reading-post-until-row">
-                        <span>Last milestone +</span>
                         <input id="reading-post-deliver-days" class="dialog-input reading-post-days" type="number" min="0" max="365" value="7">
-                        <span>days</span>
+                        <span>days after the last milestone</span>
                       </span>
                     </label>
                   </div>
                   <p id="reading-post-window" class="form-note paper-note reading-post-window" aria-live="polite" aria-atomic="true"></p>
-                  <button id="reading-post-sleep-button" class="paper-quiet-trigger reading-post-sleep-button" type="button" hidden>Let it sleep</button>
                   <p id="reading-post-message" class="form-note paper-note reading-post-message" aria-live="polite" aria-atomic="true"></p>
                 </div>
               </details>
@@ -562,7 +560,10 @@
             </div>
           </aside>
           <aside class="starlight-detail-card timeline-note-card paper-card paper-floating-card hidden" aria-live="polite">
-            <p class="starlight-detail-kicker">Night Log</p>
+            <div class="starlight-detail-head">
+              <p class="starlight-detail-kicker">Night Log</p>
+              <button class="starlight-detail-expand-button paper-icon-button paper-icon-button-compact" type="button" aria-pressed="false" aria-label="Expand night log" title="Expand night log">⤢</button>
+            </div>
             <p class="starlight-detail-value"></p>
             <p class="starlight-detail-date"></p>
             <p class="starlight-detail-whisper"></p>
@@ -609,15 +610,21 @@
               </div>
             </div>
             <p class="summary-line paper-note paper-note-inline engine-status-note">Choose how dates are written across the journey board.</p>
-            <div class="engine-date-format-field">
-              <span class="dialog-title-2">Date format</span>
-              <button id="engine-date-format-button" class="engine-date-format-button" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="engine-date-format-menu">
-                <span id="engine-date-format-label">Jun 29, 2026</span>
-              </button>
-              <div id="engine-date-format-menu" class="engine-date-menu paper-menu hidden" role="menu">
-                <button class="release-menu-item" type="button" data-format="storybook" role="menuitem">Jun 29, 2026</button>
-                <button class="release-menu-item" type="button" data-format="iso" role="menuitem">2026-06-29</button>
-                <button class="release-menu-item" type="button" data-format="day-first" role="menuitem">29 Jun 2026</button>
+            <div class="engine-world-clock-grid">
+              <div class="engine-clock-field">
+                <span class="dialog-title-2">Current time</span>
+                <output id="engine-current-time" class="engine-current-time" aria-live="off">08:04:17 AM</output>
+              </div>
+              <div class="engine-date-format-field">
+                <span class="dialog-title-2">Date format</span>
+                <button id="engine-date-format-button" class="engine-date-format-button" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="engine-date-format-menu">
+                  <span id="engine-date-format-label">Jun 29, 2026</span>
+                </button>
+                <div id="engine-date-format-menu" class="engine-date-menu paper-menu hidden" role="menu">
+                  <button class="release-menu-item" type="button" data-format="storybook" role="menuitem">Jun 29, 2026</button>
+                  <button class="release-menu-item" type="button" data-format="iso" role="menuitem">2026-06-29</button>
+                  <button class="release-menu-item" type="button" data-format="day-first" role="menuitem">29 Jun 2026</button>
+                </div>
               </div>
             </div>
           </div>
