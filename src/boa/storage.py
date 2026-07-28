@@ -985,8 +985,13 @@ class BoaStorage:
                 "ack_id = NULL",
                 (release_id, milestone_id, token_hash, now.isoformat(), expires_at.isoformat()),
             )
-            token_id = int(cursor.lastrowid)
-        return self.get_ack_token(token_id)
+            row = connection.execute(
+                "SELECT id FROM ack_token WHERE release_id = ? AND milestone_id = ?",
+                (release_id, milestone_id),
+            ).fetchone()
+        if row is None:
+            raise KeyError(f"Ack token for milestone {milestone_id} was not found.")
+        return self.get_ack_token(int(row["id"]))
 
     def get_ack_token(self, token_id: int) -> AckTokenRecord:
         with self.connect() as connection:
