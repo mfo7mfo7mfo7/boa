@@ -1,6 +1,6 @@
-# Boa 2.2 Release Notes
+# Boa 2.5 Release Notes
 
-Boa 2.2 makes the sky easier to read.
+Boa 2.5 makes the sky easier to read.
 
 This release does not change what Boa is. It quiets the edges: the little paper windows speak the same language, hover notes open like lifted slips of paper, close milestones stop stepping on each other, and email marks now point to the public door instead of the room behind it.
 
@@ -111,7 +111,7 @@ If SMTP is enabled and `PUBLIC_BASE_URL` is missing, Boa refuses to send the ack
 
 ## Validation
 
-Boa 2.2 should pass:
+Boa 2.5 should pass:
 
 ```bash
 node --check src/boa/static/app.js
@@ -123,10 +123,10 @@ This release was prepared with the full Python and browser-facing test suite pas
 
 ## Suggested Tag
 
-- `v2.2.0`
+- `v2.5.0`
 
 ## Closing Note
 
-Boa 2.2 is a quieter page.
+Boa 2.5 is a quieter page.
 
 The journey still moves across the horizon. The starlight still gathers. The storms still show their shape. But the little notes, marks, and windows now feel like they were always part of the same book.
