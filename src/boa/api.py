@@ -464,6 +464,16 @@ class ReleaseBlueprintResponse(BaseModel):
     version: str
     secret: str
     milestones: list[MilestoneResponse]
+    reading_post: "ReadingPostBlueprintResponse | None" = None
+
+
+class ReadingPostBlueprintResponse(BaseModel):
+    enabled: bool
+    recipients: list[str]
+    rhythm: str
+    schedule: str
+    send_time: str
+    deliver_until_days: int
 
 
 class AckResponse(BaseModel):
@@ -1511,6 +1521,18 @@ def _blueprint_response(blueprint: ReleaseBlueprint) -> ReleaseBlueprintResponse
             _milestone_response(milestone)
             for milestone in blueprint.milestones
         ],
+        reading_post=(
+            ReadingPostBlueprintResponse(
+                enabled=blueprint.reading_post.enabled,
+                recipients=list(blueprint.reading_post.recipients),
+                rhythm=blueprint.reading_post.rhythm,
+                schedule=blueprint.reading_post.schedule,
+                send_time=blueprint.reading_post.send_time,
+                deliver_until_days=blueprint.reading_post.deliver_until_days,
+            )
+            if blueprint.reading_post is not None
+            else None
+        ),
     )
 
 

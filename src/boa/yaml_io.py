@@ -7,7 +7,7 @@ from typing import Any
 
 import yaml
 
-from boa.domain import Milestone, ReleaseBlueprint
+from boa.domain import Milestone, ReadingPostBlueprint, ReleaseBlueprint
 
 
 class BlueprintValidationError(ValueError):
@@ -62,6 +62,8 @@ def dump_release_blueprint(blueprint: ReleaseBlueprint) -> str:
             for milestone in blueprint.milestones
         ],
     }
+    if blueprint.reading_post is not None:
+        payload["reading_post"] = _reading_post_to_mapping(blueprint.reading_post)
     return yaml.safe_dump(payload, sort_keys=False)
 
 
@@ -83,6 +85,7 @@ def _blueprint_from_mapping(payload: dict[str, Any]) -> ReleaseBlueprint:
         version=_require_scalar_string(payload["version"], field="version"),
         secret=_require_non_empty_string(payload["secret"], field="secret"),
         milestones=milestones,
+        reading_post=_reading_post_from_mapping(payload.get("reading_post")),
     )
 
 
@@ -156,3 +159,90 @@ def _parse_optional_string(value: Any, *, field: str) -> str | None:
         raise BlueprintValidationError(f"{field} must be a string.")
     cleaned = value.strip()
     return cleaned or None
+
+
+def _reading_post_from_mapping(payload: Any) -> ReadingPostBlueprint | None:
+    if payload is None:
+        return None
+    if not isinstance(payload, dict):
+        raise BlueprintValidationError("reading_post must be a mapping.")
+
+    recipients_value = payload.get("recipients", [])
+    if not isinstance(recipients_value, list):
+        raise BlueprintValidationError("reading_post.recipients must be a list.")
+    recipients = tuple(
+        _require_non_empty_string(item, field="reading_post.recipients")
+        for item in recipients_value
+    )
+
+    enabled_value = payload.get("enabled", False)
+    if not isinstance(enabled_value, bool):
+        raise BlueprintValidationError("reading_post.enabled must be a boolean.")
+    enabled = enabled_value
+    rhythm = _parse_reading_post_choice(
+        payload.get("rhythm", "weekly"),
+        field="reading_post.rhythm",
+        allowed={"daily", "weekly"},
+    )
+    schedule = _parse_reading_post_choice(
+        payload.get("schedule") or rhythm,
+        field="reading_post.schedule",
+        allowed={"daily", "weekdays", "milestones", "never", "weekly"},
+    )
+    send_time = _parse_reading_post_time(payload.get("send_time", "08:00"))
+    deliver_until_days = _parse_reading_post_deliver_until_days(payload.get("deliver_until_days", 7))
+
+    return ReadingPostBlueprint(
+        enabled=enabled,
+        recipients=recipients,
+        rhythm=rhythm,
+        schedule=schedule,
+        send_time=send_time,
+        deliver_until_days=deliver_until_days,
+    )
+
+
+def _reading_post_to_mapping(reading_post: ReadingPostBlueprint) -> dict[str, Any]:
+    return {
+        "enabled": reading_post.enabled,
+        "recipients": list(reading_post.recipients),
+        "rhythm": reading_post.rhythm,
+        "schedule": reading_post.schedule,
+        "send_time": reading_post.send_time,
+        "deliver_until_days": reading_post.deliver_until_days,
+    }
+
+
+def _parse_reading_post_choice(value: Any, *, field: str, allowed: set[str]) -> str:
+    if not isinstance(value, str):
+        raise BlueprintValidationError(f"{field} must be a string.")
+    cleaned = value.strip().lower()
+    if cleaned not in allowed:
+        allowed_text = ", ".join(sorted(allowed))
+        raise BlueprintValidationError(f"{field} must be one of: {allowed_text}.")
+    return cleaned
+
+
+def _parse_reading_post_time(value: Any) -> str:
+    if not isinstance(value, str):
+        raise BlueprintValidationError("reading_post.send_time must be a string.")
+    cleaned = value.strip()
+    parts = cleaned.split(":")
+    if len(parts) != 2:
+        raise BlueprintValidationError("reading_post.send_time must use HH:MM.")
+    try:
+        hour = int(parts[0])
+        minute = int(parts[1])
+    except ValueError as exc:
+        raise BlueprintValidationError("reading_post.send_time must use HH:MM.") from exc
+    if not 0 <= hour <= 23 or not 0 <= minute <= 59:
+        raise BlueprintValidationError("reading_post.send_time must be a valid 24-hour time.")
+    return f"{hour:02d}:{minute:02d}"
+
+
+def _parse_reading_post_deliver_until_days(value: Any) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise BlueprintValidationError("reading_post.deliver_until_days must be an integer.")
+    if not 0 <= value <= 365:
+        raise BlueprintValidationError("reading_post.deliver_until_days must be between 0 and 365.")
+    return value

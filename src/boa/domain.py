@@ -40,6 +40,7 @@ class ReleaseBlueprint:
     version: str
     secret: str
     milestones: tuple[Milestone, ...]
+    reading_post: "ReadingPostBlueprint | None" = None
 
     def kickoff(self) -> Milestone:
         if not self.milestones:
@@ -54,6 +55,7 @@ class ReleaseBlueprint:
             version=self.version,
             secret=self.secret,
             milestones=tuple(milestone.shift(delta) for milestone in self.milestones),
+            reading_post=self.reading_post,
         )
 
 
@@ -172,6 +174,18 @@ class BugSnapshotSubmission:
 
     open_bug_count: int
     signal_type: str = "total"
+
+
+@dataclass(slots=True, frozen=True)
+class ReadingPostBlueprint:
+    """A YAML-defined reading post subscription."""
+
+    enabled: bool
+    recipients: tuple[str, ...]
+    rhythm: str
+    schedule: str
+    send_time: str
+    deliver_until_days: int
 
 
 @dataclass(slots=True, frozen=True)

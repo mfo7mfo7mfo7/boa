@@ -25,6 +25,7 @@ from boa.domain import (
     PluginDescriptor,
     ReadingPostLogRecord,
     ReadingPostSubscription,
+    ReadingPostBlueprint,
     ReleaseBlueprint,
     ReleaseRecord,
     ReleaseStarlight,
@@ -348,6 +349,7 @@ class BoaStorage:
                 )
 
     def create_release(self, blueprint: ReleaseBlueprint) -> ReleaseRecord:
+        reading_post = blueprint.reading_post
         with self.connect() as connection:
             self._ensure_unique_release_version(connection, blueprint.product, blueprint.version)
             cursor = connection.execute(
@@ -375,6 +377,17 @@ class BoaStorage:
                     )
                     for milestone in blueprint.milestones
                 ],
+            )
+
+        if reading_post is not None:
+            self.upsert_reading_post_subscription(
+                release_id,
+                enabled=reading_post.enabled,
+                recipients=reading_post.recipients,
+                rhythm=reading_post.rhythm,
+                schedule=reading_post.schedule,
+                send_time=reading_post.send_time,
+                deliver_until_days=reading_post.deliver_until_days,
             )
 
         return self.get_release(release_id)
@@ -418,6 +431,15 @@ class BoaStorage:
                 """,
                 (release_id,),
             ).fetchall()
+            reading_post_row = connection.execute(
+                """
+                SELECT enabled, recipients, rhythm, schedule, send_time,
+                       deliver_until_days
+                FROM reading_post_subscription
+                WHERE release_id = ?
+                """,
+                (release_id,),
+            ).fetchone()
 
         blueprint = ReleaseBlueprint(
             product=str(release_row["product"]),
@@ -431,6 +453,22 @@ class BoaStorage:
                     note=str(row["note"]) if row["note"] else None,
                 )
                 for row in milestone_rows
+            ),
+            reading_post=(
+                ReadingPostBlueprint(
+                    enabled=bool(reading_post_row["enabled"]),
+                    recipients=tuple(
+                        str(item).strip()
+                        for item in json.loads(str(reading_post_row["recipients"]))
+                        if str(item).strip()
+                    ),
+                    rhythm=str(reading_post_row["rhythm"]),
+                    schedule=str(reading_post_row["schedule"]),
+                    send_time=str(reading_post_row["send_time"]),
+                    deliver_until_days=int(reading_post_row["deliver_until_days"]),
+                )
+                if reading_post_row is not None
+                else None
             ),
         )
         return ReleaseRecord(id=int(release_row["id"]), blueprint=blueprint)

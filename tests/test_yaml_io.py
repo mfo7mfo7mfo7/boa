@@ -113,6 +113,44 @@ milestones:
     assert reloaded.milestones[1].email is None
 
 
+def test_dump_and_load_release_blueprint_preserves_reading_post() -> None:
+    blueprint_text = """
+product: FortiSASE
+version: 26.2
+secret: boa-262
+
+reading_post:
+  enabled: true
+  recipients:
+    - rose@example.com
+    - fox@example.com
+  rhythm: daily
+  schedule: weekdays
+  send_time: 09:05
+  deliver_until_days: 12
+
+milestones:
+  - name: Kickoff
+    expected: 2026-01-01
+    owner: pm
+"""
+    blueprint = load_release_blueprint(blueprint_text)
+    assert blueprint.reading_post is not None
+    assert blueprint.reading_post.enabled is True
+    assert blueprint.reading_post.recipients == ("rose@example.com", "fox@example.com")
+    assert blueprint.reading_post.rhythm == "daily"
+    assert blueprint.reading_post.schedule == "weekdays"
+    assert blueprint.reading_post.send_time == "09:05"
+    assert blueprint.reading_post.deliver_until_days == 12
+
+    exported = dump_release_blueprint(blueprint)
+    assert "reading_post:" in exported
+    assert "rose@example.com" in exported
+    assert "schedule: weekdays" in exported
+    reloaded = load_release_blueprint(exported)
+    assert reloaded.reading_post == blueprint.reading_post
+
+
 def test_import_preview_and_create_from_yaml(tmp_path: Path) -> None:
     from fastapi.testclient import TestClient
     from boa.api import create_app
@@ -124,6 +162,16 @@ def test_import_preview_and_create_from_yaml(tmp_path: Path) -> None:
 product: Voyager
 version: 3.0
 secret: voyager-30
+
+reading_post:
+  enabled: true
+  recipients:
+    - scout@example.com
+  rhythm: weekly
+  schedule: milestones
+  send_time: 08:15
+  deliver_until_days: 5
+
 milestones:
   - name: Launch Window
     expected: 2026-08-01
@@ -148,3 +196,10 @@ milestones:
         export = client.get(f"/api/releases/{release_id}/export")
         assert export.status_code == 200
         assert "product: Voyager" in export.text
+        assert "reading_post:" in export.text
+        assert "scout@example.com" in export.text
+
+        reading_post = client.get(f"/api/releases/{release_id}/reading-post")
+        assert reading_post.status_code == 200
+        assert reading_post.json()["enabled"] is True
+        assert reading_post.json()["recipients"] == ["scout@example.com"]

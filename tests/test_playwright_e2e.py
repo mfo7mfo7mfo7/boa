@@ -504,10 +504,10 @@ def test_reading_post_lives_inside_tend_journey_draft(page: Page) -> None:
     expect(page.locator("#reading-post-panel")).not_to_contain_text("Keep the Post")
     expect(page.locator("#reading-post-panel")).not_to_contain_text("World clock")
     expect(page.locator("#reading-post-recipients")).to_have_value("rose@example.com")
-    expect(page.locator("#reading-post-window")).to_contain_text("Starts Jun 14, 2026. Ends Aug 13, 2026.")
+    expect(page.locator("#reading-post-window")).to_contain_text("Starts Jun 14, 2026. Ends Aug 13, 2026. Daily.")
 
     page.locator("#reading-post-deliver-days").fill("8")
-    expect(page.locator("#reading-post-window")).to_contain_text("Starts Jun 14, 2026. Ends Aug 14, 2026.")
+    expect(page.locator("#reading-post-window")).to_contain_text("Starts Jun 14, 2026. Ends Aug 14, 2026. Daily.")
     persisted_before_save = get_reading_post_via_api(page, release_id)
     assert persisted_before_save["deliver_until_days"] == 7
 
@@ -518,7 +518,7 @@ def test_reading_post_lives_inside_tend_journey_draft(page: Page) -> None:
     expect(page.locator("#reading-post-message")).to_contain_text("No notes will be sent.")
 
     page.locator('input[name="reading-post-schedule"][value="daily"]').check(force=True)
-    expect(page.locator("#reading-post-window")).to_contain_text("Starts Jun 14, 2026. Ends Aug 14, 2026.")
+    expect(page.locator("#reading-post-window")).to_contain_text("Starts Jun 14, 2026. Ends Aug 14, 2026. Daily.")
 
     page.locator("#journey-secret").fill("wrong-key")
     page.locator("#journey-create-button").click()

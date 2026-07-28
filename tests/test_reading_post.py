@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from boa.api import create_app
 from boa.domain import Milestone, ReleaseBlueprint, StarlightDetail, StarlightMetrics
 from boa.email import load_smtp_config
-from boa.reading_post_service import send_due_reading_posts
+from boa.reading_post_service import send_due_reading_posts, send_reading_post
 from boa.storage import BoaStorage
 
 
@@ -132,6 +132,117 @@ def test_reading_post_subscription_rejects_bad_shape(tmp_path: Path) -> None:
         assert bad_schedule.status_code == 422
         assert bad_until.status_code == 422
         assert wrong_secret.status_code == 403
+
+
+def test_reading_post_send_logs_sent_email_without_smtp(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("os.environ", {})
+    storage = BoaStorage(tmp_path / "boa.db")
+    storage.initialize()
+    release = storage.create_release(
+        ReleaseBlueprint(
+            product="Lantern Vale",
+            version="1.6",
+            secret="demo",
+            milestones=(Milestone(name="Kickoff", expected=date(2026, 7, 21), owner="rose"),),
+        )
+    )
+    storage.update_release_starlight(
+        release.id,
+        starlight=73,
+        whisper="The release is gathering steadily.",
+        detail=StarlightDetail(type="markdown", content="A hill was crossed."),
+        metrics=StarlightMetrics(done=5, total=9, blocked=1),
+        observed_on=date(2026, 7, 27),
+    )
+    storage.add_bug_snapshot(
+        release.id,
+        open_bug_count=2,
+        observed_at=datetime(2026, 7, 27, 7, 0, tzinfo=timezone.utc),
+    )
+    storage.upsert_reading_post_subscription(
+        release.id,
+        enabled=True,
+        recipients=("rose@example.com", "fox@example.com"),
+        rhythm="daily",
+        schedule="daily",
+        send_time="08:00",
+    )
+
+    sent: list[dict] = []
+
+    def fake_send_email(to: str, subject: str, body_text: str, body_html: str | None) -> None:
+        sent.append({"to": to, "subject": subject, "body_text": body_text, "body_html": body_html})
+
+    result = send_reading_post(
+        storage,
+        load_smtp_config(),
+        release.id,
+        now=datetime(2026, 7, 27, 8, 0, tzinfo=timezone.utc),
+        send_email_func=fake_send_email,
+    )
+
+    assert result.sent is True
+    assert result.log_id is not None
+    assert [item["to"] for item in sent] == ["rose@example.com", "fox@example.com"]
+    assert sent[0]["subject"] == "Lantern Vale 1.6 · Today’s Reading"
+    log = storage.get_reading_post_log(result.log_id)
+    assert log.status == "sent"
+    assert log.recipients == ("rose@example.com", "fox@example.com")
+    assert log.subject == "Lantern Vale 1.6 · Today’s Reading"
+
+
+def test_reading_post_send_logs_failure_without_smtp(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("os.environ", {})
+    storage = BoaStorage(tmp_path / "boa.db")
+    storage.initialize()
+    release = storage.create_release(
+        ReleaseBlueprint(
+            product="Lantern Vale",
+            version="1.6",
+            secret="demo",
+            milestones=(Milestone(name="Kickoff", expected=date(2026, 7, 21), owner="rose"),),
+        )
+    )
+    storage.update_release_starlight(
+        release.id,
+        starlight=73,
+        whisper="The release is gathering steadily.",
+        detail=StarlightDetail(type="markdown", content="A hill was crossed."),
+        metrics=StarlightMetrics(done=5, total=9, blocked=1),
+        observed_on=date(2026, 7, 27),
+    )
+    storage.upsert_reading_post_subscription(
+        release.id,
+        enabled=True,
+        recipients=("rose@example.com",),
+        rhythm="daily",
+        schedule="daily",
+        send_time="08:00",
+    )
+
+    def fake_send_email(to: str, subject: str, body_text: str, body_html: str | None) -> None:
+        raise RuntimeError("smtp down")
+
+    result = send_reading_post(
+        storage,
+        load_smtp_config(),
+        release.id,
+        now=datetime(2026, 7, 27, 8, 0, tzinfo=timezone.utc),
+        send_email_func=fake_send_email,
+    )
+
+    assert result.sent is False
+    assert result.error == "smtp down"
+    assert result.log_id is not None
+    log = storage.get_reading_post_log(result.log_id)
+    assert log.status == "failed"
+    assert log.error == "smtp down"
 
 
 def test_due_reading_post_sends_latest_observation_once(
