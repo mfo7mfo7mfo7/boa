@@ -361,8 +361,19 @@ def test_observation_notebook_records_starlight_storms_markdown_and_trail(page: 
     expect(row.locator(".release-reading-card")).to_contain_text("Confidence is still gathering quietly.")
 
     row.locator(".starlight-event").first.hover()
-    expect(row.locator(".starlight-detail-card")).to_be_visible()
-    expect(row.locator(".starlight-detail-card")).to_contain_text("Confidence is still gathering quietly.")
+    detail_card = row.locator(".starlight-detail-card")
+    expand_button = detail_card.locator(".starlight-detail-expand-button")
+    expect(detail_card).to_be_visible()
+    expect(expand_button).to_be_visible()
+    expect(detail_card).to_contain_text("Confidence is still gathering quietly.")
+    before_box = detail_card.bounding_box()
+    assert before_box is not None
+
+    expand_button.click()
+    expect(detail_card).to_have_class(re.compile(r".*\bis-expanded\b.*"))
+    after_box = detail_card.bounding_box()
+    assert after_box is not None
+    assert after_box["width"] > before_box["width"]
 
 
 def test_engine_room_date_language_updates_visible_timeline_dates(page: Page) -> None:

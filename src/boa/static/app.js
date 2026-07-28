@@ -2665,6 +2665,39 @@ function initializeTimelineNoteCard(card, hideCallback) {
   });
 }
 
+function initializeStarlightDetailCard(card) {
+  if (!card || card.dataset.starlightReady === "true") {
+    return;
+  }
+  card.dataset.starlightReady = "true";
+  const button = card.querySelector(".starlight-detail-expand-button");
+  if (!button) {
+    return;
+  }
+
+  const syncButtonState = (expanded) => {
+    button.setAttribute("aria-pressed", String(expanded));
+    button.setAttribute("aria-label", expanded ? "Collapse night log" : "Expand night log");
+    button.title = expanded ? "Collapse night log" : "Expand night log";
+    button.textContent = expanded ? "⤡" : "⤢";
+  };
+
+  syncButtonState(false);
+  card._syncStarlightExpandState = syncButtonState;
+  button.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const expanded = !card.classList.contains("is-expanded");
+    card.classList.toggle("is-expanded", expanded);
+    syncButtonState(expanded);
+    const point = card._starlightPoint;
+    const svg = card._starlightSvg;
+    if (point && svg) {
+      window.requestAnimationFrame(() => positionStoryCard(card, svg, point, { preferred: "center" }));
+    }
+  });
+}
+
 function revealTimelineNoteCard(card, svg, point, { verticalGap = 20, preferred = "center" } = {}) {
   if (!card) {
     return;
@@ -2716,6 +2749,7 @@ function bindStarlightDetail(marker, svg, detailCard, point, event) {
   }
 
   initializeTimelineNoteCard(detailCard, hideStarlightDetail);
+  initializeStarlightDetailCard(detailCard);
   const show = () => showStarlightDetail(detailCard, svg, point, event);
   const hide = () => {
     detailCard.dataset.markerHover = "false";
@@ -2755,6 +2789,8 @@ function bindBugWaveDetail(marker, svg, detailCard, point, snapshot) {
 function showStarlightDetail(detailCard, svg, point, event) {
   const body = detailCard.querySelector(".starlight-detail-body");
   const stats = detailCard.querySelector(".starlight-detail-stats");
+  detailCard._starlightPoint = point;
+  detailCard._starlightSvg = svg;
   detailCard.querySelector(".starlight-detail-value").textContent = `✦ ${event.starlight} ${describeStarlightState(event.starlight)}`;
   detailCard.querySelector(".starlight-detail-date").textContent = formatDate(event.display_date || event.date);
   detailCard.querySelector(".starlight-detail-whisper").textContent = event.whisper;
@@ -2769,11 +2805,18 @@ function showStarlightDetail(detailCard, svg, point, event) {
     stats.classList.add("hidden");
   }
 
+  if (typeof detailCard._syncStarlightExpandState === "function") {
+    detailCard._syncStarlightExpandState(detailCard.classList.contains("is-expanded"));
+  }
   detailCard.dataset.hovering = detailCard.dataset.hovering || "false";
   revealTimelineNoteCard(detailCard, svg, point, { preferred: "center" });
 }
 
 function hideStarlightDetail(detailCard) {
+  detailCard.classList.remove("is-expanded");
+  if (typeof detailCard._syncStarlightExpandState === "function") {
+    detailCard._syncStarlightExpandState(false);
+  }
   hideTimelineNoteCard(detailCard);
 }
 
