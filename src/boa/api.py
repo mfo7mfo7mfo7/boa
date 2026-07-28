@@ -16,6 +16,7 @@ from starlette.staticfiles import StaticFiles
 
 from boa.domain import (
     BugSnapshotSubmission,
+    ReadingPostSubscription,
     Milestone,
     MilestoneRecord,
     NotificationRecord,
@@ -48,6 +49,10 @@ from boa.reminder_service import (
     send_acknowledgement_confirmation,
     send_due_reminder_emails,
 )
+from boa.reading_post_service import (
+    ReadingPostSendResult,
+    send_due_reading_posts,
+)
 
 
 MAX_PRODUCT_LENGTH = 120
@@ -58,6 +63,10 @@ MAX_OWNER_LENGTH = 160
 MAX_NOTE_LENGTH = 5000
 MAX_WHISPER_LENGTH = 280
 MAX_STARLIGHT_DETAIL_LENGTH = 20 * 1024
+MAX_READING_POST_RECIPIENTS = 20
+VALID_READING_POST_RHYTHMS = {"daily", "weekly"}
+VALID_READING_POST_SCHEDULES = {"daily", "weekdays", "milestones", "never", "weekly"}
+MAX_READING_POST_DELIVER_UNTIL_DAYS = 365
 
 
 def _clean_text(value: str, *, field: str, max_length: int) -> str:
@@ -210,6 +219,17 @@ class AckRequest(BaseModel):
         return _clean_text(value, field="ack_name", max_length=MAX_OWNER_LENGTH)
 
 
+class AckEmailRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    secret: str
+
+    @field_validator("secret")
+    @classmethod
+    def clean_secret(cls, value: str) -> str:
+        return _clean_text(value, field="secret", max_length=MAX_SECRET_LENGTH)
+
+
 class SmtpTestRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -228,6 +248,120 @@ class SmtpTestResponse(BaseModel):
     ok: bool
     message: str
     error: str | None = None
+
+
+class ReadingPostRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    secret: str
+    enabled: bool = False
+    recipients: list[str] = Field(default_factory=list)
+    rhythm: str = "weekly"
+    schedule: str | None = None
+    send_time: str = "08:00"
+    deliver_until_days: int = 7
+
+    @field_validator("secret")
+    @classmethod
+    def clean_secret(cls, value: str) -> str:
+        return _clean_text(value, field="secret", max_length=MAX_SECRET_LENGTH)
+
+    @field_validator("recipients")
+    @classmethod
+    def clean_recipients(cls, value: list[str]) -> list[str]:
+        cleaned: list[str] = []
+        seen: set[str] = set()
+        for raw in value:
+            candidate = raw.strip()
+            if not candidate:
+                continue
+            if not is_valid_email(candidate):
+                raise ValueError("recipients must contain valid email addresses.")
+            key = candidate.lower()
+            if key not in seen:
+                cleaned.append(candidate)
+                seen.add(key)
+        if len(cleaned) > MAX_READING_POST_RECIPIENTS:
+            raise ValueError(f"recipients must contain {MAX_READING_POST_RECIPIENTS} addresses or fewer.")
+        return cleaned
+
+    @field_validator("rhythm")
+    @classmethod
+    def clean_rhythm(cls, value: str) -> str:
+        cleaned = value.strip().lower()
+        if cleaned not in VALID_READING_POST_RHYTHMS:
+            raise ValueError("rhythm must be daily or weekly.")
+        return cleaned
+
+    @field_validator("schedule")
+    @classmethod
+    def clean_schedule(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip().lower()
+        if cleaned not in VALID_READING_POST_SCHEDULES:
+            raise ValueError("schedule must be daily, weekdays, milestones, never, or weekly.")
+        return cleaned
+
+    @field_validator("send_time")
+    @classmethod
+    def clean_send_time(cls, value: str) -> str:
+        cleaned = value.strip()
+        parts = cleaned.split(":")
+        if len(parts) != 2:
+            raise ValueError("send_time must use HH:MM.")
+        try:
+            hour = int(parts[0])
+            minute = int(parts[1])
+        except ValueError as exc:
+            raise ValueError("send_time must use HH:MM.") from exc
+        if not 0 <= hour <= 23 or not 0 <= minute <= 59:
+            raise ValueError("send_time must be a valid 24-hour time.")
+        return f"{hour:02d}:{minute:02d}"
+
+    @field_validator("deliver_until_days")
+    @classmethod
+    def clean_deliver_until_days(cls, value: int) -> int:
+        if not 0 <= value <= MAX_READING_POST_DELIVER_UNTIL_DAYS:
+            raise ValueError(
+                f"deliver_until_days must be between 0 and {MAX_READING_POST_DELIVER_UNTIL_DAYS}."
+            )
+        return value
+
+    @model_validator(mode="after")
+    def validate_enabled_subscription(self) -> "ReadingPostRequest":
+        effective_schedule = self.schedule or self.rhythm
+        if effective_schedule == "never":
+            self.enabled = False
+        if self.enabled and not self.recipients:
+            raise ValueError("recipients are required when Reading Post is enabled.")
+        return self
+
+
+class ReadingPostDeliveryWindowResponse(BaseModel):
+    starts_at: str | None
+    ends_at: str | None
+    deliver_until_days: int
+
+
+class ReadingPostResponse(BaseModel):
+    release_id: int
+    enabled: bool
+    recipients: list[str]
+    rhythm: str
+    schedule: str
+    send_time: str
+    deliver_until_days: int
+    delivery_window: ReadingPostDeliveryWindowResponse
+    last_sent_at: str | None = None
+    smtp_ready: bool
+
+
+class SendReadingPostsResponse(BaseModel):
+    sent: int
+    failed: int
+    results: list[dict]
+    message: str
 
 
 class BugSnapshotCreateRequest(BaseModel):
@@ -570,6 +704,7 @@ def _run_scheduled_reminder_cycle(storage: BoaStorage) -> None:
         smtp_config = load_smtp_config()
         if smtp_config.ready:
             send_due_reminder_emails(storage, smtp_config, as_of=date.today())
+            send_due_reading_posts(storage, smtp_config)
         else:
             storage.generate_due_notifications(as_of=date.today())
     except Exception as exc:  # noqa: BLE001
@@ -599,7 +734,7 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
             with contextlib.suppress(asyncio.CancelledError):
                 await app.state.reminder_scheduler
 
-    app = FastAPI(title="Boa API", version="2.0.0", lifespan=lifespan)
+    app = FastAPI(title="Boa API", version="2.2.0", lifespan=lifespan)
     app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 
     def get_storage() -> BoaStorage:
@@ -941,8 +1076,18 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
     @app.post("/api/milestones/{milestone_id}/ack-email", response_model=AckEmailResponse)
     def send_milestone_ack_email(
         milestone_id: int,
+        request: AckEmailRequest,
         storage: BoaStorage = Depends(get_storage),
     ) -> AckEmailResponse:
+        try:
+            milestone = storage.get_milestone(milestone_id)
+            release = storage.get_release(milestone.release_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+        if request.secret != release.blueprint.secret:
+            raise HTTPException(status_code=403, detail="Invalid journey key.")
+
         try:
             smtp_config = load_smtp_config()
         except SmtpConfigurationError as exc:
@@ -951,11 +1096,6 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
         if not smtp_config.ready:
             status = get_smtp_status(smtp_config)
             raise HTTPException(status_code=400, detail=status["message"])
-
-        try:
-            storage.get_milestone(milestone_id)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
         result = send_ack_request_email(storage, smtp_config, milestone_id=milestone_id)
         if result.sent:
@@ -1140,6 +1280,41 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return _observation_workspace_response(release, starlight)
 
+    @app.get("/api/releases/{release_id}/reading-post", response_model=ReadingPostResponse)
+    def get_reading_post_subscription(
+        release_id: int,
+        storage: BoaStorage = Depends(get_storage),
+    ) -> ReadingPostResponse:
+        try:
+            storage.get_release(release_id)
+            subscription = storage.get_reading_post_subscription(release_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return _reading_post_response(release_id, subscription, storage)
+
+    @app.put("/api/releases/{release_id}/reading-post", response_model=ReadingPostResponse)
+    def update_reading_post_subscription(
+        release_id: int,
+        request: ReadingPostRequest,
+        storage: BoaStorage = Depends(get_storage),
+    ) -> ReadingPostResponse:
+        try:
+            release = storage.get_release(release_id)
+            if request.secret != release.blueprint.secret:
+                raise HTTPException(status_code=403, detail="Invalid journey key.")
+            subscription = storage.upsert_reading_post_subscription(
+                release_id,
+                enabled=request.enabled,
+                recipients=tuple(request.recipients),
+                rhythm=request.rhythm,
+                schedule=request.schedule or request.rhythm,
+                send_time=request.send_time,
+                deliver_until_days=request.deliver_until_days,
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return _reading_post_response(release_id, subscription, storage)
+
     @app.post("/api/notifications/run", response_model=list[NotificationResponse])
     def run_notifications(
         request: ReminderRunRequest,
@@ -1182,6 +1357,30 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
         ]
         message = f"Sent {sent} reminder email(s)." if failed == 0 else f"Sent {sent}, failed {failed}."
         return SendRemindersResponse(sent=sent, failed=failed, results=result_payload, message=message)
+
+    @app.post("/api/reading-posts/send", response_model=SendReadingPostsResponse)
+    def send_reading_post_emails(
+        storage: BoaStorage = Depends(get_storage),
+    ) -> SendReadingPostsResponse:
+        try:
+            smtp_config = load_smtp_config()
+        except SmtpConfigurationError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        if not smtp_config.ready:
+            status = get_smtp_status(smtp_config)
+            raise HTTPException(status_code=400, detail=status["message"])
+
+        results = send_due_reading_posts(storage, smtp_config)
+        sent = sum(1 for result in results if result.sent)
+        failed = len(results) - sent
+        message = f"Sent {sent} Reading Post email(s)." if failed == 0 else f"Sent {sent}, failed {failed}."
+        return SendReadingPostsResponse(
+            sent=sent,
+            failed=failed,
+            results=[_reading_post_send_result(result) for result in results],
+            message=message,
+        )
 
     @app.get("/api/releases/{release_id}/export", response_class=PlainTextResponse)
     def export_release(
@@ -1364,6 +1563,76 @@ def _email_log_response(email) -> EmailLogResponse:
         status=email.status,
         error=email.error,
     )
+
+
+def _smtp_ready() -> bool:
+    try:
+        return load_smtp_config().ready
+    except SmtpConfigurationError:
+        return False
+
+
+def _reading_post_delivery_window(
+    storage: BoaStorage,
+    release_id: int,
+    deliver_until_days: int,
+) -> ReadingPostDeliveryWindowResponse:
+    milestones = storage.list_milestones(release_id)
+    if not milestones:
+        return ReadingPostDeliveryWindowResponse(
+            starts_at=None,
+            ends_at=None,
+            deliver_until_days=deliver_until_days,
+        )
+    starts_at = min(item.expected for item in milestones)
+    ends_at = max(item.expected for item in milestones) + timedelta(days=deliver_until_days)
+    return ReadingPostDeliveryWindowResponse(
+        starts_at=starts_at.isoformat(),
+        ends_at=ends_at.isoformat(),
+        deliver_until_days=deliver_until_days,
+    )
+
+
+def _reading_post_response(
+    release_id: int,
+    subscription: ReadingPostSubscription | None,
+    storage: BoaStorage,
+) -> ReadingPostResponse:
+    if subscription is None:
+        return ReadingPostResponse(
+            release_id=release_id,
+            enabled=False,
+            recipients=[],
+            rhythm="weekly",
+            schedule="never",
+            send_time="08:00",
+            deliver_until_days=7,
+            delivery_window=_reading_post_delivery_window(storage, release_id, 7),
+            last_sent_at=None,
+            smtp_ready=_smtp_ready(),
+        )
+    return ReadingPostResponse(
+        release_id=release_id,
+        enabled=subscription.enabled,
+        recipients=list(subscription.recipients),
+        rhythm=subscription.rhythm,
+        schedule=subscription.schedule,
+        send_time=subscription.send_time,
+        deliver_until_days=subscription.deliver_until_days,
+        delivery_window=_reading_post_delivery_window(storage, release_id, subscription.deliver_until_days),
+        last_sent_at=subscription.last_sent_at.isoformat() if subscription.last_sent_at else None,
+        smtp_ready=_smtp_ready(),
+    )
+
+
+def _reading_post_send_result(result: ReadingPostSendResult) -> dict:
+    return {
+        "release_id": result.release_id,
+        "recipients": list(result.recipients),
+        "sent": result.sent,
+        "error": result.error,
+        "log_id": result.log_id,
+    }
 
 
 def _reminder_state_response(state: ReminderState) -> ReminderStateResponse:

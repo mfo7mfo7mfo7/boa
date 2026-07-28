@@ -146,7 +146,7 @@ def test_send_ack_email_requires_smtp_ready(tmp_path: Path, monkeypatch: pytest.
         ).json()
         milestone_id = created["milestones"][0]["id"]
 
-        response = client.post(f"/api/milestones/{milestone_id}/ack-email")
+        response = client.post(f"/api/milestones/{milestone_id}/ack-email", json={"secret": "boa-262"})
         assert response.status_code == 400
 
 
@@ -199,7 +199,7 @@ def test_send_ack_email_succeeds_when_smtp_ready(
 
         monkeypatch.setattr("boa.reminder_service.send_email", fake_send_email)
 
-        response = client.post(f"/api/milestones/{milestone_id}/ack-email")
+        response = client.post(f"/api/milestones/{milestone_id}/ack-email", json={"secret": "boa-262"})
         assert response.status_code == 200
         payload = response.json()
         assert payload["sent"] is True
@@ -220,6 +220,48 @@ def test_send_ack_email_succeeds_when_smtp_ready(
     assert len(logs) == 1
     assert logs[0].recipient == "qa@example.com"
     assert logs[0].template_name == "ack_request"
+
+
+def test_send_ack_email_requires_journey_key(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    env = {
+        "BOA_SMTP_ENABLED": "true",
+        "BOA_SMTP_HOST": "smtp.example.com",
+        "BOA_SMTP_FROM": "boa@example.com",
+        "PUBLIC_BASE_URL": "http://gitlab.qa:4001/",
+    }
+    monkeypatch.setattr("os.environ", env)
+
+    sent_emails: list[dict] = []
+
+    def fake_send_email(config, *, to, subject, body_text, body_html=None):
+        sent_emails.append({"to": to, "subject": subject})
+
+    monkeypatch.setattr("boa.reminder_service.send_email", fake_send_email)
+
+    app = create_app(BoaStorage(tmp_path / "boa.db"))
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/releases",
+            json={"product": "FortiSASE", "version": "26.2", "secret": "boa-262"},
+        ).json()
+        milestone_id = created["milestones"][0]["id"]
+        client.put(
+            f"/api/milestones/{milestone_id}",
+            json={
+                "name": "Kickoff",
+                "expected": "2026-08-01",
+                "owner": "qa",
+                "email": "qa@example.com",
+            },
+        )
+
+        response = client.post(f"/api/milestones/{milestone_id}/ack-email", json={"secret": "wrong-key"})
+
+    assert response.status_code == 403
+    assert sent_emails == []
 
 
 def test_send_ack_email_requires_public_base_url(
@@ -258,7 +300,7 @@ def test_send_ack_email_requires_public_base_url(
 
         monkeypatch.setattr("boa.reminder_service.send_email", fake_send_email)
 
-        response = client.post(f"/api/milestones/{milestone_id}/ack-email")
+        response = client.post(f"/api/milestones/{milestone_id}/ack-email", json={"secret": "boa-262"})
         assert response.status_code == 200
         payload = response.json()
         assert payload["sent"] is False
@@ -282,7 +324,7 @@ def test_send_ack_email_fails_without_valid_email(tmp_path: Path, monkeypatch: p
         ).json()
         milestone_id = created["milestones"][0]["id"]
 
-        response = client.post(f"/api/milestones/{milestone_id}/ack-email")
+        response = client.post(f"/api/milestones/{milestone_id}/ack-email", json={"secret": "boa-262"})
         assert response.status_code == 200
         payload = response.json()
         assert payload["sent"] is False
@@ -455,7 +497,7 @@ def test_secret_token_ack_flow_end_to_end(tmp_path: Path) -> None:
         assert info_before.json()["valid"] is False
 
         # Request ack email creates a token
-        ack_email = client.post(f"/api/milestones/{milestone_id}/ack-email")
+        ack_email = client.post(f"/api/milestones/{milestone_id}/ack-email", json={"secret": "comet-20"})
         # Without SMTP configured, this returns 400. That is OK; we test token creation path separately.
         if ack_email.status_code == 200:
             token = ack_email.json()["token"]

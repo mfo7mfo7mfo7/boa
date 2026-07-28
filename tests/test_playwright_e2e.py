@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import socket
+import re
 import threading
 import time
 import urllib.request
@@ -119,6 +120,49 @@ def update_milestone_via_api(page: Page, milestone: dict, *, expected: date, own
             if (!response.ok) throw new Error(await response.text());
         }""",
         [milestone, expected.isoformat(), owner],
+    )
+
+
+def update_reading_post_via_api(
+    page: Page,
+    release_id: int,
+    *,
+    secret: str,
+    recipients: list[str],
+    schedule: str = "daily",
+    send_time: str = "08:00",
+    deliver_until_days: int = 7,
+) -> dict:
+    return page.evaluate(
+        """async ([releaseId, secret, recipients, schedule, sendTime, deliverUntilDays]) => {
+            const response = await fetch(`/api/releases/${releaseId}/reading-post`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                secret,
+                enabled: schedule !== 'never',
+                recipients,
+                rhythm: schedule === 'daily' ? 'daily' : 'weekly',
+                schedule,
+                send_time: sendTime,
+                deliver_until_days: deliverUntilDays,
+              }),
+            });
+            if (!response.ok) throw new Error(await response.text());
+            return response.json();
+        }""",
+        [release_id, secret, recipients, schedule, send_time, deliver_until_days],
+    )
+
+
+def get_reading_post_via_api(page: Page, release_id: int) -> dict:
+    return page.evaluate(
+        """async (releaseId) => {
+            const response = await fetch(`/api/releases/${releaseId}/reading-post`);
+            if (!response.ok) throw new Error(await response.text());
+            return response.json();
+        }""",
+        release_id,
     )
 
 
@@ -259,11 +303,20 @@ def test_observation_notebook_records_starlight_storms_markdown_and_trail(page: 
 
     page.locator("#observation-whisper").fill("Confidence is gathering near the horizon.")
     page.locator("#observation-detail").fill(
-        "## Completed\n\n- Integration path feels dependable\n\n## Risk\n\n- One storm still needs watching"
+        "## Completed\n\n"
+        "- **Ready NFR (id 1315432):** Integration path feels dependable\n\n"
+        "## Risk\n\n"
+        "- One storm still needs watching\n\n"
+        "| Status | Count |\n"
+        "|--------|-------|\n"
+        "| Ready  | 1     |\n"
     )
     page.locator("#observation-detail-preview-toggle").click()
     expect(page.locator("#observation-detail-preview")).to_be_visible()
     expect(page.locator("#observation-detail-preview")).to_contain_text("Integration path feels dependable")
+    expect(page.locator("#observation-detail-preview strong")).to_contain_text("Ready NFR")
+    expect(page.locator("#observation-detail-preview table")).to_be_visible()
+    expect(page.locator("#observation-detail-preview table")).to_contain_text("Ready")
     page.locator("#observation-detail-preview-toggle").click()
     set_range_value(page, "#observation-starlight", 73)
     expect(page.locator("#observation-starlight-readout")).to_contain_text("73")
@@ -300,6 +353,16 @@ def test_observation_notebook_records_starlight_storms_markdown_and_trail(page: 
     updated_item = next(release_item for release_item in updated if release_item["id"] == release_id)
     assert updated_item["starlight"]["whisper"] == "Confidence is still gathering quietly."
     assert [event["starlight"] for event in updated_item["starlight_trail"]] == [73]
+
+    expect(row.locator(".starlight-summary")).not_to_have_attribute("title", re.compile(".+"))
+    row.locator(".starlight-whisper-trigger").hover()
+    expect(row.locator(".release-reading-card")).to_be_visible()
+    expect(row.locator(".release-reading-card")).to_contain_text("Today’s Reading")
+    expect(row.locator(".release-reading-card")).to_contain_text("Confidence is still gathering quietly.")
+
+    row.locator(".starlight-event").first.hover()
+    expect(row.locator(".starlight-detail-card")).to_be_visible()
+    expect(row.locator(".starlight-detail-card")).to_contain_text("Confidence is still gathering quietly.")
 
 
 def test_engine_room_date_language_updates_visible_timeline_dates(page: Page) -> None:
@@ -402,6 +465,64 @@ def test_ack_edit_and_move_milestone_surfaces(page: Page) -> None:
         "() => fetch('/api/timeline').then((r) => r.json()).then((items) => items[0].milestones[0].expected)"
     )
     assert after != before
+
+
+def test_reading_post_lives_inside_tend_journey_draft(page: Page) -> None:
+    release = create_release_via_api(page, product="Lantern Vale", version="1.6", secret="lantern-key")
+    release_id = release["id"]
+    update_milestone_via_api(page, release["milestones"][0], expected=date(2026, 6, 14))
+    update_milestone_via_api(page, release["milestones"][1], expected=date(2026, 8, 6))
+    update_reading_post_via_api(
+        page,
+        release_id,
+        secret="lantern-key",
+        recipients=["rose@example.com"],
+        schedule="daily",
+        send_time="08:00",
+        deliver_until_days=7,
+    )
+
+    page.reload()
+    row = release_row(page, "Lantern Vale")
+    row.locator(".release-menu-button").click()
+    page.locator('.release-menu-item[data-action="settings"]').click()
+    expect(page.locator("#journey-dialog")).to_be_visible()
+
+    page.locator("#reading-post-panel > summary").click()
+    expect(page.locator("#reading-post-panel")).to_have_attribute("open", "")
+    expect(page.locator("#reading-post-panel")).not_to_contain_text("Keep the Post")
+    expect(page.locator("#reading-post-panel")).not_to_contain_text("World clock")
+    expect(page.locator("#reading-post-recipients")).to_have_value("rose@example.com")
+    expect(page.locator("#reading-post-window")).to_contain_text("Starts Jun 14, 2026. Ends Aug 13, 2026.")
+
+    page.locator("#reading-post-deliver-days").fill("8")
+    expect(page.locator("#reading-post-window")).to_contain_text("Starts Jun 14, 2026. Ends Aug 14, 2026.")
+    persisted_before_save = get_reading_post_via_api(page, release_id)
+    assert persisted_before_save["deliver_until_days"] == 7
+
+    page.locator('input[name="reading-post-schedule"][value="never"]').check(force=True)
+    expect(page.locator("#reading-post-window")).to_be_hidden()
+    expect(page.locator("#reading-post-time")).to_be_hidden()
+    expect(page.locator("#reading-post-deliver-days")).to_be_hidden()
+    expect(page.locator("#reading-post-message")).to_contain_text("No notes will be sent.")
+
+    page.locator('input[name="reading-post-schedule"][value="daily"]').check(force=True)
+    expect(page.locator("#reading-post-window")).to_contain_text("Starts Jun 14, 2026. Ends Aug 14, 2026.")
+
+    page.locator("#journey-secret").fill("wrong-key")
+    page.locator("#journey-create-button").click()
+    expect(page.locator("#journey-dialog")).to_be_visible()
+    expect(page.locator("#journey-message")).to_contain_text("Enter the correct journey key")
+    persisted_after_wrong_key = get_reading_post_via_api(page, release_id)
+    assert persisted_after_wrong_key["deliver_until_days"] == 7
+
+    page.locator("#journey-secret").fill("lantern-key")
+    page.locator("#journey-create-button").click()
+    expect(page.locator("#journey-dialog")).not_to_be_visible()
+    persisted_after_save = get_reading_post_via_api(page, release_id)
+    assert persisted_after_save["deliver_until_days"] == 8
+    assert persisted_after_save["schedule"] == "daily"
+    assert persisted_after_save["recipients"] == ["rose@example.com"]
 
 
 def test_plugin_manual_payload_and_bug_wave_filters(page: Page) -> None:
