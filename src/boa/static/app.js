@@ -249,6 +249,7 @@ const elements = {
   engineDateFormatMenu: document.querySelector("#engine-date-format-menu"),
   engineCurrentTime: document.querySelector("#engine-current-time"),
   engineCurrentTimeZone: document.querySelector("#engine-current-time-zone"),
+  engineVersion: document.querySelector("#engine-version"),
   engineSmtpTestForm: document.querySelector("#engine-smtp-test-form"),
   engineSmtpTestTo: document.querySelector("#engine-smtp-test-to"),
   engineSmtpSendButton: document.querySelector("#engine-smtp-send-button"),
@@ -4856,10 +4857,18 @@ function renderSystemClock(status) {
   syncEngineClock(status.time_zone || "UTC");
 }
 
+function renderSystemVersion(status) {
+  if (!elements.engineVersion) {
+    return;
+  }
+  elements.engineVersion.textContent = status?.version ? `Boa ${status.version}` : "";
+}
+
 async function loadSystemStatus() {
-  const [smtpStatus, clockStatus] = await Promise.allSettled([
+  const [smtpStatus, clockStatus, versionStatus] = await Promise.allSettled([
     request("/api/system/smtp"),
     request("/api/system/clock"),
+    request("/api/system/version"),
   ]);
 
   if (smtpStatus.status === "fulfilled") {
@@ -4873,6 +4882,12 @@ async function loadSystemStatus() {
     renderSystemClock(clockStatus.value);
   } else {
     renderSystemClock(null);
+  }
+
+  if (versionStatus.status === "fulfilled") {
+    renderSystemVersion(versionStatus.value);
+  } else {
+    renderSystemVersion(null);
   }
 }
 

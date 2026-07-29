@@ -677,6 +677,7 @@ def test_engine_room_shows_email_delivery_disabled(page: Page) -> None:
     """The Engine Room exposes email delivery status without leaking credentials."""
     page.locator("#engine-button").click()
     expect(page.locator("#engine-dialog")).to_be_visible()
+    expect(page.locator("#engine-version")).to_contain_text("Boa 3.0.0")
     expect(page.locator("#engine-smtp-title")).to_contain_text("Email delivery")
     expect(page.locator("#engine-smtp-status")).to_contain_text("Disabled")
     expect(page.locator("#engine-smtp-message")).to_contain_text("not enabled")

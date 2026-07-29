@@ -593,9 +593,12 @@
           <div class="dialog-head-copy">
             <p class="dialog-kicker">Engine Room</p>
             <div class="dialog-title-row">
-              <h2>Delivery settings</h2>
-              <p class="dialog-intro">A small room for clocks, letters, and quiet machinery.</p>
+              <h2>Control center</h2>
+              <p class="dialog-intro">Clocks, mail, and version markers kept together.</p>
             </div>
+          </div>
+          <div class="dialog-head-meta" aria-label="Engine Room version">
+            <p id="engine-version" class="dialog-updated-at engine-version-meta" aria-hidden="true"></p>
           </div>
           <button id="close-engine-dialog-button" class="icon-button paper-icon-button paper-close-button dialog-close-button" type="button" aria-label="Close"></button>
         </div>
@@ -606,17 +609,19 @@
             <div class="engine-section-head">
               <div class="engine-section-title">
                 <span class="engine-smtp-lamp is-ready" aria-hidden="true"></span>
-                <h3 class="dialog-title-1">Date language</h3>
+                <h3 class="dialog-title-1">World time</h3>
               </div>
             </div>
-            <p class="summary-line paper-note paper-note-inline engine-status-note">Choose how dates are written across the journey board.</p>
+            <p class="summary-line paper-note paper-note-inline engine-status-note">Choose how this room writes time across the journey board.</p>
             <div class="engine-world-clock-grid">
-              <div class="engine-clock-field">
+              <label class="engine-field paper-field engine-clock-field">
                 <span class="dialog-title-2">Current time</span>
-                <output id="engine-current-time" class="engine-current-time" aria-live="off">08:04:17 AM</output>
-                <span id="engine-current-time-zone" class="dialog-title-3 engine-current-time-zone">UTC</span>
-              </div>
-              <div class="engine-date-format-field">
+                <div class="engine-current-time-row">
+                  <output id="engine-current-time" class="engine-current-time" aria-live="off">08:04:17 AM</output>
+                  <span id="engine-current-time-zone" class="engine-current-time-zone">UTC</span>
+                </div>
+              </label>
+              <label class="engine-field paper-field engine-date-format-field">
                 <span class="dialog-title-2">Date format</span>
                 <button id="engine-date-format-button" class="engine-date-format-button" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="engine-date-format-menu">
                   <span id="engine-date-format-label">Jun 29, 2026</span>
@@ -626,7 +631,7 @@
                   <button class="release-menu-item" type="button" data-format="iso" role="menuitem">2026-06-29</button>
                   <button class="release-menu-item" type="button" data-format="day-first" role="menuitem">29 Jun 2026</button>
                 </div>
-              </div>
+              </label>
             </div>
           </div>
 

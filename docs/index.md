@@ -4,6 +4,7 @@ Boa is a journey visualization platform. These guides are the field notes for tr
 
 ## Product
 
+- [Release Notes 3.0](release-notes-3.0.md) — Reading Post, SMTP, release process docs, and the versioning discipline that keeps them together
 - [Release Notes 2.7](release-notes-2.7.md) — shared Reading Post language, round-trippable journey settings, live Engine Room clock, and expandable hover notes
 - [Release Notes 2.5](release-notes-2.5.md) — paper dialogs, hover notes, horizon labels, Reading Post, and public email links
 - [Release Notes 2.1](release-notes-2.1.md) — automation client and integration examples
@@ -17,6 +18,7 @@ Boa is a journey visualization platform. These guides are the field notes for tr
 ## Testing
 
 - [Testing Strategy](testing.md) — how Boa is tested, including sandbox notes
+- [Release Process](release-process.md) — how version bumps, release notes, and docs should move together
 
 ## Design
 

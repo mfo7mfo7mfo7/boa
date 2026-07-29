@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from starlette.responses import FileResponse, PlainTextResponse
 from starlette.staticfiles import StaticFiles
 
+from boa import __version__
 from boa.domain import (
     BugSnapshotSubmission,
     ReadingPostSubscription,
@@ -254,6 +255,10 @@ class SmtpTestResponse(BaseModel):
 class SystemClockResponse(BaseModel):
     time_zone: str
     current_time: str
+
+
+class SystemVersionResponse(BaseModel):
+    version: str
 
 
 class ReadingPostRequest(BaseModel):
@@ -750,7 +755,7 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
             with contextlib.suppress(asyncio.CancelledError):
                 await app.state.reminder_scheduler
 
-    app = FastAPI(title="Boa API", version="2.5.0", lifespan=lifespan)
+    app = FastAPI(title="Boa API", version="3.0.0", lifespan=lifespan)
     app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 
     def get_storage() -> BoaStorage:
@@ -810,6 +815,10 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
             time_zone=get_engine_time_zone_name(),
             current_time=current_time.isoformat(),
         )
+
+    @app.get("/api/system/version", response_model=SystemVersionResponse)
+    def system_version() -> SystemVersionResponse:
+        return SystemVersionResponse(version=__version__)
 
     @app.post("/api/system/smtp/test", response_model=SmtpTestResponse)
     def smtp_test(request: SmtpTestRequest) -> SmtpTestResponse:

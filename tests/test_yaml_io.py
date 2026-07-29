@@ -151,6 +151,62 @@ milestones:
     assert reloaded.reading_post == blueprint.reading_post
 
 
+def test_load_release_blueprint_rejects_invalid_reading_post_recipient() -> None:
+    blueprint_text = """
+product: FortiSASE
+version: 26.2
+secret: boa-262
+
+reading_post:
+  enabled: true
+  recipients:
+    - rose@example.com
+    - not-an-email
+  rhythm: daily
+  schedule: weekdays
+  send_time: 09:05
+  deliver_until_days: 12
+
+milestones:
+  - name: Kickoff
+    expected: 2026-01-01
+    owner: pm
+"""
+
+    with pytest.raises(
+        BlueprintValidationError,
+        match=r"reading_post\.recipients\[1\] must be a valid email address\.",
+    ):
+        load_release_blueprint(blueprint_text)
+
+
+def test_load_release_blueprint_requires_recipients_when_enabled() -> None:
+    blueprint_text = """
+product: FortiSASE
+version: 26.2
+secret: boa-262
+
+reading_post:
+  enabled: true
+  recipients: []
+  rhythm: daily
+  schedule: weekdays
+  send_time: 09:05
+  deliver_until_days: 12
+
+milestones:
+  - name: Kickoff
+    expected: 2026-01-01
+    owner: pm
+"""
+
+    with pytest.raises(
+        BlueprintValidationError,
+        match=r"reading_post\.recipients must include at least one email address when enabled is true\.",
+    ):
+        load_release_blueprint(blueprint_text)
+
+
 def test_import_preview_and_create_from_yaml(tmp_path: Path) -> None:
     from fastapi.testclient import TestClient
     from boa.api import create_app

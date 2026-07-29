@@ -1,5 +1,5 @@
 .import-dialog {
-  width: min(552px, calc(100vw - 24px));
+  width: min(552px, calc(100% - 24px));
 }
 
 .import-form-stack {
@@ -109,7 +109,7 @@
 
 
 .ack-dialog {
-  width: min(780px, calc(100vw - 28px));
+  width: min(780px, calc(100% - 28px));
 }
 
 .ack-dialog .dialog-form-stack {
@@ -672,7 +672,7 @@
 
 @media (max-width: 720px) {
   .ack-dialog {
-    width: min(100vw - 16px, 500px);
+    width: min(calc(100% - 16px), 500px);
   }
 
   .import-kickoff-field.choice-field {
@@ -748,7 +748,7 @@
 }
 
 .engine-dialog {
-  width: min(653px, calc(100vw - 28px));
+  width: min(653px, calc(100% - 28px));
 }
 
 .engine-section {
@@ -795,6 +795,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  position: relative;
+  z-index: 1;
 }
 
 .engine-section-title {
@@ -837,14 +839,16 @@
   color: rgba(120, 99, 67, 0.78);
   font-size: 12px;
   line-height: 1.45;
-  max-width: 34ch;
+  max-width: 42ch;
 }
 
 .engine-world-clock-grid {
+  position: relative;
+  z-index: 2;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 14px 18px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
 }
 
 .engine-clock-field {
@@ -854,32 +858,58 @@
   min-width: 0;
 }
 
-.engine-current-time {
-  display: inline-flex;
+.engine-current-time-row {
+  display: flex;
   align-items: center;
-  min-height: 34px;
-  width: fit-content;
-  padding: 0 14px;
+  gap: 8px;
+  min-width: 0;
+}
+
+.engine-current-time {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  min-height: 31px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 12px;
+  border: 1px solid rgba(166, 139, 95, 0.12);
   border-radius: 999px;
-  border: 1px solid rgba(173, 146, 102, 0.14);
   background:
-    linear-gradient(180deg, rgba(255, 252, 246, 0.94), rgba(247, 239, 224, 0.84)),
-    radial-gradient(circle at 20% 16%, rgba(255, 255, 255, 0.54), transparent 38%);
+    linear-gradient(180deg, rgba(255, 253, 248, 0.76), rgba(250, 244, 233, 0.58));
   box-shadow:
-    0 8px 18px rgba(111, 92, 67, 0.055),
-    inset 0 1px 0 rgba(255, 255, 255, 0.58);
-  color: rgba(76, 69, 61, 0.8);
+    inset 0 1px 0 rgba(255, 255, 255, 0.76),
+    0 6px 14px rgba(220, 198, 159, 0.03);
+  color: rgba(73, 63, 48, 0.92);
   font-family: "Libre Baskerville", "Georgia", serif;
-  font-size: 13px;
+  font-size: 12.5px;
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.05em;
-  line-height: 1;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
   white-space: nowrap;
 }
 
 .engine-current-time-zone {
-  color: rgba(126, 104, 73, 0.56);
-  letter-spacing: 0.03em;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-height: 31px;
+  padding: 0 10px;
+  border: 1px solid rgba(166, 139, 95, 0.12);
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(255, 253, 248, 0.76), rgba(250, 244, 233, 0.58));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.76),
+    0 6px 14px rgba(220, 198, 159, 0.03);
+  color: rgba(126, 104, 73, 0.64);
+  font-family: "Instrument Sans", "Helvetica Neue", sans-serif;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .engine-detail-list {
@@ -933,56 +963,56 @@
 
 .engine-date-format-field {
   position: relative;
-  z-index: 4;
-  display: inline-grid;
-  justify-items: start;
+  z-index: 8;
+  display: grid;
+  align-content: start;
   gap: 7px;
-  min-width: 172px;
-  width: max-content;
-  max-width: 100%;
+  min-width: 0;
 }
 
 .engine-date-format-button {
-  min-height: 34px;
-  min-width: 148px;
-  padding: 0 28px 0 14px;
-  border: 1px solid rgba(173, 146, 102, 0.14);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  min-height: 31px;
+  min-width: 0;
+  width: 100%;
+  padding: 0 30px 0 12px;
+  border: 1px solid rgba(166, 139, 95, 0.12);
   border-radius: 999px;
-  color: rgba(76, 69, 61, 0.7);
+  color: rgba(73, 63, 48, 0.92);
   font-family: "Libre Baskerville", "Georgia", serif;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 400;
-  letter-spacing: 0.02em;
-  line-height: 1;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
   text-align: left;
   cursor: pointer;
   background:
-    linear-gradient(45deg, transparent 50%, rgba(126, 108, 83, 0.56) 50%) calc(100% - 15px) 50% / 5px 5px no-repeat,
-    linear-gradient(135deg, rgba(126, 108, 83, 0.56) 50%, transparent 50%) calc(100% - 11px) 50% / 5px 5px no-repeat,
-    linear-gradient(180deg, rgba(255, 252, 246, 0.94), rgba(247, 239, 224, 0.84)),
-    radial-gradient(circle at 20% 16%, rgba(255, 255, 255, 0.54), transparent 38%);
+    linear-gradient(45deg, transparent 50%, rgba(137, 117, 90, 0.66) 50%) calc(100% - 15px) 50% / 5px 5px no-repeat,
+    linear-gradient(135deg, rgba(137, 117, 90, 0.66) 50%, transparent 50%) calc(100% - 11px) 50% / 5px 5px no-repeat,
+    linear-gradient(180deg, rgba(255, 253, 248, 0.76), rgba(250, 244, 233, 0.58));
   box-shadow:
-    0 8px 18px rgba(111, 92, 67, 0.055),
-    inset 0 1px 0 rgba(255, 255, 255, 0.58);
-  transition: color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+    inset 0 1px 0 rgba(255, 255, 255, 0.76),
+    0 6px 14px rgba(220, 198, 159, 0.03);
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
 
 .engine-date-format-button:hover,
 .engine-date-format-button:focus-visible,
 .engine-date-format-button[aria-expanded="true"] {
-  color: rgba(67, 60, 52, 0.9);
-  border-color: rgba(173, 146, 102, 0.24);
+  border-color: rgba(157, 137, 88, 0.34);
   box-shadow:
-    0 11px 22px rgba(111, 92, 67, 0.075),
-    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    0 0 0 3px rgba(217, 195, 150, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.58);
 }
 
 .engine-date-menu {
   position: absolute;
   top: calc(100% + 9px);
   left: 0;
-  z-index: 40;
-  min-width: 228px;
+  z-index: 100;
+  min-width: min(100%, 248px);
   display: grid;
   gap: 2px;
   padding: 13px 12px 12px;
@@ -1011,9 +1041,14 @@
   line-height: 1.4;
 }
 
+.engine-version-meta {
+  max-width: 100%;
+  text-transform: none;
+}
+
 @media (max-width: 720px) {
   .engine-dialog {
-    width: min(100vw - 16px, 560px);
+    width: min(calc(100% - 16px), 560px);
   }
 
   .engine-section-head {
@@ -1024,6 +1059,19 @@
   .engine-world-clock-grid {
     grid-template-columns: 1fr;
     align-items: start;
+  }
+
+  .engine-clock-field,
+  .engine-date-format-field {
+    width: 100%;
+  }
+
+  .engine-current-time-row {
+    flex-wrap: wrap;
+  }
+
+  .engine-current-time {
+    width: auto;
   }
 
   .engine-detail-list {

@@ -1,5 +1,5 @@
 .journey-dialog {
-  width: min(1180px, calc(100vw - 42px));
+  width: min(1180px, calc(100% - 42px));
 }
 
 .journey-dialog .dialog-head-copy {
@@ -871,7 +871,7 @@
 
 @media (max-width: 900px) {
   .journey-dialog {
-    width: min(100vw - 18px, 980px);
+    width: min(calc(100% - 18px), 980px);
   }
 
   .journey-reading-post {
@@ -911,7 +911,7 @@
 
 @media (max-width: 640px) {
   .journey-dialog {
-    width: calc(100vw - 12px);
+    width: calc(100% - 12px);
   }
 
   .journey-identity-row {
@@ -940,7 +940,7 @@
   .reading-post-body {
     left: 0;
     right: auto;
-    width: min(100%, calc(100vw - 46px));
+    width: min(100%, calc(100vw - 18px));
   }
 
   .journey-builder {
