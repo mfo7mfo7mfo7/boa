@@ -209,7 +209,6 @@ def _reading_post_to_mapping(reading_post: ReadingPostBlueprint) -> dict[str, An
         "deliver_until_days": reading_post.deliver_until_days,
     }
 
-
 def _parse_reading_post_recipients(value: Any, *, enabled: bool) -> tuple[str, ...]:
     if not isinstance(value, list):
         raise BlueprintValidationError("reading_post.recipients must be a list.")

@@ -912,6 +912,43 @@
   white-space: nowrap;
 }
 
+.engine-world-clock-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 14px 18px;
+}
+
+.engine-clock-field {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-width: 0;
+}
+
+.engine-current-time {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  width: fit-content;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(173, 146, 102, 0.14);
+  background:
+    linear-gradient(180deg, rgba(255, 252, 246, 0.94), rgba(247, 239, 224, 0.84)),
+    radial-gradient(circle at 20% 16%, rgba(255, 255, 255, 0.54), transparent 38%);
+  box-shadow:
+    0 8px 18px rgba(111, 92, 67, 0.055),
+    inset 0 1px 0 rgba(255, 255, 255, 0.58);
+  color: rgba(76, 69, 61, 0.8);
+  font-family: "Libre Baskerville", "Georgia", serif;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.05em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .engine-detail-list {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1073,7 +1110,6 @@
   .engine-current-time {
     width: auto;
   }
-
   .engine-detail-list {
     grid-template-columns: 1fr;
   }
