@@ -66,7 +66,7 @@ const HORIZON_STORAGE_KEY = "boa.horizonMonths";
 const PERSPECTIVE_STORAGE_KEY = "boa.perspective";
 const DATE_FORMAT_STORAGE_KEY = "boa.dateFormat";
 const DEFAULT_HORIZON_MONTHS = 2;
-const HORIZON_MONTH_OPTIONS = new Set([2, 4, 6, 8]);
+const HORIZON_MONTH_OPTIONS = new Set([1, 2, 5, 8]);
 const DEFAULT_PERSPECTIVE = "due-soon";
 const PERSPECTIVE_OPTIONS = new Set(["due-soon", "destination"]);
 const DATE_FORMAT_OPTIONS = {
@@ -83,13 +83,6 @@ const DATE_FORMAT_OPTIONS = {
     shortLabel: "29 Jun",
   },
 };
-const ENGINE_CLOCK_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-  hour12: true,
-});
-
 const journeyLabelMeasurementCache = new Map();
 const journeyLabelPlacementCache = new Map();
 const boardMilestoneLabelPlacementCache = new Map();
@@ -97,6 +90,13 @@ const BOARD_MILESTONE_AVOID_GAP = 2;
 let journeyTimelineResizeObserver = null;
 let journeyTimelineResizeFrame = null;
 let engineClockTimer = null;
+let engineClockFormatter = new Intl.DateTimeFormat("en-US", {
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: true,
+  timeZone: "UTC",
+});
 
 const state = {
   releases: [],
@@ -248,6 +248,8 @@ const elements = {
   engineDateFormatLabel: document.querySelector("#engine-date-format-label"),
   engineDateFormatMenu: document.querySelector("#engine-date-format-menu"),
   engineCurrentTime: document.querySelector("#engine-current-time"),
+  engineCurrentTimeZone: document.querySelector("#engine-current-time-zone"),
+  engineVersion: document.querySelector("#engine-version"),
   engineSmtpTestForm: document.querySelector("#engine-smtp-test-form"),
   engineSmtpTestTo: document.querySelector("#engine-smtp-test-to"),
   engineSmtpSendButton: document.querySelector("#engine-smtp-send-button"),
@@ -4847,13 +4849,45 @@ function renderSystemSmtp(status) {
   renderReadingPostPanel();
 }
 
+function renderSystemClock(status) {
+  if (!status) {
+    syncEngineClock("UTC");
+    return;
+  }
+  syncEngineClock(status.time_zone || "UTC");
+}
+
+function renderSystemVersion(status) {
+  if (!elements.engineVersion) {
+    return;
+  }
+  elements.engineVersion.textContent = status?.version ? `Boa ${status.version}` : "";
+}
+
 async function loadSystemStatus() {
-  try {
-    const status = await request("/api/system/smtp");
-    renderSystemSmtp(status);
-  } catch (error) {
+  const [smtpStatus, clockStatus, versionStatus] = await Promise.allSettled([
+    request("/api/system/smtp"),
+    request("/api/system/clock"),
+    request("/api/system/version"),
+  ]);
+
+  if (smtpStatus.status === "fulfilled") {
+    renderSystemSmtp(smtpStatus.value);
+  } else {
     renderSystemSmtp(null);
-    elements.engineSmtpTestMessage.textContent = error.message;
+    elements.engineSmtpTestMessage.textContent = smtpStatus.reason?.message || "The mail route could not be read right now.";
+  }
+
+  if (clockStatus.status === "fulfilled") {
+    renderSystemClock(clockStatus.value);
+  } else {
+    renderSystemClock(null);
+  }
+
+  if (versionStatus.status === "fulfilled") {
+    renderSystemVersion(versionStatus.value);
+  } else {
+    renderSystemVersion(null);
   }
 }
 
@@ -6427,11 +6461,38 @@ function syncEngineDateFormat() {
   });
 }
 
+function buildEngineClockFormatter(timeZone) {
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true,
+      timeZone,
+    });
+  } catch (_error) {
+    return new Intl.DateTimeFormat("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true,
+    });
+  }
+}
+
+function syncEngineClock(timeZone = "UTC") {
+  engineClockFormatter = buildEngineClockFormatter(timeZone);
+  if (elements.engineCurrentTimeZone) {
+    elements.engineCurrentTimeZone.textContent = timeZone;
+  }
+  syncEngineCurrentTime();
+}
+
 function syncEngineCurrentTime() {
   if (!elements.engineCurrentTime) {
     return;
   }
-  elements.engineCurrentTime.textContent = ENGINE_CLOCK_TIME_FORMATTER.format(new Date());
+  elements.engineCurrentTime.textContent = engineClockFormatter.format(new Date());
 }
 
 function startEngineClock() {

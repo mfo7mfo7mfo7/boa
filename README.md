@@ -204,8 +204,20 @@ Boa listens to observations from other instruments. These guides show how to wri
 - [Email Mark Workflow](docs/email-ack.md)
 - [Reminder Engine](docs/reminders.md)
 
+## Reading Post
+
+Reading Post is Boa's journey-level delivery policy.
+
+- Open Tend Journey and expand the Reading Post control.
+- Choose the rhythm, time, and until fields together.
+- Rhythm decides whether notes go daily, on weekdays, at milestones, or never.
+- The schedule is saved with the journey and included in YAML downloads when configured.
+- The schedule follows the Engine Room clock, so the delivery time matches the room the user sees.
+- Begin a Journey and Tend Journey use the same Reading Post field set.
+
 ## Release Notes
 
+- [Boa 3.0](docs/release-notes-3.0.md)
 - [Boa 2.7](docs/release-notes-2.7.md)
 - [Boa 1.0](docs/release-notes-1.0.md)
 - [Boa 1.5](docs/release-notes-1.5.md)
@@ -272,9 +284,19 @@ SQLite records the journey.
 
 ## Status
 
-Boa 2.7 is release-ready.
+Boa 3.0 is release-ready.
 
 The universe view, galaxy routes, Observation Notebook, Starlight Trail, Bug Wave, Mark Trail, Engine Room, Reading Post, and paper dialog system now form one coherent journey language.
+
+## Release Discipline
+
+Boa keeps versioning and release notes together so feature work does not drift into random doc edits.
+
+- Update the version in `pyproject.toml`, `src/boa/__init__.py`, and `src/boa/api.py` together.
+- Write the release note in `docs/release-notes-<version>.md`.
+- Add the release note to [docs/index.md](docs/index.md) and this README.
+- If the change is user-facing, add a short usage note to the README instead of leaving it buried only in code.
+- See [docs/release-process.md](docs/release-process.md) for the full flow.
 
 ## Local QA Reset
 
@@ -291,7 +313,7 @@ This clears all local journeys plus cascading milestone, mark, bug snapshot, and
 Boa publishes container images to GitHub Container Registry.
 
 ```bash
-docker run --rm -p 8000:8000 -v boa-data:/data ghcr.io/chengenzo/boa:2.5.0
+docker run --rm -p 8000:8000 -v boa-data:/data ghcr.io/chengenzo/boa:3.0.0
 ```
 
 Then open <http://localhost:8000>.
@@ -522,7 +544,7 @@ PUBLIC_BASE_URL=http://gitlab.qa:4001 docker compose up -d
 Use a published GHCR image:
 
 ```bash
-docker run --rm -p 8000:8000 -v boa-data:/data ghcr.io/chengenzo/boa:2.5.0
+docker run --rm -p 8000:8000 -v boa-data:/data ghcr.io/chengenzo/boa:3.0.0
 ```
 
 Set folded-journey days:
@@ -531,7 +553,7 @@ Set folded-journey days:
 docker run --rm -p 8000:8000 \
   -v boa-data:/data \
   -e BOA_JOURNEY_FOLD_DAYS=21 \
-  ghcr.io/chengenzo/boa:2.5.0
+  ghcr.io/chengenzo/boa:3.0.0
 ```
 
 Same idea with Compose:
@@ -545,7 +567,7 @@ Use a host-mounted database file instead of a Docker volume:
 ```bash
 docker run --rm -p 8000:8000 \
   -v "$(pwd)/data:/data" \
-  ghcr.io/chengenzo/boa:2.5.0
+  ghcr.io/chengenzo/boa:3.0.0
 ```
 
 ### Reset Docker Data

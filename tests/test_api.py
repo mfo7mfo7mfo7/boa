@@ -5,6 +5,7 @@ from datetime import date, datetime, timezone
 
 from fastapi.testclient import TestClient
 
+from boa import __version__
 from boa.api import create_app
 from boa.domain import Milestone, ReleaseBlueprint
 from boa.storage import BoaStorage
@@ -24,6 +25,14 @@ def test_galaxy_route_serves_boa_ui(tmp_path) -> None:
         response = client.get("/fortisase")
         assert response.status_code == 200
         assert "reveal the shape of a journey" in response.text
+
+
+def test_system_version_endpoint_reports_package_version(tmp_path) -> None:
+    app = create_app(BoaStorage(tmp_path / "boa.db"))
+    with TestClient(app) as client:
+        response = client.get("/api/system/version")
+        assert response.status_code == 200
+        assert response.json() == {"version": __version__}
 
 
 def test_release_crud_and_export(tmp_path) -> None:
@@ -520,6 +529,39 @@ milestones:
         release = imported.json()
         assert release["milestones"][0]["expected"] == "2026-01-01"
         assert release["milestones"][1]["expected"] == "2026-03-30"
+
+
+def test_import_preview_reports_bad_reading_post_recipient(tmp_path) -> None:
+    app = create_app(BoaStorage(tmp_path / "boa.db"))
+    yaml_text = """
+product: FortiSASE
+version: 26.2
+secret: boa-262
+
+reading_post:
+  enabled: true
+  recipients:
+    - rose@example.com
+    - bad-address
+  rhythm: daily
+  schedule: weekdays
+  send_time: 09:05
+  deliver_until_days: 12
+
+milestones:
+  - name: Kickoff
+    expected: 2026-01-01
+    owner: pm
+"""
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/releases/import/preview",
+            files={"file": ("release.yaml", yaml_text, "text/yaml")},
+        )
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == "reading_post.recipients[1] must be a valid email address."
 
 
 def test_delete_release_removes_related_rows(tmp_path) -> None:

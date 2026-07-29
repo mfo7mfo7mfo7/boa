@@ -10,7 +10,7 @@
   --red: #c75b4a;
   --today: rgba(111, 159, 122, 0.72);
   --header-height: 104px;
-  --page-padding: 48px;
+  --page-padding: 44px;
   --content-width: 1600px;
   --selector-active: #6e9b78;
   --selector-inactive: rgba(55, 64, 80, 0.75);
@@ -23,6 +23,7 @@
 html,
 body {
   min-height: 100%;
+  overflow-x: hidden;
 }
 
 html {
@@ -862,6 +863,15 @@ dd {
   display: grid;
   gap: 10px;
   position: relative;
+}
+
+.release-track {
+  position: relative;
+}
+
+.release-canvas {
+  display: block;
+  overflow: hidden;
 }
 
 .now-line {

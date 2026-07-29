@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from starlette.responses import FileResponse, PlainTextResponse
 from starlette.staticfiles import StaticFiles
 
+from boa import __version__
 from boa.domain import (
     BugSnapshotSubmission,
     ReadingPostSubscription,
@@ -35,6 +36,7 @@ from boa.storage import BoaStorage, slugify_galaxy
 from boa.yaml_io import BlueprintValidationError, dump_release_blueprint, load_release_blueprint
 
 from boa.ack_token import generate_ack_token, hash_ack_token
+from boa.clock import get_engine_time_zone_name, normalize_engine_datetime
 from boa.email import (
     SmtpConfigurationError,
     SmtpSendError,
@@ -248,6 +250,15 @@ class SmtpTestResponse(BaseModel):
     ok: bool
     message: str
     error: str | None = None
+
+
+class SystemClockResponse(BaseModel):
+    time_zone: str
+    current_time: str
+
+
+class SystemVersionResponse(BaseModel):
+    version: str
 
 
 class ReadingPostRequest(BaseModel):
@@ -744,7 +755,7 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
             with contextlib.suppress(asyncio.CancelledError):
                 await app.state.reminder_scheduler
 
-    app = FastAPI(title="Boa API", version="2.5.0", lifespan=lifespan)
+    app = FastAPI(title="Boa API", version="3.0.0", lifespan=lifespan)
     app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 
     def get_storage() -> BoaStorage:
@@ -796,6 +807,18 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
                 "message": str(exc),
             }
         return get_smtp_status(config)
+
+    @app.get("/api/system/clock", response_model=SystemClockResponse)
+    def system_clock() -> SystemClockResponse:
+        current_time = normalize_engine_datetime()
+        return SystemClockResponse(
+            time_zone=get_engine_time_zone_name(),
+            current_time=current_time.isoformat(),
+        )
+
+    @app.get("/api/system/version", response_model=SystemVersionResponse)
+    def system_version() -> SystemVersionResponse:
+        return SystemVersionResponse(version=__version__)
 
     @app.post("/api/system/smtp/test", response_model=SmtpTestResponse)
     def smtp_test(request: SmtpTestRequest) -> SmtpTestResponse:

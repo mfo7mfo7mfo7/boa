@@ -134,6 +134,17 @@ def test_reading_post_special_characters_are_parameterized_not_executed(tmp_path
     assert [item["product"] for item in listed.json()] == ["FortiSASE", "FortiGate"]
 
 
+def test_system_clock_reports_tz_env(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("TZ", "Asia/Taipei")
+    with make_client(tmp_path) as client:
+        response = client.get("/api/system/clock")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["time_zone"] == "Asia/Taipei"
+    assert payload["current_time"].endswith("+08:00")
+
+
 def test_galaxy_filter_normalizes_case_spaces_and_symbols(tmp_path) -> None:
     with make_client(tmp_path) as client:
         create_release(client, product="Forti SASE++", version="26.2")

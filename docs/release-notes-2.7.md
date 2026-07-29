@@ -24,6 +24,7 @@ Reading Post settings are no longer trapped in the local draft.
 - YAML import restores the Reading Post configuration alongside milestones.
 - `Begin a Journey` and `Tend Journey` use the same Reading Post field set.
 - When a new journey is created, its Reading Post settings can be saved with it so import/export stays round-trippable.
+- Reading Post scheduling now follows the Engine Room clock instead of an unrelated UTC clock.
 
 ### Engine Room Current Time
 
@@ -31,6 +32,7 @@ The Engine Room now shows a quiet live clock in the `World clock` panel.
 
 - The current time updates every second.
 - The display stays small, warm, and non-distracting.
+- The clock follows the server's `TZ` setting so the room and the scheduler stay on the same star.
 - Date language remains beside it so the two controls read like one shared instrument.
 
 ### Hover Notes And Popups

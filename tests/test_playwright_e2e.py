@@ -270,16 +270,16 @@ def test_galaxy_routes_scope_the_board_and_unknown_galaxies_show_story_empty_sta
 
 
 def test_horizon_and_perspective_preferences_persist_in_local_storage(page: Page) -> None:
-    page.locator('#horizon-selector [data-horizon-months="8"]').click()
+    page.locator('#horizon-selector [data-horizon-months="1"]').click()
     page.locator('#perspective-selector [data-perspective="destination"]').click()
 
-    expect(page.locator('#horizon-selector [data-horizon-months="8"]')).to_have_attribute("aria-checked", "true")
+    expect(page.locator('#horizon-selector [data-horizon-months="1"]')).to_have_attribute("aria-checked", "true")
     expect(page.locator('#perspective-selector [data-perspective="destination"]')).to_have_attribute("aria-checked", "true")
 
     page.reload()
     expect(page.locator("#status-pill")).to_contain_text("Waiting")
 
-    expect(page.locator('#horizon-selector [data-horizon-months="8"]')).to_have_attribute("aria-checked", "true")
+    expect(page.locator('#horizon-selector [data-horizon-months="1"]')).to_have_attribute("aria-checked", "true")
     expect(page.locator('#perspective-selector [data-perspective="destination"]')).to_have_attribute("aria-checked", "true")
 
 
@@ -677,6 +677,7 @@ def test_engine_room_shows_email_delivery_disabled(page: Page) -> None:
     """The Engine Room exposes email delivery status without leaking credentials."""
     page.locator("#engine-button").click()
     expect(page.locator("#engine-dialog")).to_be_visible()
+    expect(page.locator("#engine-version")).to_contain_text("Boa 3.0.0")
     expect(page.locator("#engine-smtp-title")).to_contain_text("Email delivery")
     expect(page.locator("#engine-smtp-status")).to_contain_text("Disabled")
     expect(page.locator("#engine-smtp-message")).to_contain_text("not enabled")

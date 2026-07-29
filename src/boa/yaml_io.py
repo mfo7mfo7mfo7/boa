@@ -7,11 +7,15 @@ from typing import Any
 
 import yaml
 
+from boa.email import is_valid_email
 from boa.domain import Milestone, ReadingPostBlueprint, ReleaseBlueprint
 
 
 class BlueprintValidationError(ValueError):
     """Raised when a release blueprint does not match the expected schema."""
+
+
+MAX_READING_POST_RECIPIENTS = 20
 
 
 def load_release_blueprint(
@@ -167,18 +171,11 @@ def _reading_post_from_mapping(payload: Any) -> ReadingPostBlueprint | None:
     if not isinstance(payload, dict):
         raise BlueprintValidationError("reading_post must be a mapping.")
 
-    recipients_value = payload.get("recipients", [])
-    if not isinstance(recipients_value, list):
-        raise BlueprintValidationError("reading_post.recipients must be a list.")
-    recipients = tuple(
-        _require_non_empty_string(item, field="reading_post.recipients")
-        for item in recipients_value
-    )
-
     enabled_value = payload.get("enabled", False)
     if not isinstance(enabled_value, bool):
         raise BlueprintValidationError("reading_post.enabled must be a boolean.")
     enabled = enabled_value
+    recipients = _parse_reading_post_recipients(payload.get("recipients", []), enabled=enabled)
     rhythm = _parse_reading_post_choice(
         payload.get("rhythm", "weekly"),
         field="reading_post.rhythm",
@@ -211,6 +208,38 @@ def _reading_post_to_mapping(reading_post: ReadingPostBlueprint) -> dict[str, An
         "send_time": reading_post.send_time,
         "deliver_until_days": reading_post.deliver_until_days,
     }
+
+def _parse_reading_post_recipients(value: Any, *, enabled: bool) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        raise BlueprintValidationError("reading_post.recipients must be a list.")
+
+    recipients: list[str] = []
+    seen: set[str] = set()
+    for index, item in enumerate(value):
+        if not isinstance(item, str):
+            raise BlueprintValidationError(f"reading_post.recipients[{index}] must be a string.")
+        cleaned = item.strip()
+        if not cleaned:
+            continue
+        if not is_valid_email(cleaned):
+            raise BlueprintValidationError(
+                f"reading_post.recipients[{index}] must be a valid email address."
+            )
+        key = cleaned.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        recipients.append(cleaned)
+
+    if len(recipients) > MAX_READING_POST_RECIPIENTS:
+        raise BlueprintValidationError(
+            f"reading_post.recipients must contain {MAX_READING_POST_RECIPIENTS} addresses or fewer."
+        )
+    if enabled and not recipients:
+        raise BlueprintValidationError(
+            "reading_post.recipients must include at least one email address when enabled is true."
+        )
+    return tuple(recipients)
 
 
 def _parse_reading_post_choice(value: Any, *, field: str, allowed: set[str]) -> str:

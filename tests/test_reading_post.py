@@ -245,6 +245,60 @@ def test_reading_post_send_logs_failure_without_smtp(
     assert log.error == "smtp down"
 
 
+def test_reading_post_uses_engine_room_timezone_from_tz_env(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TZ", "Asia/Taipei")
+    storage = BoaStorage(tmp_path / "boa.db")
+    storage.initialize()
+    release = storage.create_release(
+        ReleaseBlueprint(
+            product="Lantern Vale",
+            version="1.6",
+            secret="demo",
+            milestones=(Milestone(name="Kickoff", expected=date(2026, 7, 21), owner="rose"),),
+        )
+    )
+    storage.upsert_reading_post_subscription(
+        release.id,
+        enabled=True,
+        recipients=("rose@example.com",),
+        rhythm="daily",
+        schedule="daily",
+        send_time="20:00",
+    )
+
+    sent: list[dict] = []
+
+    def fake_send_email(to: str, subject: str, body_text: str, body_html: str | None) -> None:
+        sent.append({"to": to, "subject": subject})
+
+    before = send_due_reading_posts(
+        storage,
+        load_smtp_config(),
+        now=datetime(2026, 7, 27, 11, 59, tzinfo=timezone.utc),
+        send_email_func=fake_send_email,
+    )
+    after = send_due_reading_posts(
+        storage,
+        load_smtp_config(),
+        now=datetime(2026, 7, 27, 12, 0, tzinfo=timezone.utc),
+        send_email_func=fake_send_email,
+    )
+
+    subscription = storage.get_reading_post_subscription(release.id)
+
+    assert before == []
+    assert len(after) == 1
+    assert sent[0]["to"] == "rose@example.com"
+    assert subscription is not None
+    assert subscription.last_sent_at is not None
+    assert subscription.last_sent_at.hour == 20
+    assert subscription.last_sent_at.date() == date(2026, 7, 27)
+    assert subscription.last_sent_at.isoformat().endswith("+08:00")
+
+
 def test_due_reading_post_sends_latest_observation_once(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
