@@ -35,6 +35,7 @@ from boa.storage import BoaStorage, slugify_galaxy
 from boa.yaml_io import BlueprintValidationError, dump_release_blueprint, load_release_blueprint
 
 from boa.ack_token import generate_ack_token, hash_ack_token
+from boa.clock import get_engine_time_zone_name, normalize_engine_datetime
 from boa.email import (
     SmtpConfigurationError,
     SmtpSendError,
@@ -248,6 +249,11 @@ class SmtpTestResponse(BaseModel):
     ok: bool
     message: str
     error: str | None = None
+
+
+class SystemClockResponse(BaseModel):
+    time_zone: str
+    current_time: str
 
 
 class ReadingPostRequest(BaseModel):
@@ -796,6 +802,14 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
                 "message": str(exc),
             }
         return get_smtp_status(config)
+
+    @app.get("/api/system/clock", response_model=SystemClockResponse)
+    def system_clock() -> SystemClockResponse:
+        current_time = normalize_engine_datetime()
+        return SystemClockResponse(
+            time_zone=get_engine_time_zone_name(),
+            current_time=current_time.isoformat(),
+        )
 
     @app.post("/api/system/smtp/test", response_model=SmtpTestResponse)
     def smtp_test(request: SmtpTestRequest) -> SmtpTestResponse:

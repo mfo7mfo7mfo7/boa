@@ -7,9 +7,10 @@ when the journey's rhythm and clock say it is time.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from typing import Callable
 
+from boa.clock import get_engine_time_zone, normalize_engine_datetime
 from boa.domain import ReadingPostSubscription
 from boa.email import SmtpConfig, send_email
 from boa.email_templates import render_reading_post_email
@@ -53,10 +54,7 @@ def _parse_send_time(value: str) -> tuple[int, int]:
 
 
 def _normalize_now(now: datetime | None) -> datetime:
-    value = now or datetime.now(timezone.utc).replace(microsecond=0)
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc).replace(microsecond=0)
+    return normalize_engine_datetime(now)
 
 
 def _delivery_window(storage: BoaStorage, release_id: int, deliver_until_days: int) -> tuple[date | None, date | None]:
@@ -106,27 +104,29 @@ def _is_due(storage: BoaStorage, subscription: ReadingPostSubscription, now: dat
     if subscription.schedule == "milestones":
         return bool(_due_milestone_dates(storage, subscription, now))
 
+    engine_now = _normalize_now(now)
     hour, minute = _parse_send_time(subscription.send_time)
-    threshold = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-    if now < threshold:
+    threshold = engine_now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if engine_now < threshold:
         return False
-    if subscription.schedule == "weekdays" and now.weekday() >= 5:
+    if subscription.schedule == "weekdays" and engine_now.weekday() >= 5:
         return False
 
     if subscription.last_sent_at is None:
         return True
 
     last_sent = subscription.last_sent_at
+    engine_tz = get_engine_time_zone()
     if last_sent.tzinfo is None:
-        last_sent = last_sent.replace(tzinfo=timezone.utc)
-    last_sent = last_sent.astimezone(timezone.utc)
+        last_sent = last_sent.replace(tzinfo=engine_tz)
+    last_sent = last_sent.astimezone(engine_tz)
 
     if subscription.schedule == "daily":
-        return last_sent.date() < now.date()
+        return last_sent.date() < engine_now.date()
     if subscription.schedule == "weekdays":
-        return now.weekday() < 5 and last_sent.date() < now.date()
+        return engine_now.weekday() < 5 and last_sent.date() < engine_now.date()
     if subscription.schedule == "weekly":
-        return now - last_sent >= timedelta(days=7)
+        return engine_now - last_sent >= timedelta(days=7)
     return False
 
 

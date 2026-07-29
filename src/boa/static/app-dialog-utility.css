@@ -877,6 +877,11 @@
   white-space: nowrap;
 }
 
+.engine-current-time-zone {
+  color: rgba(126, 104, 73, 0.56);
+  letter-spacing: 0.03em;
+}
+
 .engine-detail-list {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
