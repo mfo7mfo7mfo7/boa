@@ -219,6 +219,7 @@ Reading Post is Boa's journey-level delivery policy.
 ## Release Notes
 
 - [Boa 3.2](docs/release-notes-3.2.md)
+- [Boa 3.2.1](docs/release-notes-3.2.1.md)
 - [Boa 3.1](docs/release-notes-3.1.md)
 - [Boa 3.0](docs/release-notes-3.0.md)
 - [Boa 2.7](docs/release-notes-2.7.md)
@@ -287,7 +288,7 @@ SQLite records the journey.
 
 ## Status
 
-Boa 3.2 is release-ready.
+Boa 3.2.1 is release-ready.
 
 The universe view, galaxy routes, Observation Notebook, Page Notes, Today’s Reading, Starlight Trail, Bug Wave, Mark Trail, Engine Room, Reading Post, and paper dialog system now form one coherent journey language.
 
@@ -316,7 +317,7 @@ This clears all local journeys plus cascading milestone, mark, bug snapshot, and
 Boa publishes container images to GitHub Container Registry.
 
 ```bash
-docker run --rm -p 8000:8000 -v boa-data:/data ghcr.io/chengenzo/boa:3.2.0
+docker run --rm -p 8000:8000 -v boa-data:/data ghcr.io/chengenzo/boa:3.2.1
 ```
 
 Then open <http://localhost:8000>.
@@ -547,7 +548,7 @@ PUBLIC_BASE_URL=http://gitlab.qa:4001 docker compose up -d
 Use a published GHCR image:
 
 ```bash
-docker run --rm -p 8000:8000 -v boa-data:/data ghcr.io/chengenzo/boa:3.2.0
+docker run --rm -p 8000:8000 -v boa-data:/data ghcr.io/chengenzo/boa:3.2.1
 ```
 
 Set folded-journey days:
@@ -556,7 +557,7 @@ Set folded-journey days:
 docker run --rm -p 8000:8000 \
   -v boa-data:/data \
   -e BOA_JOURNEY_FOLD_DAYS=21 \
-  ghcr.io/chengenzo/boa:3.2.0
+  ghcr.io/chengenzo/boa:3.2.1
 ```
 
 Same idea with Compose:
@@ -570,7 +571,7 @@ Use a host-mounted database file instead of a Docker volume:
 ```bash
 docker run --rm -p 8000:8000 \
   -v "$(pwd)/data:/data" \
-  ghcr.io/chengenzo/boa:3.2.0
+  ghcr.io/chengenzo/boa:3.2.1
 ```
 
 ### Reset Docker Data

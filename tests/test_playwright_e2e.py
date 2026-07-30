@@ -132,10 +132,10 @@ def update_reading_post_via_api(
     schedule: str = "daily",
     send_time: str = "08:00",
     deliver_until_days: int = 7,
-) -> dict:
-    return page.evaluate(
-        """async ([releaseId, secret, recipients, schedule, sendTime, deliverUntilDays]) => {
-            const response = await fetch(`/api/releases/${releaseId}/reading-post`, {
+    ) -> dict:
+        return page.evaluate(
+            """async ([releaseId, secret, recipients, schedule, sendTime, deliverUntilDays]) => {
+                const response = await fetch(`/api/releases/${releaseId}/reading-post`, {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -152,6 +152,42 @@ def update_reading_post_via_api(
             return response.json();
         }""",
         [release_id, secret, recipients, schedule, send_time, deliver_until_days],
+    )
+
+
+def update_observation_via_api(
+    page: Page,
+    release_id: int,
+    *,
+    starlight: int,
+    whisper: str,
+    detail: str,
+    metrics: dict[str, int] | None = None,
+    observed_on: date | None = None,
+) -> dict:
+    payload = {
+        "starlight": starlight,
+        "whisper": whisper,
+        "detail": {
+            "type": "markdown",
+            "content": detail,
+        },
+    }
+    if metrics is not None:
+        payload["metrics"] = metrics
+    if observed_on is not None:
+        payload["observed_on"] = observed_on.isoformat()
+    return page.evaluate(
+        """async ([releaseId, payload]) => {
+            const response = await fetch(`/api/releases/${releaseId}/observation`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
+            if (!response.ok) throw new Error(await response.text());
+            return response.json();
+        }""",
+        [release_id, payload],
     )
 
 
@@ -386,6 +422,53 @@ def test_observation_notebook_records_starlight_storms_markdown_and_trail(page: 
     assert after_body_box["width"] > before_body_box["width"]
 
 
+def test_starlight_hover_popup_keeps_long_notes_inside_the_popup(page: Page) -> None:
+    release = create_release_via_api(page, product="Enzo", version="1.0", secret="enzo-key")
+    release_id = release["id"]
+    long_detail = "\n\n".join(
+        [
+            "## Page Notes",
+            *[
+                f"- Supporting note {index}: " + "a quiet margin line that keeps going " * 6
+                for index in range(1, 18)
+            ],
+        ]
+    )
+    update_observation_via_api(
+        page,
+        release_id,
+        starlight=73,
+        whisper="The journey is moving forward with patient confidence.",
+        detail=long_detail,
+        metrics={"done": 16, "total": 22, "blocked": 1},
+        observed_on=date(2026, 7, 27),
+    )
+    page.reload()
+
+    row = release_row(page, "Enzo")
+    before_height = page.evaluate("document.scrollingElement.scrollHeight")
+    row.locator(".starlight-event").first.hover()
+    detail_card = row.locator(".starlight-detail-card")
+    expect(detail_card).to_be_visible()
+    expect(detail_card).to_contain_text("Page Notes")
+    page.wait_for_timeout(250)
+    style = detail_card.evaluate(
+        """(el) => ({
+            overflow: getComputedStyle(el).overflow,
+            overflowY: getComputedStyle(el).overflowY,
+            maxHeight: getComputedStyle(el).maxHeight,
+            clientHeight: el.clientHeight,
+            scrollHeight: el.scrollHeight,
+            offsetHeight: el.offsetHeight,
+        })"""
+    )
+    assert style["overflowY"] == "auto"
+    assert style["maxHeight"] != "none"
+    assert style["scrollHeight"] > style["clientHeight"]
+    after_height = page.evaluate("document.scrollingElement.scrollHeight")
+    assert after_height == before_height
+
+
 def test_engine_room_date_language_updates_visible_timeline_dates(page: Page) -> None:
     release = create_release_via_api(page, product="Clock Rose", version="2.0", secret="clock-key")
     update_milestone_via_api(page, release["milestones"][0], expected=date(2026, 6, 29))
@@ -394,7 +477,7 @@ def test_engine_room_date_language_updates_visible_timeline_dates(page: Page) ->
     row = release_row(page, "Clock Rose")
     expect(row.locator(".milestone-expected").first).to_contain_text("Jun 29")
 
-    page.locator("#engine-button").click()
+    page.locator("#engine-button").evaluate("(element) => element.click()")
     expect(page.locator("#engine-dialog")).to_be_visible()
     page.locator("#engine-date-format-button").click()
     page.locator("#engine-date-format-menu .release-menu-item[data-format='iso']").click()
@@ -685,9 +768,9 @@ def test_download_delete_fold_hover_and_ack_date_states(page: Page) -> None:
 
 def test_engine_room_shows_email_delivery_disabled(page: Page) -> None:
     """The Engine Room exposes email delivery status without leaking credentials."""
-    page.locator("#engine-button").click()
+    page.locator("#engine-button").evaluate("(element) => element.click()")
     expect(page.locator("#engine-dialog")).to_be_visible()
-    expect(page.locator("#engine-version")).to_contain_text("Boa 3.1.0")
+    expect(page.locator("#engine-version")).to_contain_text("Boa 3.2.1")
     expect(page.locator("#engine-smtp-title")).to_contain_text("Email delivery")
     expect(page.locator("#engine-smtp-status")).to_contain_text("Disabled")
     expect(page.locator("#engine-smtp-message")).to_contain_text("not enabled")

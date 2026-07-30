@@ -5,6 +5,7 @@ The story moves from Universe to Galaxy to Journey, then into the Journey Key, S
 
 ## Product
 
+- [Release Notes 3.2.1](release-notes-3.2.1.md) — Starlight popup scroll restoration and release discipline
 - [Release Notes 3.2](release-notes-3.2.md) — Reading Post, Page Notes, shared journey vocabulary cleanup, and release discipline
 - [Release Notes 3.1](release-notes-3.1.md) — Reading Post, Page Notes, Starlight hover expansion, the shared journey vocabulary, and release discipline
 - [Release Notes 3.0](release-notes-3.0.md) — Reading Post, SMTP, release process docs, and the versioning discipline that keeps them together
