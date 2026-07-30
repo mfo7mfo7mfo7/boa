@@ -393,7 +393,7 @@
             <p class="dialog-kicker">Observation Notebook</p>
             <div class="dialog-title-row">
               <h2>Today’s Reading</h2>
-              <p class="dialog-intro">A quiet notebook page for this journey today.</p>
+              <p class="dialog-intro">Note the journey.</p>
             </div>
             <div class="dialog-identity-row">
               <p id="observation-release-name" class="observation-release-name observation-title-1 dialog-title-1"></p>
@@ -429,7 +429,7 @@
                     <span class="observation-detail-preview-label">Preview</span>
                   </button>
                 </div>
-                <textarea id="observation-detail" class="observation-textarea dialog-textarea" rows="10" placeholder="Today’s reading&#10;&#10;You may write about:&#10;&#10;• A hill we crossed&#10;• A storm we discovered&#10;• A star that feels closer"></textarea>
+                <textarea id="observation-detail" class="observation-textarea dialog-textarea" rows="10" placeholder="Page Notes&#10;&#10;You may write about:&#10;&#10;• A hill we crossed&#10;• A storm we discovered&#10;• A star that feels closer"></textarea>
                 <div id="observation-detail-preview" class="observation-detail-preview boa-note-body hidden" aria-live="polite"></div>
               </section>
             </div>
@@ -561,18 +561,21 @@
           </aside>
           <aside class="starlight-detail-card timeline-note-card paper-card paper-floating-card hidden" aria-live="polite">
             <div class="starlight-detail-head">
-              <p class="starlight-detail-kicker">Night Log</p>
-              <button class="starlight-detail-expand-button paper-icon-button paper-icon-button-compact" type="button" aria-pressed="false" aria-label="Expand night log" title="Expand night log">⤢</button>
+              <p class="starlight-detail-kicker">Page Notes</p>
+              <button class="starlight-detail-expand-button paper-icon-button paper-icon-button-compact" type="button" aria-pressed="false" aria-label="Expand page notes" title="Expand page notes">⤢</button>
             </div>
             <p class="starlight-detail-value"></p>
             <p class="starlight-detail-date"></p>
             <p class="starlight-detail-whisper"></p>
             <div class="starlight-detail-body boa-note-body"></div>
-            <dl class="starlight-detail-stats hidden">
-              <div><dt>Done</dt><dd class="starlight-detail-done"></dd></div>
-              <div><dt>Total</dt><dd class="starlight-detail-total"></dd></div>
-              <div><dt>Blocked</dt><dd class="starlight-detail-blocked"></dd></div>
-            </dl>
+            <div class="starlight-detail-stats-shell hidden">
+              <p class="starlight-detail-stats-kicker">Behind the Reading</p>
+              <dl class="starlight-detail-stats">
+                <div><dt>Done</dt><dd class="starlight-detail-done"></dd></div>
+                <div><dt>Total</dt><dd class="starlight-detail-total"></dd></div>
+                <div><dt>Blocked</dt><dd class="starlight-detail-blocked"></dd></div>
+              </dl>
+            </div>
           </aside>
           <aside class="bugwave-detail-card timeline-note-card paper-card paper-floating-card hidden" aria-live="polite">
             <p class="bugwave-detail-kicker">Storm Reading</p>

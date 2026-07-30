@@ -2,7 +2,7 @@
 
 Boa 3.1 tightens the shared journey language and makes the reading path feel more complete.
 
-This release brings the Starlight hover popup, Reading Post email output, and the supporting terminology into one steadier vocabulary. The main page now keeps Whisper, Page Notes, Evidence, and Today’s Reading in their proper places, while the Engine Room and release docs explain the control language more clearly.
+This release brings the Starlight hover popup, Reading Post email output, and the supporting terminology into one steadier vocabulary. The main page now keeps Page Notes and Today’s Reading in their proper places, while the Engine Room and release docs explain the control language more clearly.
 
 ## What Changed
 
@@ -18,7 +18,7 @@ The Starlight hover popup now centers Page Notes instead of trying to show too m
 
 Reading Post email output now renders the full Today’s Reading instead of flattening the page into plain text.
 
-- Whisper, Starlight, Storms, and Page Notes all appear in the email.
+- Starlight, Storms, and Page Notes all appear in the email.
 - Page Notes support markdown so headings, lists, tables, and emphasis survive the trip.
 - Imported or downloaded Reading Post settings stay useful because the same language is used across the journey.
 
@@ -34,7 +34,7 @@ The Engine Room now reads like the control center for the journey instead of a l
 
 Boa 3.1 updates the README and docs index so the public language matches the product behavior.
 
-- The shared terms now describe Whisper, Page Notes, Evidence, and Today’s Reading.
+- The shared terms now describe Page Notes and Today’s Reading.
 - The release notes index points to the newest release first.
 - The release process docs stay aligned with the versioning workflow.
 

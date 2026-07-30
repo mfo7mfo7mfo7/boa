@@ -18,7 +18,7 @@ Acknowledgements now record an explicit `ack_name` — the human who acknowledge
 
 ### Shared Note System
 
-A single note renderer, `renderBoaNote()`, powers milestone field annotations, acknowledgement cards, and starlight night logs. Notes are stored as plain markdown and rendered as safe blocks in the UI.
+A single note renderer, `renderBoaNote()`, powers milestone field annotations, acknowledgement cards, and Starlight Page Notes. Notes are stored as plain markdown and rendered as safe blocks in the UI.
 
 ### Milestone Note Card
 

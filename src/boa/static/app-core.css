@@ -135,7 +135,7 @@ dd {
   margin: 0 auto;
   padding: 28px var(--page-padding) 90px;
   position: relative;
-  z-index: 1;
+  z-index: 20;
   background: transparent;
 }
 

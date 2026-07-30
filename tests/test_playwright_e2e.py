@@ -369,7 +369,8 @@ def test_observation_notebook_records_starlight_storms_markdown_and_trail(page: 
     expect(detail_card.locator(".starlight-detail-whisper")).to_be_hidden()
     expect(detail_card.locator(".starlight-detail-value")).to_be_hidden()
     expect(detail_card.locator(".starlight-detail-date")).to_be_hidden()
-    expect(detail_card.locator(".starlight-detail-stats")).to_be_hidden()
+    expect(detail_card.locator(".starlight-detail-stats-shell")).to_be_visible()
+    expect(detail_card).to_contain_text("Behind the Reading")
     before_box = detail_card.bounding_box()
     before_body_box = body.bounding_box()
     assert before_box is not None
