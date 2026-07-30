@@ -6,7 +6,7 @@ from datetime import date, datetime, timezone
 from fastapi.testclient import TestClient
 
 from boa import __version__
-from boa.api import create_app
+from boa.api import READING_POST_SCHEDULER_INTERVAL_SECONDS, create_app
 from boa.domain import Milestone, ReleaseBlueprint
 from boa.storage import BoaStorage
 
@@ -33,6 +33,10 @@ def test_system_version_endpoint_reports_package_version(tmp_path) -> None:
         response = client.get("/api/system/version")
         assert response.status_code == 200
         assert response.json() == {"version": __version__}
+
+
+def test_reading_post_scheduler_runs_every_minute() -> None:
+    assert READING_POST_SCHEDULER_INTERVAL_SECONDS == 60
 
 
 def test_release_crud_and_export(tmp_path) -> None:

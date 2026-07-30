@@ -57,6 +57,9 @@ from boa.reading_post_service import (
 )
 
 
+READING_POST_SCHEDULER_INTERVAL_SECONDS = 60
+
+
 MAX_PRODUCT_LENGTH = 120
 MAX_VERSION_LENGTH = 80
 MAX_SECRET_LENGTH = 200
@@ -740,7 +743,7 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
     async def reminder_scheduler(app: FastAPI) -> None:
         while True:
             _run_scheduled_reminder_cycle(app.state.storage)
-            await asyncio.sleep(60 * 60)
+            await asyncio.sleep(READING_POST_SCHEDULER_INTERVAL_SECONDS)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -755,7 +758,7 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
             with contextlib.suppress(asyncio.CancelledError):
                 await app.state.reminder_scheduler
 
-    app = FastAPI(title="Boa API", version="3.2.0", lifespan=lifespan)
+    app = FastAPI(title="Boa API", version="3.2.2", lifespan=lifespan)
     app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 
     def get_storage() -> BoaStorage:

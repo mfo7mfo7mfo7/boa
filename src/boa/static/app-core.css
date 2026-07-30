@@ -139,6 +139,17 @@ dd {
   background: transparent;
 }
 
+body:has(.starlight-whisper-trigger:hover, .starlight-whisper-trigger:focus-visible, .release-reading-card:hover) .app-shell {
+  z-index: 300;
+}
+
+body:has(.starlight-whisper-trigger:hover, .starlight-whisper-trigger:focus-visible, .release-reading-card:hover) .now-label,
+body:has(.starlight-whisper-trigger:hover, .starlight-whisper-trigger:focus-visible, .release-reading-card:hover) .now-toggle {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .app-shell::before {
   display: none;
 }
@@ -528,7 +539,7 @@ dd {
   position: fixed;
   left: var(--page-padding);
   bottom: 28px;
-  z-index: 4;
+  z-index: 220;
   display: inline-flex;
   align-items: baseline;
 }
@@ -537,7 +548,7 @@ dd {
   position: fixed;
   right: var(--page-padding);
   bottom: 28px;
-  z-index: 4;
+  z-index: 220;
   display: inline-flex;
   align-items: baseline;
 }
@@ -882,7 +893,7 @@ dd {
   transform: translateX(-50%);
   border-left: 1px dashed rgba(90, 155, 104, 0.55);
   pointer-events: none;
-  z-index: 10;
+  z-index: 18;
 }
 
 .now-label {
@@ -894,7 +905,7 @@ dd {
   letter-spacing: 0.12em;
   color: rgba(47, 55, 70, 0.75);
   font-family: "Libre Baskerville", "Georgia", serif;
-  z-index: 11;
+  z-index: 18;
 }
 
 .now-toggle {
@@ -916,7 +927,7 @@ dd {
     0 1px 5px rgba(70, 57, 38, 0.04),
     inset 0 0 0 1px rgba(255, 255, 255, 0.28);
   cursor: pointer;
-  z-index: 12;
+  z-index: 24;
   transition: border-color 180ms ease, color 180ms ease, transform 180ms ease, background 180ms ease;
 }
 
