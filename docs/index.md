@@ -1,9 +1,11 @@
 # Boa Documentation
 
 Boa is a journey visualization platform. These guides are the field notes for tracing, observing, and guiding a release across the stars.
+The story moves from Universe to Galaxy to Journey, then down into the Observation Notebook, Starlight, Storms, Reading Post, and the Engine Room that keeps the shared language steady.
 
 ## Product
 
+- [Release Notes 3.1](release-notes-3.1.md) — Reading Post, Page Notes, Starlight hover expansion, the shared journey vocabulary, and release discipline
 - [Release Notes 3.0](release-notes-3.0.md) — Reading Post, SMTP, release process docs, and the versioning discipline that keeps them together
 - [Release Notes 2.7](release-notes-2.7.md) — shared Reading Post language, round-trippable journey settings, live Engine Room clock, and expandable hover notes
 - [Release Notes 2.5](release-notes-2.5.md) — paper dialogs, hover notes, horizon labels, Reading Post, and public email links
@@ -40,9 +42,21 @@ Boa is a journey visualization platform. These guides are the field notes for tr
 
 | Term | Meaning |
 |------|---------|
+| Universe | The full sky Boa can see |
+| Galaxy | One product's corner of that sky |
 | Journey | A release traced across time |
-| Observation | "Where are we now?" |
-| Starlight | Journey readiness |
-| Bug Wave / Current Storms | Known troubles |
+| Horizon | The line where milestones rest |
+| Milestone | A meaningful point on the horizon |
+| Keeper | The person responsible for saying they have seen a milestone |
+| Observation Notebook | Where the team writes what the journey looks like now |
+| Whisper | The short milestone-facing summary shown on the main page |
+| Page Notes | The markdown detail shown in the Starlight hover popup |
+| Evidence | The factual detail that supports the reading |
+| Today’s Reading | The full observation made up of Whisper, Page Notes, and supporting evidence |
+| Starlight | Journey readiness and gathered confidence |
+| Bug Wave / Current Storms | Known troubles still moving through the journey |
+| Reading Post | The journey-level delivery policy that sends the full Today’s Reading |
+| Engine Room | The quiet control room that holds Date Language and Reading Post settings |
+| Date Language | The shared way Boa writes dates across the page and dialogs |
 | Reminders | Email prompts before, during, and after milestones |
 | Acknowledgement | Human confirmation of a milestone |

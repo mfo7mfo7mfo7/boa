@@ -76,6 +76,13 @@ They are the person responsible for saying:
 
 > I have seen this point.
 
+### 🗣️ Whisper
+
+Whisper is the short line that looks at the milestone side of the journey.
+
+It is the quiet summary shown on the main page under the journey.
+It should feel like the journey speaking in one sentence.
+
 ### 📖 Observation Notebook
 
 The Observation Notebook is where the team writes what the journey looks like now.
@@ -94,6 +101,34 @@ Sometimes the observer may add small facts behind the reading, such as how much 
 But those facts are not the story itself.
 They are only pencil marks in the margin.
 
+### 📝 Page Notes
+
+Page Notes are the markdown notes attached to Today's Reading.
+
+They hold the longer detail written about the journey, including headings, lists, tables, and other evidence.
+On the main page, they appear in the Starlight hover popup.
+
+### 🔎 Evidence
+
+Evidence is the factual detail inside Page Notes.
+
+It is where the observer writes the supporting signs behind the reading, especially the Starlight and Storms insight.
+Evidence may include extra bullets, numbers, or tables that explain why the journey feels the way it does.
+
+### 🌞 Today’s Reading
+
+Today’s Reading is the full observation written for the journey.
+
+It combines Whisper, Starlight, Storms, Page Notes, and any supporting evidence into one complete note.
+Reading Post sends this full reading by email.
+
+### 🕰️ Date Language
+
+Date Language is how Boa writes dates across the journey.
+
+It keeps the board, the dialogs, and the emails speaking the same calendar style.
+It is a small language rule, but it helps the whole page stay consistent.
+
 ### ✦ Starlight
 
 Starlight is the light gathered by a journey.
@@ -103,6 +138,7 @@ It represents readiness, preparation, confidence, and forward motion.
 Starlight is not a KPI.
 It is not a progress bar.
 It is the quiet energy collected before departure.
+The timeline already shows the starlight score, and the Starlight hover popup shows the Page Notes behind it.
 
 ### 🌟 Starlight Trail
 
@@ -129,6 +165,14 @@ The Bug Wave is the visible shape of storms over time.
 It shows how much weather remains between the gathered starlight and the horizon.
 
 It should feel like weather, not a defect chart.
+
+### ⚙️ Engine Room
+
+The Engine Room holds quiet instruments behind the page.
+
+It is where Date Language and Reading Post settings live.
+It supports the clock, the delivery rhythm, and the other background rules that keep the story consistent.
+It should never feel like the center of Boa.
 
 ### ✅ Acknowledge
 
@@ -173,13 +217,6 @@ A Scroll is a portable journey page.
 A journey can be brought into Boa from a scroll.
 A journey can also be downloaded as a scroll.
 
-### ⚙️ Engine Room
-
-The Engine Room holds quiet instruments behind the page.
-
-It is where delivery settings live.
-It should never feel like the center of Boa.
-
 ## One Sentence
 
 Boa is a storybook for release journeys: a place where teams watch a journey move across the horizon, gather starlight, pass through storms, and leave quiet marks when milestones are seen.
@@ -214,9 +251,11 @@ Reading Post is Boa's journey-level delivery policy.
 - The schedule is saved with the journey and included in YAML downloads when configured.
 - The schedule follows the Engine Room clock, so the delivery time matches the room the user sees.
 - Begin a Journey and Tend Journey use the same Reading Post field set.
+- Reading Post sends the full Today’s Reading, not just the short Whisper or the Page Notes alone.
 
 ## Release Notes
 
+- [Boa 3.1](docs/release-notes-3.1.md)
 - [Boa 3.0](docs/release-notes-3.0.md)
 - [Boa 2.7](docs/release-notes-2.7.md)
 - [Boa 1.0](docs/release-notes-1.0.md)
@@ -284,9 +323,9 @@ SQLite records the journey.
 
 ## Status
 
-Boa 3.0 is release-ready.
+Boa 3.1 is release-ready.
 
-The universe view, galaxy routes, Observation Notebook, Starlight Trail, Bug Wave, Mark Trail, Engine Room, Reading Post, and paper dialog system now form one coherent journey language.
+The universe view, galaxy routes, Observation Notebook, Whisper, Page Notes, Evidence, Today’s Reading, Starlight Trail, Bug Wave, Mark Trail, Engine Room, Reading Post, and paper dialog system now form one coherent journey language.
 
 ## Release Discipline
 
@@ -313,7 +352,7 @@ This clears all local journeys plus cascading milestone, mark, bug snapshot, and
 Boa publishes container images to GitHub Container Registry.
 
 ```bash
-docker run --rm -p 8000:8000 -v boa-data:/data ghcr.io/chengenzo/boa:3.0.0
+docker run --rm -p 8000:8000 -v boa-data:/data ghcr.io/chengenzo/boa:3.1.0
 ```
 
 Then open <http://localhost:8000>.
@@ -544,7 +583,7 @@ PUBLIC_BASE_URL=http://gitlab.qa:4001 docker compose up -d
 Use a published GHCR image:
 
 ```bash
-docker run --rm -p 8000:8000 -v boa-data:/data ghcr.io/chengenzo/boa:3.0.0
+docker run --rm -p 8000:8000 -v boa-data:/data ghcr.io/chengenzo/boa:3.1.0
 ```
 
 Set folded-journey days:
@@ -553,7 +592,7 @@ Set folded-journey days:
 docker run --rm -p 8000:8000 \
   -v boa-data:/data \
   -e BOA_JOURNEY_FOLD_DAYS=21 \
-  ghcr.io/chengenzo/boa:3.0.0
+  ghcr.io/chengenzo/boa:3.1.0
 ```
 
 Same idea with Compose:
@@ -567,7 +606,7 @@ Use a host-mounted database file instead of a Docker volume:
 ```bash
 docker run --rm -p 8000:8000 \
   -v "$(pwd)/data:/data" \
-  ghcr.io/chengenzo/boa:3.0.0
+  ghcr.io/chengenzo/boa:3.1.0
 ```
 
 ### Reset Docker Data

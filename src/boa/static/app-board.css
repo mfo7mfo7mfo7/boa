@@ -394,7 +394,15 @@
 }
 
 .starlight-detail-card.is-expanded .starlight-detail-body {
-  max-width: 58ch;
+  width: 100%;
+  max-width: none;
+}
+
+.starlight-detail-card .starlight-detail-value,
+.starlight-detail-card .starlight-detail-date,
+.starlight-detail-card .starlight-detail-whisper,
+.starlight-detail-card .starlight-detail-stats {
+  display: none;
 }
 
 .bugwave-detail-card {
@@ -515,6 +523,7 @@
   color: rgba(67, 60, 48, 0.86);
   font-size: 11.5px;
   line-height: 1.55;
+  width: 100%;
   max-width: 46ch;
 }
 

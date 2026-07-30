@@ -2704,6 +2704,12 @@ function initializeStarlightDetailCard(card) {
     const expanded = !card.classList.contains("is-expanded");
     card.classList.toggle("is-expanded", expanded);
     syncButtonState(expanded);
+    const body = card.querySelector(".starlight-detail-body");
+    if (body && card._starlightContent !== undefined) {
+      renderBoaNote(body, card._starlightContent, {
+        emptyFallback: card._starlightEmptyFallback || "",
+      });
+    }
     const point = card._starlightPoint;
     const svg = card._starlightSvg;
     if (point && svg) {
@@ -2803,12 +2809,15 @@ function bindBugWaveDetail(marker, svg, detailCard, point, snapshot) {
 function showStarlightDetail(detailCard, svg, point, event) {
   const body = detailCard.querySelector(".starlight-detail-body");
   const stats = detailCard.querySelector(".starlight-detail-stats");
+  const markdown = event.detail?.content || "";
   detailCard._starlightPoint = point;
   detailCard._starlightSvg = svg;
+  detailCard._starlightContent = markdown;
+  detailCard._starlightEmptyFallback = "No night log recorded.";
   detailCard.querySelector(".starlight-detail-value").textContent = `✦ ${event.starlight} ${describeStarlightState(event.starlight)}`;
   detailCard.querySelector(".starlight-detail-date").textContent = formatDate(event.display_date || event.date);
   detailCard.querySelector(".starlight-detail-whisper").textContent = event.whisper;
-  renderBoaNote(body, event.detail?.content || "", { emptyFallback: "No night log recorded." });
+  renderBoaNote(body, markdown, { emptyFallback: detailCard._starlightEmptyFallback });
 
   if (event.metrics) {
     detailCard.querySelector(".starlight-detail-done").textContent = String(event.metrics.done);
