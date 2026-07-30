@@ -5,6 +5,7 @@ The story moves from Universe to Galaxy to Journey, then into the Journey Key, S
 
 ## Product
 
+- [Release Notes 3.2.2](release-notes-3.2.2.md) — Starlight hover layering, Now controls, and Engine Room cleanup
 - [Release Notes 3.2.1](release-notes-3.2.1.md) — Starlight popup scroll restoration and release discipline
 - [Release Notes 3.2](release-notes-3.2.md) — Reading Post, Page Notes, shared journey vocabulary cleanup, and release discipline
 - [Release Notes 3.1](release-notes-3.1.md) — Reading Post, Page Notes, Starlight hover expansion, the shared journey vocabulary, and release discipline
@@ -39,6 +40,7 @@ The story moves from Universe to Galaxy to Journey, then into the Journey Key, S
 - [Starlight API](starlight.md) — journey readiness
 - [Email Ack Workflow](email-ack.md) — secret links and acknowledgements
 - [Reminder Engine](reminders.md) — scheduled reminders and notifications
+- [Reading Post Scheduler Design](reading-post-scheduler.md) — minute-level background polling, engine-room time, and idempotent sends
 
 ## Concepts
 

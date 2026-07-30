@@ -391,11 +391,7 @@ function render(allowTimelineRealign = true) {
   updateBoardSummary();
   syncNowControls();
 
-  if (hasAnyReleases) {
-    renderMonthRuler(state.timeline);
-  } else {
-    renderMonthRuler(null);
-  }
+  renderMonthRuler(state.timeline);
 
   releases.forEach((release, index) => {
     const fragment = elements.releaseTemplate.content.cloneNode(true);
@@ -611,7 +607,7 @@ function syncBoardChromeVisibility(hasAnyReleases) {
   const shouldShow = Boolean(hasAnyReleases);
   elements.nowLine.classList.toggle("hidden", !shouldShow);
   elements.nowLabel.classList.toggle("hidden", !shouldShow);
-  elements.monthRulerWrap.classList.toggle("hidden", !shouldShow);
+  elements.monthRulerWrap.classList.remove("hidden");
   elements.journeyStar.classList.toggle("hidden", !shouldShow);
   elements.nowToggles.forEach((toggle) => {
     toggle.classList.toggle("hidden", !shouldShow);
@@ -2810,6 +2806,7 @@ function showStarlightDetail(detailCard, svg, point, event) {
   const body = detailCard.querySelector(".starlight-detail-body");
   const statsShell = detailCard.querySelector(".starlight-detail-stats-shell");
   const markdown = event.detail?.content || "";
+  window.clearTimeout(detailCard._collapseExpandedTimer);
   detailCard._starlightPoint = point;
   detailCard._starlightSvg = svg;
   detailCard._starlightContent = markdown;
@@ -2836,8 +2833,18 @@ function showStarlightDetail(detailCard, svg, point, event) {
 }
 
 function hideStarlightDetail(detailCard) {
-  detailCard.classList.remove("is-expanded");
-  if (typeof detailCard._syncStarlightExpandState === "function") {
+  window.clearTimeout(detailCard._collapseExpandedTimer);
+  if (detailCard.classList.contains("is-expanded")) {
+    detailCard._collapseExpandedTimer = window.setTimeout(() => {
+      if (detailCard.dataset.hovering === "true" || detailCard.dataset.markerHover === "true") {
+        return;
+      }
+      detailCard.classList.remove("is-expanded");
+      if (typeof detailCard._syncStarlightExpandState === "function") {
+        detailCard._syncStarlightExpandState(false);
+      }
+    }, 420);
+  } else if (typeof detailCard._syncStarlightExpandState === "function") {
     detailCard._syncStarlightExpandState(false);
   }
   hideTimelineNoteCard(detailCard);
@@ -2869,31 +2876,60 @@ function initializeMilestoneNoteCard(card) {
 }
 
 function positionStoryCard(card, svg, point, { verticalGap = 18, preferred = "above" } = {}) {
+  const box = svg.viewBox.baseVal;
+  const svgRect = svg.getBoundingClientRect();
+  const ratioX = point.x / Math.max(box.width, 1);
+  const ratioY = point.y / Math.max(box.height, 1);
+  const cardWidth = card.offsetWidth || 280;
+  const cardHeight = card.offsetHeight || 180;
+  const viewport = window.visualViewport;
+  const viewportLeft = viewport?.offsetLeft ?? 0;
+  const viewportTop = viewport?.offsetTop ?? 0;
+  const viewportWidth = viewport?.width ?? window.innerWidth;
+  const viewportHeight = viewport?.height ?? window.innerHeight;
+  const pointLeft = viewportLeft + svgRect.left + (ratioX * svgRect.width);
+  const pointTop = viewportTop + svgRect.top + (ratioY * svgRect.height);
+
+  if (card.classList.contains("is-expanded") && card.classList.contains("starlight-detail-card")) {
+    const minLeft = viewportLeft + 16;
+    const maxLeft = Math.max(minLeft, viewportLeft + viewportWidth - cardWidth - 16);
+    const left = Math.min(Math.max(pointLeft - (cardWidth / 2), minLeft), maxLeft);
+    const minTop = viewportTop + 16;
+    const maxTop = Math.max(minTop, viewportTop + viewportHeight - cardHeight - 16);
+    const centerTop = pointTop - (cardHeight / 2);
+    const aboveTop = pointTop - cardHeight - verticalGap;
+    const belowTop = pointTop + verticalGap;
+    const top = preferred === "center"
+      ? centerTop
+      : preferred === "above"
+      ? (aboveTop >= minTop ? aboveTop : Math.min(belowTop, maxTop))
+      : (belowTop <= maxTop ? belowTop : Math.max(aboveTop, minTop));
+    card.style.position = "fixed";
+    card.style.left = `${left}px`;
+    card.style.top = `${Math.min(Math.max(top, minTop), maxTop)}px`;
+    return;
+  }
+
   const track = svg.closest(".release-track");
   if (!track) {
     return;
   }
-  const box = svg.viewBox.baseVal;
   const trackRect = track.getBoundingClientRect();
-  const svgRect = svg.getBoundingClientRect();
-  const ratioX = point.x / Math.max(box.width, 1);
-  const ratioY = point.y / Math.max(box.height, 1);
-  const pointLeft = (svgRect.left - trackRect.left) + (ratioX * svgRect.width);
-  const pointTop = (svgRect.top - trackRect.top) + (ratioY * svgRect.height);
-  const cardWidth = card.offsetWidth || 280;
-  const cardHeight = card.offsetHeight || 180;
+  const pointTrackLeft = (svgRect.left - trackRect.left) + (ratioX * svgRect.width);
+  const pointTrackTop = (svgRect.top - trackRect.top) + (ratioY * svgRect.height);
   const minLeft = 14;
   const maxLeft = Math.max(minLeft, trackRect.width - cardWidth - 14);
-  const left = Math.min(Math.max(pointLeft - (cardWidth / 2), minLeft), maxLeft);
-  const centerTop = pointTop - (cardHeight / 2);
-  const aboveTop = pointTop - cardHeight - verticalGap;
-  const belowTop = pointTop + verticalGap;
+  const left = Math.min(Math.max(pointTrackLeft - (cardWidth / 2), minLeft), maxLeft);
+  const centerTop = pointTrackTop - (cardHeight / 2);
+  const aboveTop = pointTrackTop - cardHeight - verticalGap;
+  const belowTop = pointTrackTop + verticalGap;
   const maxTop = Math.max(14, trackRect.height - cardHeight - 14);
   const top = preferred === "center"
     ? centerTop
     : preferred === "above"
     ? (aboveTop >= 14 ? aboveTop : Math.min(belowTop, maxTop))
     : Math.min(Math.max(belowTop, 14), maxTop);
+  card.style.position = "";
   card.style.left = `${left}px`;
   card.style.top = `${Math.min(Math.max(top, 14), maxTop)}px`;
 }

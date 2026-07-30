@@ -9,6 +9,11 @@
   box-shadow: none !important;
 }
 
+.release-row:has(.release-menu:not(.hidden)) {
+  position: relative;
+  z-index: 260;
+}
+
 .release-identity {
   display: grid;
   gap: 15px;
@@ -73,7 +78,7 @@
 
 .release-menu-shell {
   position: relative;
-  z-index: 140;
+  z-index: 260;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: baseline;
@@ -109,7 +114,7 @@
   position: absolute;
   top: calc(100% + 10px);
   left: -12px;
-  z-index: 150;
+  z-index: 270;
   min-width: 154px;
   display: grid;
   gap: 2px;
@@ -148,7 +153,12 @@
   max-width: min(280px, 28vw);
   padding-left: 2px;
   overflow: visible;
-  z-index: 22;
+  z-index: 220;
+}
+
+.starlight-summary:hover,
+.starlight-summary:focus-within {
+  z-index: 340;
 }
 
 .starlight-whisper-trigger {
@@ -197,10 +207,15 @@
 .release-reading-card {
   left: 0;
   bottom: calc(100% + 10px);
-  z-index: 90;
+  z-index: 360;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
   width: max-content;
   min-width: min(248px, 78vw);
   max-width: min(380px, 82vw);
+  height: auto;
   max-height: none;
   overflow: visible;
   opacity: 0;
@@ -293,6 +308,21 @@
   pointer-events: auto;
 }
 
+.release-reading-card.paper-floating-card {
+  overflow: visible;
+  overflow-x: visible;
+  overflow-y: visible;
+  height: fit-content;
+  min-height: fit-content;
+  pointer-events: none;
+}
+
+.release-reading-card.paper-floating-card *,
+.release-reading-card.paper-floating-card *::before,
+.release-reading-card.paper-floating-card *::after {
+  pointer-events: none;
+}
+
 .paper-floating-card::before {
   content: "";
   position: absolute;
@@ -366,6 +396,10 @@
     filter 220ms ease;
 }
 
+.release-reading-card.timeline-note-card {
+  z-index: 360;
+}
+
 .release-track .timeline-note-card:not(.starlight-detail-card) {
   max-height: none !important;
   overflow: visible !important;
@@ -380,10 +414,14 @@
 }
 
 .starlight-detail-card.is-expanded {
-  min-width: min(640px, 90vw);
-  max-width: min(740px, 90vw);
-  max-height: min(74vh, calc(100% - 24px));
+  position: fixed;
+  z-index: 340;
+  min-width: min(640px, calc(100vw - 32px));
+  max-width: min(740px, calc(100vw - 32px));
+  max-height: min(90dvh, calc(100dvh - 32px));
   padding: 16px 18px 16px;
+  overflow-y: auto;
+  transform: none;
 }
 
 .starlight-detail-head {
@@ -406,6 +444,11 @@
 
 .starlight-detail-card.is-expanded .starlight-detail-body {
   width: 100%;
+  max-width: none;
+}
+
+.starlight-detail-card.is-expanded .starlight-detail-whisper,
+.starlight-detail-card.is-expanded .boa-note-body {
   max-width: none;
 }
 
@@ -923,7 +966,7 @@
   transform: translateX(-50%);
   width: min(1080px, calc(100vw - (var(--page-padding) * 2) - 220px));
   pointer-events: none;
-  z-index: 3;
+  z-index: 330;
 }
 
 .month-ruler {

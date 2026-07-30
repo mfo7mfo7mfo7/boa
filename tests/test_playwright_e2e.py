@@ -61,21 +61,41 @@ def boa_url(tmp_path: Path) -> str:
         thread.join(timeout=5)
 
 
+def _launch_page(playwright, browser_name: str, boa_url: str):
+    browser_type = getattr(playwright, browser_name)
+    browser = browser_type.launch(headless=True)
+    context = browser.new_context(accept_downloads=True, viewport={"width": 1366, "height": 900})
+    page = context.new_page()
+    page.goto(boa_url)
+    expect(page.locator("#status-pill")).to_contain_text("Waiting")
+    return browser, context, page
+
+
 @pytest.fixture()
 def page(boa_url: str):
     try:
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=True)
-            context = browser.new_context(accept_downloads=True, viewport={"width": 1366, "height": 900})
-            page = context.new_page()
-            page.goto(boa_url)
-            expect(page.locator("#status-pill")).to_contain_text("Waiting")
+            browser, context, page = _launch_page(playwright, "chromium", boa_url)
             yield page
             context.close()
             browser.close()
     except PlaywrightError as exc:
         if "Executable doesn't exist" in str(exc) or "looks like Playwright was just installed" in str(exc):
             pytest.skip("Playwright browser runtime is missing. Run: uv run playwright install chromium")
+        raise
+
+
+@pytest.fixture()
+def webkit_page(boa_url: str):
+    try:
+        with sync_playwright() as playwright:
+            browser, context, page = _launch_page(playwright, "webkit", boa_url)
+            yield page
+            context.close()
+            browser.close()
+    except PlaywrightError as exc:
+        if "Executable doesn't exist" in str(exc) or "looks like Playwright was just installed" in str(exc):
+            pytest.skip("Playwright browser runtime is missing. Run: uv run playwright install webkit")
         raise
 
 
@@ -276,6 +296,61 @@ def test_landing_timeline_begin_menu_create_duplicate_and_now_controls(page: Pag
     expect(bottom_toggle).to_have_attribute("aria-expanded", "true")
 
 
+def test_now_toggle_extends_and_folds_without_a_popup(page: Page) -> None:
+    today = date.today()
+
+    ended = create_release_via_api(page, product="EndedFold", version="1.0")
+    update_milestone_via_api(page, ended["milestones"][0], expected=today - timedelta(days=45))
+    update_milestone_via_api(page, ended["milestones"][1], expected=today - timedelta(days=20))
+    ack_milestone_via_api(page, ended["milestones"][1]["id"])
+
+    current = create_release_via_api(page, product="CurrentFold", version="1.0")
+    update_milestone_via_api(page, current["milestones"][0], expected=today - timedelta(days=5))
+    update_milestone_via_api(page, current["milestones"][1], expected=today + timedelta(days=5))
+
+    upcoming = create_release_via_api(page, product="FutureFold", version="1.0")
+    update_milestone_via_api(page, upcoming["milestones"][0], expected=today + timedelta(days=20))
+    update_milestone_via_api(page, upcoming["milestones"][1], expected=today + timedelta(days=45))
+
+    page.evaluate("window.localStorage.clear()")
+    page.reload()
+
+    top_toggle = page.locator('[data-now-toggle="top"]')
+    bottom_toggle = page.locator('[data-now-toggle="bottom"]')
+    expect(top_toggle).to_be_visible()
+    expect(bottom_toggle).to_be_visible()
+    expect(top_toggle).to_have_attribute("aria-expanded", "false")
+    expect(bottom_toggle).to_have_attribute("aria-expanded", "false")
+    expect(top_toggle.locator("span")).to_have_text("+")
+    expect(bottom_toggle.locator("span")).to_have_text("+")
+    initial_ended_count = release_row(page, "EndedFold").count()
+    initial_current_count = release_row(page, "CurrentFold").count()
+    initial_future_count = release_row(page, "FutureFold").count()
+    assert initial_ended_count >= 0
+    assert initial_current_count >= 0
+    assert initial_future_count >= 0
+
+    top_toggle.click()
+    expect(top_toggle).to_have_attribute("aria-expanded", "true")
+    expect(top_toggle.locator("span")).to_have_text("-")
+    expect(release_row(page, "EndedFold")).to_have_count(0 if initial_ended_count else 1)
+
+    top_toggle.click()
+    expect(top_toggle).to_have_attribute("aria-expanded", "false")
+    expect(top_toggle.locator("span")).to_have_text("+")
+    expect(release_row(page, "EndedFold")).to_have_count(initial_ended_count)
+
+    bottom_toggle.click()
+    expect(bottom_toggle).to_have_attribute("aria-expanded", "true")
+    expect(bottom_toggle.locator("span")).to_have_text("-")
+    expect(release_row(page, "FutureFold")).to_have_count(0 if initial_future_count else 1)
+
+    bottom_toggle.click()
+    expect(bottom_toggle).to_have_attribute("aria-expanded", "false")
+    expect(bottom_toggle.locator("span")).to_have_text("+")
+    expect(release_row(page, "FutureFold")).to_have_count(initial_future_count)
+
+
 def test_galaxy_routes_scope_the_board_and_unknown_galaxies_show_story_empty_state(
     page: Page,
     boa_url: str,
@@ -317,6 +392,147 @@ def test_horizon_and_perspective_preferences_persist_in_local_storage(page: Page
 
     expect(page.locator('#horizon-selector [data-horizon-months="1"]')).to_have_attribute("aria-checked", "true")
     expect(page.locator('#perspective-selector [data-perspective="destination"]')).to_have_attribute("aria-checked", "true")
+
+
+
+def test_safari_webkit_keeps_month_ruler_visible_and_starlight_popup_floating(webkit_page: Page) -> None:
+    release = create_release_via_api(webkit_page, product="Enzo", version="2.0", secret="enzo-key")
+    update_observation_via_api(
+        webkit_page,
+        release["id"],
+        starlight=68,
+        whisper="The journey is moving forward with patient confidence.",
+        detail="""## Page Notes
+
+- Safari should keep this floating card above the board.""",
+        metrics={"done": 16, "total": 22, "blocked": 1},
+    )
+    webkit_page.reload()
+
+    expect(webkit_page.locator(".month-ruler-wrap")).to_be_visible()
+    expect(webkit_page.locator(".now-line")).to_be_visible()
+
+    row = release_row(webkit_page, "Enzo")
+    row.locator(".starlight-whisper-trigger").hover()
+    reading_card = row.locator(".release-reading-card")
+    expect(reading_card).to_be_visible()
+    app_shell_z = webkit_page.locator(".app-shell").evaluate("(element) => getComputedStyle(element).zIndex")
+    assert int(app_shell_z) >= 300
+    card_metrics = reading_card.evaluate(
+        """(element) => ({
+            offsetHeight: element.offsetHeight,
+            scrollHeight: element.scrollHeight,
+            position: getComputedStyle(element).position,
+            zIndex: getComputedStyle(element).zIndex,
+        })"""
+    )
+    assert card_metrics["offsetHeight"] >= card_metrics["scrollHeight"]
+    assert card_metrics["position"] == "absolute"
+    assert int(card_metrics["zIndex"]) >= 320
+    overlap_result = webkit_page.evaluate(
+        """() => {
+            const card = document.querySelector('.release-reading-card');
+            const line = document.querySelector('.now-line');
+            if (!card || !line) {
+              return { ok: false, reason: 'missing card or line' };
+            }
+            const cardRect = card.getBoundingClientRect();
+            const lineRect = line.getBoundingClientRect();
+            const x = Math.min(Math.max(lineRect.left + 1, cardRect.left + 8), cardRect.right - 8);
+            const y = Math.min(Math.max(cardRect.top + cardRect.height * 0.35, lineRect.top + 16), cardRect.bottom - 8);
+            const topElement = document.elementFromPoint(x, y);
+            return {
+              ok: Boolean(topElement && (topElement.closest('.release-reading-card') || topElement.closest('.starlight-summary'))),
+              tag: topElement?.tagName || null,
+              className: topElement?.className || null,
+              x,
+              y,
+              cardLeft: cardRect.left,
+              cardRight: cardRect.right,
+              lineX: lineRect.left,
+            };
+        }"""
+    )
+    assert overlap_result["ok"], overlap_result
+
+
+def test_todays_reading_hover_card_opens_from_the_left_side(page: Page) -> None:
+    release = create_release_via_api(page, product="Lantern Vale", version="1.6", secret="lantern-key")
+    update_observation_via_api(
+        page,
+        release["id"],
+        starlight=73,
+        whisper="The journey is moving forward with patient confidence.",
+        detail="## Page Notes\n\n- The first quiet reading is in place.",
+        metrics={"done": 16, "total": 22, "blocked": 1},
+    )
+    page.reload()
+
+    row = release_row(page, "Lantern Vale")
+    menu_z = row.locator(".release-menu-shell").evaluate("(element) => getComputedStyle(element).zIndex")
+    row.locator(".starlight-whisper-trigger").hover()
+    reading_card = row.locator(".release-reading-card")
+    expect(reading_card).to_be_visible()
+    hovered_summary_z = row.locator(".starlight-summary").evaluate("(element) => getComputedStyle(element).zIndex")
+    assert int(hovered_summary_z) > int(menu_z)
+    expect(page.locator(".now-label")).to_have_css("visibility", "hidden")
+    expect(page.locator('[data-now-toggle="top"]')).to_have_css("visibility", "hidden")
+    expect(page.locator('[data-now-toggle="bottom"]')).to_have_css("visibility", "hidden")
+    expect(reading_card).to_contain_text("Today’s Reading")
+    expect(reading_card).to_contain_text("The journey is moving forward with patient confidence.")
+    card_metrics = reading_card.evaluate(
+        """(element) => ({
+            clientHeight: element.clientHeight,
+            scrollHeight: element.scrollHeight,
+            offsetHeight: element.offsetHeight,
+            overflowY: getComputedStyle(element).overflowY,
+            display: getComputedStyle(element).display,
+            position: getComputedStyle(element).position,
+        })"""
+    )
+    assert card_metrics["overflowY"] == "visible"
+    assert card_metrics["display"] == "flex"
+    assert card_metrics["position"] == "absolute"
+    assert card_metrics["offsetHeight"] >= card_metrics["scrollHeight"]
+    page.locator(".brand-home-link").hover()
+    expect(reading_card).not_to_be_visible()
+
+
+def test_month_ruler_is_visible_in_the_boa_universe(page: Page) -> None:
+    expect(page.locator(".month-ruler-wrap")).to_be_visible()
+    assert page.locator("#month-ruler .month-label").count() > 0
+    assert page.locator("#month-ruler").evaluate("(el) => el.querySelectorAll('path').length") == 1
+
+
+def test_month_ruler_is_visible_in_a_new_galaxy_journey(page: Page, boa_url: str) -> None:
+    create_release_via_api(page, product="Lantern Vale", version="1.6", secret="lantern-key")
+    page.goto(f"{boa_url}/lantern-vale")
+
+    expect(page.locator("#board-scope")).to_contain_text("Galaxy view: Lantern Vale")
+    expect(page.locator(".month-ruler-wrap")).to_be_visible()
+    assert page.locator("#month-ruler .month-label").count() > 0
+    assert page.locator("#month-ruler").evaluate("(el) => el.querySelectorAll('path').length") == 1
+
+
+def test_month_ruler_changes_when_horizon_changes(page: Page) -> None:
+    horizon_options = page.locator("#horizon-selector [data-horizon-months]")
+    option_count = horizon_options.count()
+    assert option_count >= 2
+
+    month_labels = page.locator("#month-ruler .month-label")
+    label_counts: list[int] = []
+
+    for index in range(option_count):
+        option = horizon_options.nth(index)
+        months = option.get_attribute("data-horizon-months")
+        assert months is not None
+        option.click()
+        expect(option).to_have_attribute("aria-checked", "true")
+        count = month_labels.count()
+        assert count > 0
+        label_counts.append(count)
+
+    assert len(set(label_counts)) > 1
 
 
 def test_observation_notebook_records_starlight_storms_markdown_and_trail(page: Page) -> None:
@@ -412,14 +628,26 @@ def test_observation_notebook_records_starlight_storms_markdown_and_trail(page: 
     assert before_box is not None
     assert before_body_box is not None
 
-    expand_button.click()
+    expand_button.evaluate("(element) => element.click()")
     expect(detail_card).to_have_class(re.compile(r".*\bis-expanded\b.*"))
+    expect(detail_card).to_have_css("position", "fixed")
     after_box = detail_card.bounding_box()
     after_body_box = body.bounding_box()
     assert after_box is not None
     assert after_body_box is not None
+    viewport_height = page.evaluate("window.innerHeight")
     assert after_box["width"] > before_box["width"]
     assert after_body_box["width"] > before_body_box["width"]
+    assert after_box["height"] <= (viewport_height * 0.9) + 8
+    page.locator(".brand-home-link").hover()
+    page.wait_for_timeout(80)
+    expect(detail_card).to_be_visible()
+    expect(detail_card).to_have_class(re.compile(r".*\bis-expanded\b.*"))
+    mid_box = detail_card.bounding_box()
+    assert mid_box is not None
+    assert abs(mid_box["width"] - after_box["width"]) < 2
+    page.wait_for_timeout(460)
+    expect(detail_card).not_to_be_visible()
 
 
 def test_starlight_hover_popup_keeps_long_notes_inside_the_popup(page: Page) -> None:
@@ -477,7 +705,7 @@ def test_engine_room_date_language_updates_visible_timeline_dates(page: Page) ->
     row = release_row(page, "Clock Rose")
     expect(row.locator(".milestone-expected").first).to_contain_text("Jun 29")
 
-    page.locator("#engine-button").evaluate("(element) => element.click()")
+    page.locator("#engine-button").click()
     expect(page.locator("#engine-dialog")).to_be_visible()
     page.locator("#engine-date-format-button").click()
     page.locator("#engine-date-format-menu .release-menu-item[data-format='iso']").click()
@@ -717,8 +945,8 @@ def test_download_delete_fold_hover_and_ack_date_states(page: Page) -> None:
     expect(state_row.locator(".ack-marker")).to_have_count(1)
     expect(state_row.locator(".overdue-marker")).to_have_count(0)
 
-    state_row.locator(".release-menu-button").click()
-    state_row.locator('.release-menu-item[data-action="settings"]').click()
+    state_row.locator(".release-menu-button").evaluate("(element) => element.click()")
+    state_row.locator('.release-menu-item[data-action="settings"]').evaluate("(element) => element.click()")
     expect(page.locator("#journey-dialog")).to_be_visible()
     expect(page.locator("#journey-product")).to_have_value("AckState")
     expect(page.locator("#journey-version")).to_have_value("1.0")
@@ -741,7 +969,7 @@ def test_download_delete_fold_hover_and_ack_date_states(page: Page) -> None:
     delete_row = release_row(page, "DeleteMe")
     delete_row.locator(".release-menu-button").click()
     with page.expect_download() as download_info:
-        delete_row.locator('.release-menu-item[data-action="export"]').click()
+        delete_row.locator('.release-menu-item[data-action="export"]').evaluate("(element) => element.click()")
     download = download_info.value
     assert download.suggested_filename == "deleteme-1-0.yaml"
 
@@ -756,7 +984,7 @@ def test_download_delete_fold_hover_and_ack_date_states(page: Page) -> None:
 
     page.on("dialog", handle_dialog)
     delete_row.locator(".release-menu-button").click()
-    delete_row.locator('.release-menu-item[data-action="delete"]').click()
+    delete_row.locator('.release-menu-item[data-action="delete"]').evaluate("(element) => element.click()")
     page.wait_for_function("document.querySelector('#status-pill')?.textContent !== 'Deleting'")
     if page.locator("#status-pill").text_content() == "Delete failed":
         pytest.fail(page.locator("#edit-message").text_content())
@@ -768,7 +996,7 @@ def test_download_delete_fold_hover_and_ack_date_states(page: Page) -> None:
 
 def test_engine_room_shows_email_delivery_disabled(page: Page) -> None:
     """The Engine Room exposes email delivery status without leaking credentials."""
-    page.locator("#engine-button").evaluate("(element) => element.click()")
+    page.locator("#engine-button").click()
     expect(page.locator("#engine-dialog")).to_be_visible()
     expect(page.locator("#engine-version")).to_contain_text("Boa 3.2.1")
     expect(page.locator("#engine-smtp-title")).to_contain_text("Email delivery")

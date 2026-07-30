@@ -1049,11 +1049,13 @@
   top: calc(100% + 9px);
   left: 0;
   z-index: 100;
-  min-width: min(100%, 248px);
+  min-width: max(100%, 212px);
+  width: max-content;
   display: grid;
   gap: 2px;
   padding: 13px 12px 12px;
   border-radius: 24px;
+  white-space: nowrap;
 }
 
 .engine-date-menu.hidden {
@@ -1069,6 +1071,7 @@
   min-height: 38px;
   padding: 0 14px;
   font-size: 14px;
+  white-space: nowrap;
 }
 
 .engine-field-note {
