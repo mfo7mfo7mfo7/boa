@@ -6,6 +6,7 @@ standard-library email module can send a multipart alternative message.
 
 from __future__ import annotations
 
+import re
 from datetime import date
 from html import escape
 
@@ -77,6 +78,234 @@ def _plain_reading_lines(starlight: ReleaseStarlight | None, storm: BugSnapshot 
     return lines
 
 
+_INLINE_MARKDOWN_PATTERN = re.compile(
+    r"\[([^\]]+)\]\((https?://[^)\s]+)\)|`([^`]+)`|\*\*([^*\n]+)\*\*|__([^_\n]+)__|\*([^*\n]+)\*|_([^_\n]+)_"
+)
+
+
+def _decode_markdown_text(text: str) -> str:
+    return re.sub(r"\\([\\`*_{}\[\]()#+\-.!|])", r"\1", str(text or ""))
+
+
+def _render_inline_markdown(text: str) -> str:
+    source = _decode_markdown_text(text)
+    parts: list[str] = []
+    last_index = 0
+
+    for match in _INLINE_MARKDOWN_PATTERN.finditer(source):
+        if match.start() > last_index:
+            parts.append(escape(source[last_index:match.start()]))
+
+        if match.group(1) and match.group(2):
+            parts.append(
+                f'<a href="{escape(match.group(2), quote=True)}" target="_blank" rel="noopener noreferrer">'
+                f"{escape(_decode_markdown_text(match.group(1)))}"
+                "</a>"
+            )
+        elif match.group(3):
+            parts.append(f"<code>{escape(match.group(3))}</code>")
+        elif match.group(4) or match.group(5):
+            parts.append(f"<strong>{escape(_decode_markdown_text(match.group(4) or match.group(5)))}</strong>")
+        elif match.group(6) or match.group(7):
+            parts.append(f"<em>{escape(_decode_markdown_text(match.group(6) or match.group(7)))}</em>")
+        last_index = match.end()
+
+    if last_index < len(source):
+        parts.append(escape(source[last_index:]))
+    return "".join(parts)
+
+
+def _parse_markdown_table_row(line: str) -> list[str]:
+    source = str(line or "").strip()
+    if "|" not in source:
+        return []
+    trimmed = source.removeprefix("|").removesuffix("|")
+    cells: list[str] = []
+    cell = []
+    escaped = False
+    for char in trimmed:
+        if escaped:
+            cell.append(char)
+            escaped = False
+            continue
+        if char == "\\":
+            escaped = True
+            continue
+        if char == "|":
+            cells.append("".join(cell).strip())
+            cell = []
+            continue
+        cell.append(char)
+    cells.append("".join(cell).strip())
+    return cells if any(cells) else []
+
+
+def _render_markdown_html(markdown: str) -> str:
+    source = _decode_markdown_text(markdown).replace("\r\n", "\n").replace("\r", "\n")
+    lines = source.split("\n")
+    blocks: list[tuple[str, object]] = []
+    paragraph: list[str] = []
+    list_items: list[dict[str, object]] = []
+    list_ordered = False
+    code_lines: list[str] = []
+    in_code_block = False
+
+    def flush_paragraph() -> None:
+        nonlocal paragraph
+        if paragraph:
+            blocks.append(("paragraph", " ".join(paragraph).strip()))
+            paragraph = []
+
+    def flush_list() -> None:
+        nonlocal list_items, list_ordered
+        if list_items:
+            blocks.append(("list", {"ordered": list_ordered, "items": list_items[:]}))
+            list_items = []
+            list_ordered = False
+
+    def flush_code() -> None:
+        nonlocal code_lines
+        if code_lines:
+            blocks.append(("code", "\n".join(code_lines)))
+            code_lines = []
+
+    def is_table_divider(line: str) -> bool:
+        cells = _parse_markdown_table_row(line)
+        return bool(cells) and all(re.fullmatch(r":?-{3,}:?", cell.replace(" ", "")) for cell in cells)
+
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        trimmed = line.strip()
+
+        if trimmed.startswith("```"):
+            flush_paragraph()
+            flush_list()
+            if in_code_block:
+                flush_code()
+                in_code_block = False
+            else:
+                in_code_block = True
+            index += 1
+            continue
+
+        if in_code_block:
+            code_lines.append(line)
+            index += 1
+            continue
+
+        if not trimmed:
+            flush_paragraph()
+            flush_list()
+            index += 1
+            continue
+
+        heading_match = re.match(r"^(#{1,3})\s+(.*)$", trimmed)
+        if heading_match:
+            flush_paragraph()
+            flush_list()
+            blocks.append(("heading", (len(heading_match.group(1)), heading_match.group(2).strip())))
+            index += 1
+            continue
+
+        table_headers = _parse_markdown_table_row(trimmed)
+        next_line = lines[index + 1].strip() if index + 1 < len(lines) else ""
+        if table_headers and is_table_divider(next_line):
+            flush_paragraph()
+            flush_list()
+            index += 2
+            rows: list[list[str]] = []
+            while index < len(lines):
+                row_cells = _parse_markdown_table_row(lines[index].strip())
+                if not row_cells:
+                    break
+                rows.append(row_cells)
+                index += 1
+            blocks.append(("table", {"headers": table_headers, "rows": rows}))
+            continue
+
+        checkbox_match = re.match(r"^[-*]\s+\[( |x|X)\]\s+(.*)$", trimmed)
+        if checkbox_match:
+            flush_paragraph()
+            if list_items and list_ordered:
+                flush_list()
+            list_items.append({"checked": checkbox_match.group(1).lower() == "x", "text": checkbox_match.group(2).strip()})
+            list_ordered = False
+            index += 1
+            continue
+
+        unordered_match = re.match(r"^[-*]\s+(.*)$", trimmed)
+        if unordered_match:
+            flush_paragraph()
+            if list_items and list_ordered:
+                flush_list()
+            list_items.append({"text": unordered_match.group(1).strip()})
+            list_ordered = False
+            index += 1
+            continue
+
+        ordered_match = re.match(r"^\d+\.\s+(.*)$", trimmed)
+        if ordered_match:
+            flush_paragraph()
+            if list_items and not list_ordered:
+                flush_list()
+            list_ordered = True
+            list_items.append({"text": ordered_match.group(1).strip()})
+            index += 1
+            continue
+
+        flush_list()
+        paragraph.append(trimmed)
+        index += 1
+
+    flush_paragraph()
+    flush_list()
+    flush_code()
+
+    rendered: list[str] = []
+    for block_type, payload in blocks:
+        if block_type == "heading":
+            level, text = payload  # type: ignore[misc]
+            tag = "h2" if int(level) <= 2 else "h3"
+            rendered.append(f"<{tag}>{_render_inline_markdown(str(text))}</{tag}>")
+            continue
+        if block_type == "list":
+            data = payload  # type: ignore[assignment]
+            tag = "ol" if data["ordered"] else "ul"
+            items_html: list[str] = []
+            for item in data["items"]:
+                text = _render_inline_markdown(str(item.get("text", "")))
+                if item.get("checked") is not None:
+                    checkbox = "☑" if item["checked"] else "☐"
+                    text = f'<span class="boa-note-checkbox">{checkbox}</span> {text}'
+                items_html.append(f"<li>{text}</li>")
+            rendered.append(f"<{tag}>" + "".join(items_html) + f"</{tag}>")
+            continue
+        if block_type == "code":
+            rendered.append(f"<pre><code>{escape(str(payload))}</code></pre>")
+            continue
+        if block_type == "table":
+            data = payload  # type: ignore[assignment]
+            headers = data["headers"]
+            rows = data["rows"]
+            head_html = "".join(f"<th>{_render_inline_markdown(str(header))}</th>" for header in headers)
+            body_html = []
+            for row in rows:
+                row_html = "".join(f"<td>{_render_inline_markdown(str(row[index]) if index < len(row) else '')}</td>" for index in range(len(headers)))
+                body_html.append(f"<tr>{row_html}</tr>")
+            rendered.append(
+                '<div class="boa-note-table-frame">'
+                '<table style="width:100%; border-collapse:collapse;">'
+                f"<thead><tr>{head_html}</tr></thead>"
+                f"<tbody>{''.join(body_html)}</tbody>"
+                "</table></div>"
+            )
+            continue
+        rendered.append(f"<p>{_render_inline_markdown(str(payload))}</p>")
+
+    return "".join(rendered)
+
+
 def render_reading_post_email(
     release: ReleaseRecord,
     *,
@@ -104,7 +333,7 @@ def render_reading_post_email(
             f"""
             <div style="margin-top: 18px; padding-top: 16px; border-top: 1px solid rgba(103,92,83,0.12);">
               <p style="margin: 0 0 7px 0; font-family: 'Inter', 'SF Pro Text', system-ui, sans-serif; font-size: 11px; letter-spacing: 0.11em; text-transform: uppercase; color: rgba(74,59,42,0.62);">Page Notes</p>
-              <p style="white-space: pre-wrap; margin: 0; color: rgba(74,59,42,0.82);">{escape(detail_content)}</p>
+              <div style="margin: 0; color: rgba(74,59,42,0.82); font-size: 13px; line-height: 1.52;">{_render_markdown_html(detail_content)}</div>
             </div>
             """
             if detail_content

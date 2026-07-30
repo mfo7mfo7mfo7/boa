@@ -47,13 +47,21 @@ Boa asks:
 
 > Where is this journey now?
 
-### 🌅 Horizon
+### 🔑 Journey Key
 
-The Horizon is the line of time.
+The Journey Key protects the journey.
 
-Milestones rest on the horizon.
-The destination waits ahead.
-The present moment crosses the page as the journey moves.
+It is used when shaping the journey, acknowledging milestones, or removing a journey.
+
+It is not part of the story on the page.
+It is the small key kept beside the book.
+
+### 📜 Scroll
+
+A Scroll is a portable journey page.
+
+A journey can be brought into Boa from a scroll.
+A journey can also be downloaded as a scroll.
 
 ### 🔻 Milestone
 
@@ -76,11 +84,17 @@ They are the person responsible for saying:
 
 > I have seen this point.
 
+### 🌅 Horizon
+
+The Horizon is the line of time.
+
+Milestones rest on the horizon.
+The destination waits ahead.
+The present moment crosses the page as the journey moves.
+
 ### 📖 Observation Notebook
 
 The Observation Notebook is where the team writes what the journey looks like now.
-
-It is the little notebook opened while looking at a journey from a distance.
 
 Its main reading is:
 
@@ -89,10 +103,19 @@ Its main reading is:
 A reading may be only one sentence.
 It may also include page notes, if the observer needs more room.
 
-Sometimes the observer may add small facts behind the reading, such as how much is done, how much remains, or what is blocked.
+### 📝 Page Notes
 
-But those facts are not the story itself.
-They are only pencil marks in the margin.
+Page Notes are the markdown notes attached to Today's Reading.
+
+They hold the longer detail written about the journey, including headings, lists, tables, and other supporting detail.
+On the main page, they appear in the Starlight hover popup.
+
+### 🌞 Today’s Reading
+
+Today’s Reading is the full observation written for the journey.
+
+It combines Starlight, Storms, Page Notes, and any supporting detail into one complete note.
+Reading Post sends this full reading by email.
 
 ### ✦ Starlight
 
@@ -103,15 +126,7 @@ It represents readiness, preparation, confidence, and forward motion.
 Starlight is not a KPI.
 It is not a progress bar.
 It is the quiet energy collected before departure.
-
-### 🌟 Starlight Trail
-
-The Starlight Trail remembers moments when the journey gathered more light.
-
-It does not record every daily snapshot.
-It only remembers meaningful increases.
-
-Each star is a moment when the journey became more ready.
+The timeline already shows the starlight score, and the Starlight hover popup shows the Page Notes behind it.
 
 ### 🌧️ Storms
 
@@ -129,6 +144,14 @@ The Bug Wave is the visible shape of storms over time.
 It shows how much weather remains between the gathered starlight and the horizon.
 
 It should feel like weather, not a defect chart.
+
+### ⚙️ Engine Room
+
+The Engine Room holds quiet instruments behind the page.
+
+It is where Reading Post settings live.
+It supports the clock, the delivery rhythm, and the other background rules that keep the story consistent.
+It should never feel like the center of Boa.
 
 ### ✅ Acknowledge
 
@@ -157,29 +180,6 @@ The Mark Trail remembers the marks left on a milestone.
 
 It lets the team see when the milestone was seen, by whom, and what quiet notes were left along the way.
 
-### 🔑 Journey Key
-
-The Journey Key protects the journey.
-
-It is used when shaping the journey, acknowledging milestones, or removing a journey.
-
-It is not part of the story on the page.
-It is the small key kept beside the book.
-
-### 📜 Scroll
-
-A Scroll is a portable journey page.
-
-A journey can be brought into Boa from a scroll.
-A journey can also be downloaded as a scroll.
-
-### ⚙️ Engine Room
-
-The Engine Room holds quiet instruments behind the page.
-
-It is where delivery settings live.
-It should never feel like the center of Boa.
-
 ## One Sentence
 
 Boa is a storybook for release journeys: a place where teams watch a journey move across the horizon, gather starlight, pass through storms, and leave quiet marks when milestones are seen.
@@ -190,7 +190,7 @@ See [docs/index.md](docs/index.md) for the complete guide list.
 
 ## Automation
 
-Boa listens to observations from other instruments. These guides show how to write Today's Reading and Current Storms into an existing journey without learning the full API:
+Boa listens to observations from other instruments. These guides show how to write Today's Reading and Storms into an existing journey without learning the full API:
 
 - [Observation Client](docs/automation-client.md) — submit Observation Notebook readings from CI, scripts, and n8n
 - [Python Examples](examples/python/README.md)
@@ -214,9 +214,12 @@ Reading Post is Boa's journey-level delivery policy.
 - The schedule is saved with the journey and included in YAML downloads when configured.
 - The schedule follows the Engine Room clock, so the delivery time matches the room the user sees.
 - Begin a Journey and Tend Journey use the same Reading Post field set.
+- Reading Post sends the full Today’s Reading, not just the short reading or the Page Notes alone.
 
 ## Release Notes
 
+- [Boa 3.2](docs/release-notes-3.2.md)
+- [Boa 3.1](docs/release-notes-3.1.md)
 - [Boa 3.0](docs/release-notes-3.0.md)
 - [Boa 2.7](docs/release-notes-2.7.md)
 - [Boa 1.0](docs/release-notes-1.0.md)
@@ -236,7 +239,7 @@ Start Boa:
 docker compose up -d --build
 ```
 
-First create or import the journey in Boa. Then submit a Starlight + Current Storms observation from Python:
+First create or import the journey in Boa. Then submit a Starlight + Storms observation from Python:
 
 ```bash
 cd examples/python
@@ -249,7 +252,7 @@ python submit_observation.py \
     --open-bugs 5
 ```
 
-That is it. Boa finds the existing journey, records the Observation Notebook reading, and shows Current Storms as Bug Wave on the timeline.
+That is it. Boa finds the existing journey, records the Observation Notebook reading, and shows Storms as Bug Wave on the timeline.
 
 From a shell script or n8n, use the raw endpoints in [examples/n8n/README.md](examples/n8n/README.md).
 
@@ -284,9 +287,9 @@ SQLite records the journey.
 
 ## Status
 
-Boa 3.0 is release-ready.
+Boa 3.2 is release-ready.
 
-The universe view, galaxy routes, Observation Notebook, Starlight Trail, Bug Wave, Mark Trail, Engine Room, Reading Post, and paper dialog system now form one coherent journey language.
+The universe view, galaxy routes, Observation Notebook, Page Notes, Today’s Reading, Starlight Trail, Bug Wave, Mark Trail, Engine Room, Reading Post, and paper dialog system now form one coherent journey language.
 
 ## Release Discipline
 
@@ -313,7 +316,7 @@ This clears all local journeys plus cascading milestone, mark, bug snapshot, and
 Boa publishes container images to GitHub Container Registry.
 
 ```bash
-docker run --rm -p 8000:8000 -v boa-data:/data ghcr.io/chengenzo/boa:3.0.0
+docker run --rm -p 8000:8000 -v boa-data:/data ghcr.io/chengenzo/boa:3.2.0
 ```
 
 Then open <http://localhost:8000>.
@@ -544,7 +547,7 @@ PUBLIC_BASE_URL=http://gitlab.qa:4001 docker compose up -d
 Use a published GHCR image:
 
 ```bash
-docker run --rm -p 8000:8000 -v boa-data:/data ghcr.io/chengenzo/boa:3.0.0
+docker run --rm -p 8000:8000 -v boa-data:/data ghcr.io/chengenzo/boa:3.2.0
 ```
 
 Set folded-journey days:
@@ -553,7 +556,7 @@ Set folded-journey days:
 docker run --rm -p 8000:8000 \
   -v boa-data:/data \
   -e BOA_JOURNEY_FOLD_DAYS=21 \
-  ghcr.io/chengenzo/boa:3.0.0
+  ghcr.io/chengenzo/boa:3.2.0
 ```
 
 Same idea with Compose:
@@ -567,7 +570,7 @@ Use a host-mounted database file instead of a Docker volume:
 ```bash
 docker run --rm -p 8000:8000 \
   -v "$(pwd)/data:/data" \
-  ghcr.io/chengenzo/boa:3.0.0
+  ghcr.io/chengenzo/boa:3.2.0
 ```
 
 ### Reset Docker Data

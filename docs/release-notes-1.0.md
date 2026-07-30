@@ -19,7 +19,7 @@ Starlight is now a first-class release-readiness layer.
 - markdown `detail` support for narrative release observations
 - optional `metrics` for structured support data
 - meaningful Starlight Trail events only when readiness changes
-- hoverable Night Log detail card in the timeline UI
+- hoverable Page Notes detail card in the timeline UI
 
 This turns readiness into a journey signal instead of a KPI panel.
 

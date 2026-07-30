@@ -1,9 +1,12 @@
 # Boa Documentation
 
 Boa is a journey visualization platform. These guides are the field notes for tracing, observing, and guiding a release across the stars.
+The story moves from Universe to Galaxy to Journey, then into the Journey Key, Scroll, Milestone, Keeper, Horizon, Observation Notebook, Page Notes, Today’s Reading, Starlight, Storms, Bug Wave, Reading Post, and the Engine Room that keeps the shared language steady.
 
 ## Product
 
+- [Release Notes 3.2](release-notes-3.2.md) — Reading Post, Page Notes, shared journey vocabulary cleanup, and release discipline
+- [Release Notes 3.1](release-notes-3.1.md) — Reading Post, Page Notes, Starlight hover expansion, the shared journey vocabulary, and release discipline
 - [Release Notes 3.0](release-notes-3.0.md) — Reading Post, SMTP, release process docs, and the versioning discipline that keeps them together
 - [Release Notes 2.7](release-notes-2.7.md) — shared Reading Post language, round-trippable journey settings, live Engine Room clock, and expandable hover notes
 - [Release Notes 2.5](release-notes-2.5.md) — paper dialogs, hover notes, horizon labels, Reading Post, and public email links
@@ -40,9 +43,22 @@ Boa is a journey visualization platform. These guides are the field notes for tr
 
 | Term | Meaning |
 |------|---------|
+| Universe | The full sky Boa can see |
+| Galaxy | One product's corner of that sky |
 | Journey | A release traced across time |
-| Observation | "Where are we now?" |
-| Starlight | Journey readiness |
-| Bug Wave / Current Storms | Known troubles |
-| Reminders | Email prompts before, during, and after milestones |
-| Acknowledgement | Human confirmation of a milestone |
+| Journey Key | The key used when shaping, acknowledging, or removing a journey |
+| Scroll | A portable journey page that can be imported or downloaded |
+| Milestone | A meaningful point on the horizon |
+| Keeper | The person responsible for saying they have seen a milestone |
+| Horizon | The line where milestones rest |
+| Observation Notebook | Where the team writes what the journey looks like now |
+| Page Notes | The markdown detail shown in the Starlight hover popup |
+| Today’s Reading | The full observation written for the journey |
+| Starlight | Journey readiness and gathered confidence |
+| Storms | Known troubles still moving through the journey |
+| Bug Wave | The visible shape of storms over time |
+| Reading Post | The journey-level delivery policy that sends the full Today’s Reading |
+| Engine Room | The quiet control room that holds Reading Post settings |
+| Acknowledge | Human confirmation of a milestone |
+| Mark | What remains after acknowledging a milestone |
+| Mark Trail | The remembered trail of marks left on a milestone |

@@ -363,17 +363,27 @@ def test_observation_notebook_records_starlight_storms_markdown_and_trail(page: 
     row.locator(".starlight-event").first.hover()
     detail_card = row.locator(".starlight-detail-card")
     expand_button = detail_card.locator(".starlight-detail-expand-button")
+    body = detail_card.locator(".starlight-detail-body")
     expect(detail_card).to_be_visible()
     expect(expand_button).to_be_visible()
-    expect(detail_card).to_contain_text("Confidence is still gathering quietly.")
+    expect(detail_card.locator(".starlight-detail-whisper")).to_be_hidden()
+    expect(detail_card.locator(".starlight-detail-value")).to_be_hidden()
+    expect(detail_card.locator(".starlight-detail-date")).to_be_hidden()
+    expect(detail_card.locator(".starlight-detail-stats-shell")).to_be_visible()
+    expect(detail_card).to_contain_text("Behind the Reading")
     before_box = detail_card.bounding_box()
+    before_body_box = body.bounding_box()
     assert before_box is not None
+    assert before_body_box is not None
 
     expand_button.click()
     expect(detail_card).to_have_class(re.compile(r".*\bis-expanded\b.*"))
     after_box = detail_card.bounding_box()
+    after_body_box = body.bounding_box()
     assert after_box is not None
+    assert after_body_box is not None
     assert after_box["width"] > before_box["width"]
+    assert after_body_box["width"] > before_body_box["width"]
 
 
 def test_engine_room_date_language_updates_visible_timeline_dates(page: Page) -> None:
@@ -677,7 +687,7 @@ def test_engine_room_shows_email_delivery_disabled(page: Page) -> None:
     """The Engine Room exposes email delivery status without leaking credentials."""
     page.locator("#engine-button").click()
     expect(page.locator("#engine-dialog")).to_be_visible()
-    expect(page.locator("#engine-version")).to_contain_text("Boa 3.0.0")
+    expect(page.locator("#engine-version")).to_contain_text("Boa 3.1.0")
     expect(page.locator("#engine-smtp-title")).to_contain_text("Email delivery")
     expect(page.locator("#engine-smtp-status")).to_contain_text("Disabled")
     expect(page.locator("#engine-smtp-message")).to_contain_text("not enabled")

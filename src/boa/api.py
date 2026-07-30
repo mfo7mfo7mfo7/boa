@@ -755,7 +755,7 @@ def create_app(storage: BoaStorage | None = None) -> FastAPI:
             with contextlib.suppress(asyncio.CancelledError):
                 await app.state.reminder_scheduler
 
-    app = FastAPI(title="Boa API", version="3.0.0", lifespan=lifespan)
+    app = FastAPI(title="Boa API", version="3.2.0", lifespan=lifespan)
     app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 
     def get_storage() -> BoaStorage:
